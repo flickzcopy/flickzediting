@@ -8,8 +8,8 @@ const mongoose = require('mongoose');
 const multer = require('multer');
 const nodemailer = require('nodemailer');
 const cookieParser = require('cookie-parser');
-const session = require('express-session'); 
 const cors = require('cors');
+const sharp = require('sharp');
 
 const { S3Client, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { Upload } = require('@aws-sdk/lib-storage');
@@ -23,16 +23,21 @@ const allowedOrigins = [
 ];
 
 const corsOptions = {
+    // **1. Keep your existing logic for origin checking (Security)**
     origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps or curl requests)
-        // or requests from the allowed list
+        // Allow requests with no origin or requests from the allowed list
         if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
             callback(new Error('Not allowed by CORS'));
         }
-    }
+    },
+    
+    credentials: true, 
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    optionsSuccessStatus: 204 
 };
+
 // Load environment variables (ensure these are set in your .env file)
 dotenv.config();
 
@@ -156,10 +161,9 @@ async function generateSignedUrl(fileUrl) {
 
         // 2. Create the GetObject command
         const command = new GetObjectCommand({
-            // --- ⚠️ CRITICAL CHANGE: Use IDRIVE_BUCKET_NAME ---
             Bucket: IDRIVE_BUCKET_NAME,
-            // ----------------------------------------------------
             Key: fileKey,
+            ResponseCacheControl: 'max-age=604800, public', 
         });
 
         // 3. Generate the signed URL (expires in 604800 seconds = 7 days)
@@ -2112,6 +2116,96 @@ const visitorLogger = async (req, res, next) => {
     next(); 
 };
 
+/**
+ * Processes a file (compression/conversion) and uploads the resulting buffer 
+ * to IDrive E2, returning the permanent, unsign-ed URL.
+ * * @param {Object} file - The file object from Multer (assuming memory storage).
+ * @returns {Promise<string>} The permanent, clean URL of the uploaded file.
+ */
+async function uploadFileToPermanentStorage(file) {
+    if (!file || !file.buffer) {
+        throw new Error("Invalid file object provided for upload.");
+    }
+
+    try {
+        const originalFileName = file.originalname;
+        const fileExtension = path.extname(originalFileName);
+        const baseName = path.basename(originalFileName, fileExtension);
+        
+        // --- 1. IMAGE PROCESSING AND COMPRESSION (CORE SPEED BOOST) ---
+        const processedFileBuffer = await sharp(file.buffer)
+            .resize({ 
+                width: 1200, 
+                fit: 'inside', 
+                withoutEnlargement: true 
+            })
+            // Convert to WebP format with high-quality compression
+            .webp({ quality: 80 }) 
+            .toBuffer();
+        // ----------------------------------------------------------------
+
+        // Create a unique, WebP-specific key
+        const fileKey = `collections/${Date.now()}-${baseName}.webp`; 
+        
+        // --- 2. IDRIVE E2 UPLOAD ---
+        const parallelUploads3 = new Upload({
+            client: s3Client, // Your pre-configured S3Client for IDrive E2
+            params: {
+                Bucket: IDRIVE_BUCKET_NAME,
+                Key: fileKey,
+                Body: processedFileBuffer, // Use the compressed buffer
+                ContentType: 'image/webp', // Use the correct type for the converted format
+                ACL: 'private', 
+            },
+        });
+
+        await parallelUploads3.done();
+        
+        // Return the clean, permanent URL
+        return `${IDRIVE_ENDPOINT}/${IDRIVE_BUCKET_NAME}/${fileKey}`;
+
+    } catch (error) {
+        console.error('Error during file processing and upload:', error);
+        throw new Error(`File upload failed: ${error.message}`);
+    }
+}
+
+/**
+ * Generates a short-lived Access Token (e.g., 15 minutes) for API access.
+ * This token is fast to verify and is stored on the client side (e.g., memory/local storage).
+ * @param {Object} payload - The user data to embed (e.g., { id: user._id, role: user.role })
+ * @returns {string} The signed JWT Access Token.
+ */
+function generateAccessToken(payload) {
+    // Access tokens are short-lived for security
+    return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '15m' }); 
+}
+
+/**
+ * Generates a long-lived Refresh Token (e.g., 7 days) for session persistence.
+ * This token is sent as a secure HTTP-only cookie.
+ * @param {Object} payload - The user data to embed (e.g., { id: user._id })
+ * @returns {string} The signed JWT Refresh Token.
+ */
+function generateRefreshToken(payload) {
+    // Refresh tokens are long-lived for convenience
+    return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' }); 
+}
+
+/**
+ * Generates a short-lived Access Token (e.g., 15 minutes) for user API access.
+ */
+function generateUserAccessToken(payload) {
+    return jwt.sign({ ...payload, role: 'user' }, process.env.JWT_SECRET, { expiresIn: '15m' }); 
+}
+
+/**
+ * Generates a long-lived Refresh Token (e.g., 7 days) for user session persistence.
+ */
+function generateUserRefreshToken(payload) {
+    return jwt.sign({ ...payload, role: 'user' }, process.env.JWT_SECRET, { expiresIn: '7d' }); 
+}
+
 // --- EXPRESS CONFIGURATION AND MIDDLEWARE ---
 const app = express();
 // Ensure express.json() is used BEFORE the update route, but after the full form route
@@ -2120,20 +2214,6 @@ const app = express();
 app.use(cors(corsOptions));
 app.use(express.json()); 
 app.use(cookieParser());
-
-app.use(session({
-    secret: process.env.JWT_SECRET, 
-    
-    resave: false,
-    saveUninitialized: true,
-    
-    cookie: { 
-        // Set secure: true when deployed behind Netlify (HTTPS)
-        secure: process.env.NODE_ENV === 'production' ? true : false, 
-        httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    }
-}));
 
 app.use(visitorLogger);
 
@@ -2173,37 +2253,49 @@ app.get('/saleslog', (req, res) => { res.sendFile(path.join(__dirname, 'public',
 app.get('/emailnews', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'outflickzadmin', 'emailnews.html')); }); 
 app.get('/settings', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'outflickzadmin', 'settings.html')); }); 
 
-
+// WARNING: Ensure JWT_SECRET is defined in the scope where this function runs (e.g., process.env.JWT_SECRET)
 
 const verifyToken = (req, res, next) => {
     // 1. Check for Authorization header format (Bearer <token>)
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ message: 'Access denied. No token provided or token format invalid.' });
+        return res.status(401).json({ message: 'Access denied. No Access Token provided.' });
     }
     
-    // 2. Extract the token
-    const token = authHeader.split(' ')[1];
+    // 2. Extract the token (This is the short-lived Access Token)
+    const accessToken = authHeader.split(' ')[1];
     
     try {
-        // Use the defined secret (JWT_SECRET in this scope)
-        const decoded = jwt.verify(token, JWT_SECRET); 
+        // 3. Verify the Access Token (Fast, stateless check)
+        const decoded = jwt.verify(accessToken, process.env.JWT_SECRET); 
         
-        // 3. CRUCIAL: Check for the 'admin' role (Authorization)
+        // 4. CRUCIAL: Check for the 'admin' role (Authorization)
         if (decoded.role !== 'admin') { 
             return res.status(403).json({ message: 'Forbidden. Access limited to administrators.' });
         }
         
-        // 4. Attach admin data (req.adminUser = { id: 123, role: 'admin' })
+        // 5. Success: Attach admin data and proceed
         req.adminUser = decoded; 
         next();
         
     } catch (err) {
-        // 5. Handle verification errors (Signature mismatch, expiry, etc.)
-        res.status(401).json({ message: 'Invalid or expired token. Please log in again.' });
+        // 6. Handle verification errors (Signature mismatch, expiry, etc.)
+        
+        // --- 🔑 HIGH-PERFORMANCE REFRESH HANDLING ---
+        if (err.name === 'TokenExpiredError') {
+            // Token is expired, but the signature is valid.
+            // DO NOT force re-login yet. Signal the client to use the 
+            // Refresh Token endpoint (/api/refresh-token) to get a new Access Token.
+            return res.status(401).json({ 
+                message: 'Access Token expired. Please refresh the session.',
+                expired: true // CRITICAL flag for the client to initiate refresh
+            });
+        }
+        
+        // For all other errors (invalid signature, tampering, etc.), force re-login
+        res.status(401).json({ message: 'Invalid token signature. Please log in again.' });
     }
 };
-
 // --- Multer Configuration (upload) ---
 const upload = multer({ 
     storage: multer.memoryStorage(), // Stores file buffer in req.file.buffer
@@ -2222,49 +2314,53 @@ const singleReceiptUpload = multer({
 
 }).single('receipt'); 
 
-// --- USER AUTHENTICATION API ROUTES ---
 const verifyUserToken = (req, res, next) => {
-    // 1. Check for token in the HTTP-only cookie
-    let token = req.cookies.outflickzToken; 
-    
-    // 2. Fallback: Check for token in the 'Authorization: Bearer <token>' header if cookie is absent
+    // 1. Check for token in the 'Authorization: Bearer <token>' header
+    // The short-lived Access Token should be strictly sent here by the client for speed.
     const authHeader = req.headers.authorization;
-    if (!token && authHeader && authHeader.startsWith('Bearer ')) {
-        token = authHeader.split(' ')[1];
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        // If the Access Token is missing from the header, deny access.
+        return res.status(401).json({ message: 'Access denied. No Access Token provided in header.' });
     }
 
-    // 3. If no token is found in either location, deny access
-    if (!token) {
-        // Clear cookie as a security best practice, even if we expected a header
-        if (req.cookies.outflickzToken) {
-            res.clearCookie('outflickzToken');
-        }
-        return res.status(401).json({ message: 'Access denied. Please log in.' });
-    }
+    // 2. Extract the Access Token
+    const accessToken = authHeader.split(' ')[1];
 
     try {
-        // 4. Verify the token
+        // 3. Verify the Access Token (Fast, stateless check)
         // Assuming JWT_SECRET is available in scope
-        const decoded = jwt.verify(token, JWT_SECRET);
+        const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
         
-        // 5. Ensure this is a regular user token 
+        // 4. Ensure this is a regular user token 
         if (decoded.role !== 'user') {
-            // Token is valid but role is wrong (e.g., admin token used for user route)
-            return res.status(403).json({ message: 'Forbidden. Invalid user role.' });
+            return res.status(403).json({ message: 'Forbidden. Invalid token role for user access.' });
         }
         
-        // 6. Success: Attach the user ID and proceed
+        // 5. Success: Attach the user ID and proceed
         req.userId = decoded.id; 
         next();
+        
     } catch (err) {
-        // 7. Token is invalid (expired, tampered, etc.) - Force re-login
-        if (req.cookies.outflickzToken) {
-            res.clearCookie('outflickzToken');
+        // 6. Handle verification errors
+        
+        // --- 🔑 HIGH-PERFORMANCE REFRESH HANDLING ---
+        if (err.name === 'TokenExpiredError') {
+            // Access Token is expired, but valid. Signal the client to 
+            // silently call the /api/users/refresh endpoint using the secure Refresh Token cookie.
+            return res.status(401).json({ 
+                message: 'Access Token expired. Refresh required.',
+                expired: true // CRITICAL flag for the client to initiate refresh flow
+            });
         }
+        
+        // For all other errors (invalid signature, tampering, etc.), force re-login
+        // No need to clear the cookie here; the Refresh Endpoint handles clearing its own cookie on failure.
         console.error("JWT Verification Error:", err.message);
-        res.status(401).json({ message: 'Invalid or expired session. Please log in again.' });
+        res.status(401).json({ message: 'Invalid token signature. Please log in again.' });
     }
 };
+
 /**
  * Verifies the user token if present, but allows the request to proceed if absent.
  * (This middleware is generally not needed for a protected route like /api/orders/:orderId)
@@ -2314,21 +2410,44 @@ app.post('/api/admin/register', async (req, res) => {
 });
 
 app.post('/api/admin/login', async (req, res) => {
-    // ... login logic
     const { email, password } = req.body;
+    const isProduction = process.env.NODE_ENV === 'production';
+    
     try {
         const adminUser = await findAdminUserByEmail(email);
+        
+        // 1. Validate Credentials
         if (!adminUser || !(await bcrypt.compare(password, adminUser.hashedPassword))) {
             return res.status(401).json({ message: 'Invalid credentials.' });
         }
         
-        const token = jwt.sign(
-            { id: adminUser.id, email: adminUser.email, role: 'admin' }, 
-            JWT_SECRET, 
-            { expiresIn: '24h' }
-        );
+        // --- 2. GENERATE DUAL TOKENS (The Speed and Persistence Fix) ---
+        const tokenPayload = { id: adminUser._id, email: adminUser.email, role: 'admin' };
         
-        res.status(200).json({ token, message: 'Login successful' });
+        // A. Short-Lived Access Token (For API calls, sent in response body)
+        const accessToken = generateAccessToken(tokenPayload);
+        
+        // B. Long-Lived Refresh Token (For persistent session, sent as secure cookie)
+        const refreshToken = generateRefreshToken(tokenPayload);
+        // ----------------------------------------------------------------
+        
+        // 3. Set the Refresh Token in a Secure HTTP-Only Cookie
+        // This token keeps the user logged in for 7 days (the duration of the Refresh Token)
+        res.cookie('adminRefreshToken', refreshToken, {
+            httpOnly: true, // Prevents client-side JS access (XSS security)
+            secure: isProduction, // Only sent over HTTPS in production
+            sameSite: isProduction ? 'strict' : 'lax', // CSRF protection
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days (matches token expiry)
+        });
+        
+        // 4. Send the short-lived Access Token back to the client
+        // The client must store this in memory and use it for all 'Authorization: Bearer' headers.
+        res.status(200).json({ 
+            message: 'Login successful', 
+            // 🚨 CRITICAL CHANGE: Sending the Access Token here
+            accessToken: accessToken, 
+            adminId: adminUser._id
+        });
 
     } catch (error) {
         console.error("Login error:", error);
@@ -2416,6 +2535,54 @@ app.put('/api/admin/change-password', verifyToken, async (req, res) => {
     } catch (error) {
         console.error("Admin password change error:", error);
         return res.status(500).json({ message: 'Server error: Failed to change admin password.' });
+    }
+});
+// POST /api/refresh-token
+// This endpoint is the engine for persistent, seamless admin sessions.
+app.post('/api/refresh-token', async (req, res) => {
+    // Determine production status for secure cookie settings
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    // 1. Get Refresh Token from secure cookie (MUST use the name set by the login route)
+    const refreshToken = req.cookies.adminRefreshToken; // <--- Name updated
+    
+    if (!refreshToken) {
+        return res.status(401).json({ message: 'No session token found. Please log in.' });
+    }
+
+    try {
+        // 2. Verify the Refresh Token (Long-lived check)
+        const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+        
+        // Ensure the token is for an admin (security check)
+        if (decoded.role !== 'admin') {
+            throw new Error('Invalid token role for admin refresh.');
+        }
+
+        // 3. Generate a NEW Access Token (short-lived)
+        const newAccessToken = generateAccessToken({ 
+            id: decoded.id, 
+            email: decoded.email,
+            role: decoded.role 
+        });
+
+        // 4. Send the new Access Token back to the client
+        res.status(200).json({ accessToken: newAccessToken });
+        // The client receives this and replaces the expired token in its memory/local storage.
+
+    } catch (err) {
+        // Refresh token failed verification (expired, invalid signature, or wrong role)
+        console.error("Admin Refresh Token Error:", err.message);
+        
+        // 5. Clear the bad cookie and force a full re-login
+        res.clearCookie('adminRefreshToken', { // <--- Name updated
+            httpOnly: true, 
+            secure: isProduction, 
+            sameSite: isProduction ? 'strict' : 'lax'
+        });
+        
+        // Use 401 status code for authentication failure
+        res.status(401).json({ message: 'Session expired or invalid. Please log in again.' });
     }
 });
 
@@ -3727,6 +3894,7 @@ app.get('/api/admin/wearscollections/:id', verifyToken, async (req, res) => {
         res.status(500).json({ message: 'Server error fetching collection.' });
     }
 });
+
 // POST /api/admin/wearscollections (Create New Collection) 
 app.post(
     '/api/admin/wearscollections',
@@ -5125,25 +5293,21 @@ app.post('/api/users/verify', async (req, res) => {
 });
 
 // =========================================================
-// 2. POST /api/users/login (Login) - MODIFIED
+// 2. POST /api/users/login (Login) - OPTIMIZED FOR SPEED & PERSISTENCE
 // =========================================================
 app.post('/api/users/login', async (req, res) => {
-    // ⚠️ New: Extract localCartItems from the request body 
-    // The frontend should send this payload on login
     const { email, password, localCartItems } = req.body; 
-
+    const isProduction = process.env.NODE_ENV === 'production';
+    
     try {
-        // NOTE: Ensure you import and have access to the logActivity function here!
-        // const { logActivity } = require('./utils/activityLogger');
-        
         const user = await User.findOne({ email }).select('+password').lean();
         
-        // 1. Check for user existence and password match
+        // 1. Check for user existence and password match (same as yours)
         if (!user || !(await bcrypt.compare(password, user.password))) {
             return res.status(401).json({ message: 'Invalid email or password.' });
         }
         
-        // 2. Check verification status
+        // 2. Check verification status (same as yours)
         if (!user.status.isVerified) {
             return res.status(403).json({ 
                 message: 'Account not verified. Please verify your email to log in.',
@@ -5152,54 +5316,44 @@ app.post('/api/users/login', async (req, res) => {
             });
         }
 
-        // 3. Create the JWT token
-        const token = jwt.sign(
-            { id: user._id, email: user.email, role: user.status.role || 'user' }, 
-            JWT_SECRET, 
-            { expiresIn: '24h' } 
-        );
+        // --- 3. 🚀 GENERATE DUAL TOKENS (Speed & Persistence) ---
+        const tokenPayload = { id: user._id, email: user.email }; // role is set inside the helper
         
-        // --- 🔑 Set the Token as an HTTP-only Cookie ---
-        const isProduction = process.env.NODE_ENV === 'production';
+        // A. Short-Lived Access Token (For API calls, sent in response body)
+        const accessToken = generateUserAccessToken(tokenPayload);
         
-        res.cookie('outflickzToken', token, {
-            httpOnly: true,
-            secure: isProduction,
-            sameSite: isProduction ? 'strict' : 'lax',
-            maxAge: 7 * 24 * 60 * 60 * 1000 
+        // B. Long-Lived Refresh Token (For persistent session, sent as secure cookie)
+        const refreshToken = generateUserRefreshToken(tokenPayload);
+        
+        // 4. Set the Refresh Token in a Secure HTTP-Only Cookie
+        // Rename the cookie to avoid confusion with the old system.
+        res.cookie('userRefreshToken', refreshToken, {
+            httpOnly: true, 
+            secure: isProduction, 
+            sameSite: isProduction ? 'strict' : 'lax', 
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
-        // -------------------------------------------------
+        // --------------------------------------------------------
 
-        // 4. ✨ Merge Local Cart Items into the Database Cart ✨
+        // 5. Merge Cart & Log Activity (Your logic remains the same)
         if (localCartItems && Array.isArray(localCartItems) && localCartItems.length > 0) {
-            // This function handles finding the user's permanent cart and merging/updating quantities
             await mergeLocalCart(user._id, localCartItems);
             console.log(`Cart merged for user: ${user._id}`);
         }
-        // -----------------------------------------------------------------------
         
-        // 5. 🔔 CRITICAL NEW STEP: Log the successful login event 🔔
-        // Ensure you have a 'logActivity' function imported and defined!
-        // This log will appear in the Admin Dashboard.
         try {
-            await logActivity(
-                'LOGIN',
-                `User **${user.email}** successfully logged in.`,
-                user._id,
-                { ipAddress: req.ip } // Adding context data like IP is often useful
-            );
+            await logActivity('LOGIN', `User **${user.email}** successfully logged in.`, user._id, { ipAddress: req.ip });
         } catch (logErr) {
-            console.warn('Activity logging failed (login success was not affected):', logErr);
-            // This is non-critical, so we continue without erroring out the main request
+            console.warn('Activity logging failed:', logErr);
         }
-        // -----------------------------------------------------------------------
-
-        // 6. Send the successful JSON response 
+        
+        // 6. Send the Access Token back to the client
         delete user.password; 
 
         res.status(200).json({ 
             message: 'Login successful',
-            token: token,
+            // 🚨 CRITICAL CHANGE: Send Access Token, not the Refresh Token
+            accessToken: accessToken, 
             user: user
         });
 
@@ -5232,6 +5386,43 @@ app.get('/api/users/account', verifyUserToken, async (req, res) => {
     } catch (error) {
         console.error("Fetch profile error:", error);
         res.status(500).json({ message: 'Failed to retrieve user profile.' });
+    }
+});
+
+// POST /api/users/refresh
+app.post('/api/users/refresh', async (req, res) => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    // 1. Get Refresh Token from the secure cookie
+    const refreshToken = req.cookies.userRefreshToken; 
+    
+    if (!refreshToken) {
+        return res.status(401).json({ message: 'No valid session found.' });
+    }
+
+    try {
+        // 2. Verify the Refresh Token
+        const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+        
+        if (decoded.role !== 'user') {
+            throw new Error('Invalid token role for user refresh.');
+        }
+
+        // 3. Generate a NEW, short-lived Access Token
+        const newAccessToken = generateUserAccessToken({ id: decoded.id, email: decoded.email });
+
+        // 4. Send the new Access Token back
+        res.status(200).json({ accessToken: newAccessToken });
+
+    } catch (err) {
+        // 5. If refresh token is expired/invalid, clear it and force re-login
+        res.clearCookie('userRefreshToken', { 
+            httpOnly: true, 
+            secure: isProduction, 
+            sameSite: isProduction ? 'strict' : 'lax' 
+        });
+        
+        res.status(401).json({ message: 'Session expired. Please log in again.' });
     }
 });
 

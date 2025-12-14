@@ -433,224 +433,244 @@ body {
             
         </div>
     </div>
-    
+   
 <script>
-    // *** 1. CONFIGURATION ***
-    const API_BASE_URL = 'https://outflickz.com/api';
-    const REGISTER_ENDPOINT = `${API_BASE_URL}/users/register`;
-    const VERIFY_ENDPOINT = `${API_BASE_URL}/users/verify`;
-    const RESEND_ENDPOINT = `${API_BASE_URL}/users/resend-verification`;
-    const LOGIN_ENDPOINT = `${API_BASE_URL}/users/login`;
-    // Add a LOGOUT endpoint (assuming one exists or will be created)
-    const LOGOUT_ENDPOINT = `${API_BASE_URL}/users/logout`; 
-    // ⭐ NEW GLOBAL CONSTANT: KEY for the JWT token
-    const AUTH_TOKEN_KEY = 'outflickzAuthToken';
+// *** 1. CONFIGURATION ***
+const API_BASE_URL = 'https://outflickzz.netlify.app/api';
+const REGISTER_ENDPOINT = `${API_BASE_URL}/users/register`;
+const VERIFY_ENDPOINT = `${API_BASE_URL}/users/verify`;
+const RESEND_ENDPOINT = `${API_BASE_URL}/users/resend-verification`;
+const LOGIN_ENDPOINT = `${API_BASE_URL}/users/login`;
+// Add a LOGOUT endpoint (assuming one exists or will be created)
+const LOGOUT_ENDPOINT = `${API_BASE_URL}/users/logout`; 
+// ⭐ NEW GLOBAL CONSTANT: KEY for the JWT token for client-side API calls
+const AUTH_TOKEN_KEY = 'outflickzAuthToken'; 
+// ⭐ NEW GLOBAL CONSTANT: KEY for the local cart data
+const LOCAL_CART_KEY = 'outflickzLocalCart';
+// ⭐ NEW GLOBAL CONSTANT: Key for the cart item count (used for the badge)
+const CART_STORAGE_KEY = 'outflickzCartItemCount'; 
+// ⭐ NEW GLOBAL STATE for the permanent cart items (must be loaded after login)
+let globalCartItems = []; 
 
-    let pendingVerificationEmail = '';
 
-    let views = {};
-    let headerElement;
-    let messageArea;
-    let container;
+let pendingVerificationEmail = '';
 
-    // --- NEW: STATE/PROVINCE DATA FOR DROPDOWN ---
-    const stateOptions = {
-        'Nigeria': ['Abia', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa', 'Benue', 'Borno', 'Cross River', 'Delta', 'Ebonyi', 'Edo', 'Ekiti', 'Enugu', 'Gombe', 'Imo', 'Jigawa', 'Kaduna', 'Kano', 'Katsina', 'Kebbi', 'Kogi', 'Kwara', 'Lagos', 'Nasarawa', 'Niger', 'Ogun', 'Ondo', 'Osun', 'Oyo', 'Plateau', 'Rivers', 'Sokoto', 'Taraba', 'Yobe', 'Zamfara', 'FCT Abuja'],
-        'Ghana': ['Ahafo', 'Ashanti', 'Bono', 'Bono East', 'Central', 'Eastern', 'Greater Accra', 'North East', 'Northern', 'Oti', 'Savannah', 'Upper East', 'Upper West', 'Volta', 'Western', 'Western North'],
-        'South Africa': ['Eastern Cape', 'Free State', 'Gauteng', 'KwaZulu-Natal', 'Limpopo', 'Mpumalanga', 'North West', 'Northern Cape', 'Western Cape'],
-        'Kenya': ['Baringo', 'Bomet', 'Bungoma', 'Busia', 'Elgeyo-Marakwet', 'Embu', 'Garissa', 'Homa Bay', 'Isiolo', 'Kajiado', 'Kakamega', 'Kericho', 'Kiambu', 'Kilifi', 'Kirinyaga', 'Kisii', 'Kisumu', 'Kitui', 'Kwale', 'Laikipia', 'Lamu', 'Machakos', 'Makueni', 'Mandera', 'Marsabit', 'Meru', 'Migori', 'Mombasa', 'Muranga', 'Nairobi', 'Nakuru', 'Nandi', 'Narok', 'Nyamira', 'Nyandarua', 'Nyeri', 'Samburu', 'Siaya', 'Taita-Taveta', 'Tana River', 'Tharaka-Nithi', 'Trans-Nzoia', 'Turkana', 'Uasin Gishu', 'Vihiga', 'Wajir', 'West Pokot']
-    };
+let views = {};
+let headerElement;
+let messageArea;
+let container;
 
-    /**
-     * Dynamically populates the State/Province dropdown based on the selected country.
-     */
-    function populateStates() {
-        const countrySelect = document.getElementById('create-country');
-        const stateSelect = document.getElementById('create-state');
-        const selectedCountry = countrySelect.value;
-        
-        // Clear existing options
-        stateSelect.innerHTML = '<option value="" disabled selected>Select State</option>';
-        stateSelect.disabled = true;
+// --- NEW: STATE/PROVINCE DATA FOR DROPDOWN ---
+const stateOptions = {
+    'Nigeria': ['Abia', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa', 'Benue', 'Borno', 'Cross River', 'Delta', 'Ebonyi', 'Edo', 'Ekiti', 'Enugu', 'Gombe', 'Imo', 'Jigawa', 'Kaduna', 'Kano', 'Katsina', 'Kebbi', 'Kogi', 'Kwara', 'Lagos', 'Nasarawa', 'Niger', 'Ogun', 'Ondo', 'Osun', 'Oyo', 'Plateau', 'Rivers', 'Sokoto', 'Taraba', 'Yobe', 'Zamfara', 'FCT Abuja'],
+    'Ghana': ['Ahafo', 'Ashanti', 'Bono', 'Bono East', 'Central', 'Eastern', 'Greater Accra', 'North East', 'Northern', 'Oti', 'Savannah', 'Upper East', 'Upper West', 'Volta', 'Western', 'Western North'],
+    'South Africa': ['Eastern Cape', 'Free State', 'Gauteng', 'KwaZulu-Natal', 'Limpopo', 'Mpumalanga', 'North West', 'Northern Cape', 'Western Cape'],
+    'Kenya': ['Baringo', 'Bomet', 'Bungoma', 'Busia', 'Elgeyo-Marakwet', 'Embu', 'Garissa', 'Homa Bay', 'Isiolo', 'Kajiado', 'Kakamega', 'Kericho', 'Kiambu', 'Kilifi', 'Kirinyaga', 'Kisii', 'Kisumu', 'Kitui', 'Kwale', 'Laikipia', 'Lamu', 'Machakos', 'Makueni', 'Mandera', 'Marsabit', 'Meru', 'Migori', 'Mombasa', 'Muranga', 'Nairobi', 'Nakuru', 'Nandi', 'Narok', 'Nyamira', 'Nyandarua', 'Nyeri', 'Samburu', 'Siaya', 'Taita-Taveta', 'Tana River', 'Tharaka-Nithi', 'Trans-Nzoia', 'Turkana', 'Uasin Gishu', 'Vihiga', 'Wajir', 'West Pokot']
+};
 
-        if (selectedCountry && stateOptions[selectedCountry]) {
-            stateOptions[selectedCountry].forEach(state => {
-                const option = document.createElement('option');
-                option.value = state;
-                option.textContent = state;
-                stateSelect.appendChild(option);
-            });
-            stateSelect.disabled = false;
-        }
+/**
+ * Dynamically populates the State/Province dropdown based on the selected country.
+ */
+function populateStates() {
+    const countrySelect = document.getElementById('create-country');
+    const stateSelect = document.getElementById('create-state');
+    const selectedCountry = countrySelect.value;
+    
+    // Clear existing options
+    stateSelect.innerHTML = '<option value="" disabled selected>Select State</option>';
+    stateSelect.disabled = true;
+
+    if (selectedCountry && stateOptions[selectedCountry]) {
+        stateOptions[selectedCountry].forEach(state => {
+            const option = document.createElement('option');
+            option.value = state;
+            option.textContent = state;
+            stateSelect.appendChild(option);
+        });
+        stateSelect.disabled = false;
     }
-    // -----------------------------------------------------------
+}
+// -----------------------------------------------------------
 
 
-    /**
-     * Switches the active authentication view with a fade transition.
-     */
-    function showView(viewName) {
-        let currentView = Object.values(views).find(v => v.classList.contains('opacity-100') && !v.classList.contains('hidden'));
+/**
+ * Switches the active authentication view with a fade transition.
+ */
+function showView(viewName) {
+    let currentView = Object.values(views).find(v => v.classList.contains('opacity-100') && !v.classList.contains('hidden'));
 
-        const headers = {
-            'login': 'Sign In',
-            'create': 'Create Account',
-            'verify': 'Verify Account',
-            'forgot': 'Reset Password',
-        };
-        headerElement.textContent = headers[viewName] || 'Authentication';
+    const headers = {
+        'login': 'Sign In',
+        'create': 'Create Account',
+        'verify': 'Verify Account',
+        'forgot': 'Reset Password',
+    };
+    headerElement.textContent = headers[viewName] || 'Authentication';
 
-        // Simplifed to always clear message on view change
-        messageArea.classList.add('hidden');
-        messageArea.innerHTML = '';
+    // Simplifed to always clear message on view change
+    messageArea.classList.add('hidden');
+    messageArea.innerHTML = '';
 
-        const nextView = views[viewName];
+    const nextView = views[viewName];
 
-        if (!nextView) {
-            console.error(`View '${viewName}' not found.`);
-            return;
-        }
+    if (!nextView) {
+        console.error(`View '${viewName}' not found.`);
+        return;
+    }
 
-        if (currentView && currentView !== nextView) {
-            currentView.classList.remove('opacity-100');
-            currentView.classList.add('opacity-0');
+    if (currentView && currentView !== nextView) {
+        currentView.classList.remove('opacity-100');
+        currentView.classList.add('opacity-0');
 
-            // Adjust height for smooth transition between views of different sizes
-            container.style.height = `${currentView.offsetHeight}px`;
+        // Adjust height for smooth transition between views of different sizes
+        container.style.height = `${currentView.offsetHeight}px`;
+
+        setTimeout(() => {
+            currentView.classList.add('hidden');
+            currentView.classList.remove('absolute');
+
+            nextView.classList.remove('hidden');
+            nextView.classList.add('absolute');
+
+            // Calculate and set the target height before showing
+            container.style.height = `${nextView.offsetHeight}px`;
 
             setTimeout(() => {
-                currentView.classList.add('hidden');
-                currentView.classList.remove('absolute');
+                nextView.classList.remove('absolute');
+                nextView.classList.remove('opacity-0');
+                nextView.classList.add('opacity-100');
 
-                nextView.classList.remove('hidden');
-                nextView.classList.add('absolute');
-
-                // Calculate and set the target height before showing
-                container.style.height = `${nextView.offsetHeight}px`;
-
+                // Reset height after transition to allow responsive growth
                 setTimeout(() => {
-                    nextView.classList.remove('absolute');
-                    nextView.classList.remove('opacity-0');
-                    nextView.classList.add('opacity-100');
+                    container.style.height = '';
+                }, 400);
+            }, 50);
+        }, 400);
+    } else if (nextView) {
+        nextView.classList.remove('hidden');
+        nextView.classList.remove('opacity-0');
+        nextView.classList.add('opacity-100');
+    }
+}
 
-                    // Reset height after transition to allow responsive growth
-                    setTimeout(() => {
-                        container.style.height = '';
-                    }, 400);
-                }, 50);
-            }, 400);
-        } else if (nextView) {
-            nextView.classList.remove('hidden');
-            nextView.classList.remove('opacity-0');
-            nextView.classList.add('opacity-100');
-        }
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize DOM elements after load
+    views = {
+        'login': document.getElementById('login-view'),
+        'create': document.getElementById('create-view'),
+        'verify': document.getElementById('verify-view'),
+        'forgot': document.getElementById('forgot-view'),
+        // 'profile' view removed
+    };
+    headerElement = document.getElementById('auth-header');
+    messageArea = document.getElementById('message-area');
+    container = document.getElementById('auth-views');
+
+    // Check if all essential elements were found
+    if (!headerElement || !messageArea || !container || !views.login) {
+        console.error("Essential DOM elements for authentication not found. Check HTML IDs.");
+        // Stop execution if main elements are missing to prevent runtime errors
+        return;
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-        // Initialize DOM elements after load
-        views = {
-            'login': document.getElementById('login-view'),
-            'create': document.getElementById('create-view'),
-            'verify': document.getElementById('verify-view'),
-            'forgot': document.getElementById('forgot-view'),
-            // 'profile' view removed
-        };
-        headerElement = document.getElementById('auth-header');
-        messageArea = document.getElementById('message-area');
-        container = document.getElementById('auth-views');
-
-        // Check if all essential elements were found
-        if (!headerElement || !messageArea || !container || !views.login) {
-            console.error("Essential DOM elements for authentication not found. Check HTML IDs.");
-            // Stop execution if main elements are missing to prevent runtime errors
-            return;
-        }
-
-        // ⭐ NEW: Add listener for country change to populate states
-        const countrySelect = document.getElementById('create-country');
-        if (countrySelect) {
-            countrySelect.addEventListener('change', populateStates);
-        }
-
-        // ⭐ NEW: Add listener for a generic logout button
-        // NOTE: A visible logout button must be added to the HTML if this is needed outside the auth flow.
-        const logoutBtn = document.getElementById('logout-btn'); 
-        if (logoutBtn) {
-            logoutBtn.addEventListener('click', handleLogout);
-        }
-        
-        // Add event listeners to newly added forms/buttons
-        const verifyForm = document.getElementById('verify-form');
-        if (verifyForm) {
-            verifyForm.addEventListener('submit', handleVerification);
-        }
-
-        const forgotForm = document.getElementById('forgot-form');
-        if (forgotForm) {
-            forgotForm.addEventListener('submit', handleForgotPassword);
-        }
-        
-        const createForm = document.getElementById('create-form');
-        if (createForm) {
-            createForm.addEventListener('submit', handleCreateAccount); // Ensure create form has listener
-        }
-        
-        const loginForm = document.getElementById('login-form');
-        if (loginForm) {
-            loginForm.addEventListener('submit', handleLogin); // Ensure login form has listener
-        }
-
-
-        const resendBtn = document.getElementById('resend-btn');
-        if (resendBtn) {
-            resendBtn.addEventListener('click', handleResendCode);
-        }
-
-
-        showView('login');
-    });
-
-    /**
-     * Toggles password input type between 'password' and 'text'.
-     */
-    function togglePasswordVisibility(fieldId) {
-        const field = document.getElementById(fieldId);
-        const button = document.getElementById(`toggle-${fieldId}`);
-
-        if (field.type === 'password') {
-            field.type = 'text';
-            button.textContent = 'Hide';
-        } else {
-            field.type = 'password';
-            button.textContent = 'View';
-        }
+    // ⭐ NEW: Add listener for country change to populate states
+    const countrySelect = document.getElementById('create-country');
+    if (countrySelect) {
+        countrySelect.addEventListener('change', populateStates);
     }
 
-    /**
-     * Displays a temporary message.
-     */
-    function displayMessage(message, type = 'info') {
-        const baseClasses = 'mt-8 p-4 text-sm rounded-xl font-medium';
-        messageArea.className = baseClasses;
-        messageArea.innerHTML = message;
-
-        switch (type) {
-            case 'success':
-                messageArea.classList.add('bg-green-100', 'text-green-800', 'border', 'border-green-300');
-                break;
-            case 'error':
-                messageArea.classList.add('bg-red-100', 'text-red-800', 'border', 'border-red-300');
-                break;
-            default: // 'info'
-                messageArea.classList.add('bg-blue-100', 'text-blue-800', 'border', 'border-blue-300');
-                break;
-        }
-        messageArea.classList.remove('hidden');
+    // ⭐ NEW: Add listener for a generic logout button
+    // NOTE: A visible logout button must be added to the HTML if this is needed outside the auth flow.
+    const logoutBtn = document.getElementById('logout-btn'); 
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', handleLogout);
+    }
+    
+    // Add event listeners to newly added forms/buttons
+    const verifyForm = document.getElementById('verify-form');
+    if (verifyForm) {
+        verifyForm.addEventListener('submit', handleVerification);
     }
 
-    /**
- * Function to handle login form submission with real API call
+    const forgotForm = document.getElementById('forgot-form');
+    if (forgotForm) {
+        forgotForm.addEventListener('submit', handleForgotPassword);
+    }
+    
+    const createForm = document.getElementById('create-form');
+    if (createForm) {
+        createForm.addEventListener('submit', handleCreateAccount); // Ensure create form has listener
+    }
+    
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        loginForm.addEventListener('submit', handleLogin); // Ensure login form has listener
+    }
+
+
+    const resendBtn = document.getElementById('resend-btn');
+    if (resendBtn) {
+        resendBtn.addEventListener('click', handleResendCode);
+    }
+
+
+    showView('login');
+});
+
+/**
+ * Toggles password input type between 'password' and 'text'.
  */
+function togglePasswordVisibility(fieldId) {
+    const field = document.getElementById(fieldId);
+    const button = document.getElementById(`toggle-${fieldId}`);
+
+    if (field.type === 'password') {
+        field.type = 'text';
+        button.textContent = 'Hide';
+    } else {
+        field.type = 'password';
+        button.textContent = 'View';
+    }
+}
+
+/**
+ * Displays a temporary message.
+ */
+function displayMessage(message, type = 'info') {
+    const baseClasses = 'mt-8 p-4 text-sm rounded-xl font-medium';
+    messageArea.className = baseClasses;
+    messageArea.innerHTML = message;
+
+    switch (type) {
+        case 'success':
+            messageArea.classList.add('bg-green-100', 'text-green-800', 'border', 'border-green-300');
+            break;
+        case 'error':
+            messageArea.classList.add('bg-red-100', 'text-red-800', 'border', 'border-red-300');
+            break;
+        case 'warning': // Added for critical alerts that aren.t fatal errors
+            messageArea.classList.add('bg-yellow-100', 'text-yellow-800', 'border', 'border-yellow-300');
+            break;
+        default: // 'info'
+            messageArea.classList.add('bg-blue-100', 'text-blue-800', 'border', 'border-blue-300');
+            break;
+    }
+    messageArea.classList.remove('hidden');
+}
+
+/**
+* Helper function to simulate a cart badge update (since the actual HTML is missing).
+* In a real app, this would update the count displayed next to a cart icon.
+*/
+function updateCartBadge() {
+    const itemCount = localStorage.getItem(CART_STORAGE_KEY) || '0';
+    console.log(`[Cart State] Cart badge updated: ${itemCount} items.`);
+    // Example: document.getElementById('cart-badge').textContent = itemCount;
+}
+
+/**
+* Function to handle login form submission with real API call
+*/
 async function handleLogin(event) {
     event.preventDefault();
     const email = document.getElementById('login-email').value;
@@ -660,7 +680,7 @@ async function handleLogin(event) {
     // --- 🔑 CART MERGE LOGIC - STEP 1: READ LOCAL CART ---
     let localCartItems = [];
     try {
-        const localCartJson = localStorage.getItem('outflickzLocalCart');
+        const localCartJson = localStorage.getItem(LOCAL_CART_KEY);
         if (localCartJson) {
             localCartItems = JSON.parse(localCartJson);
             // Ensure it's an array before sending
@@ -710,11 +730,13 @@ async function handleLogin(event) {
             if (data.token) {
                 localStorage.setItem(AUTH_TOKEN_KEY, data.token);
                 console.log('JWT Token successfully stored for API access.');
+            } else {
+                 console.warn('No JWT token received in the login response body. API calls might fail.');
             }
             
             // --- 🔑 CART MERGE LOGIC - STEP 3: CLEAR LOCAL STORAGE ---
             if (localCartItems.length > 0) {
-                localStorage.removeItem('outflickzLocalCart');
+                localStorage.removeItem(LOCAL_CART_KEY);
                 console.log('Local cart cleared upon successful merge.');
             }
             // ----------------------------------------------------------
@@ -723,6 +745,7 @@ async function handleLogin(event) {
             try {
                 // This function must call the new GET /api/user/cart endpoint
                 // and save the permanent cart items into the frontend's global state/cache.
+                // NOTE: The endpoint is '/api/user/cart' relative to the base, which will be resolved by the fetch API.
                 await fetchAndSetPermanentCartState(); 
                 console.log('Permanent cart state updated successfully.');
             } catch (cartError) {
@@ -770,17 +793,34 @@ async function handleLogin(event) {
     }
 }
 
+/**
+ * Fetches the permanent cart from the server after a successful login/auth.
+ * Assumes a global variable 'globalCartItems' and the presence of 'CART_STORAGE_KEY'
+ * and 'updateCartBadge' function in the file's scope.
+ */
 async function fetchAndSetPermanentCartState() {
     // 1. Prepare the fetch request
     // We rely on the HTTP-only cookie set by the server, so an Authorization header is optional
     // but the 'credentials' option is CRITICAL for cross-origin requests.
-    const response = await fetch('/api/user/cart', {
+    // NOTE: The endpoint is a relative path assuming the API is at the root. Adjust if needed.
+    const authToken = localStorage.getItem(AUTH_TOKEN_KEY); 
+    if (!authToken) {
+        console.warn('Cannot fetch cart: JWT token is missing.');
+        globalCartItems = [];
+        localStorage.setItem(CART_STORAGE_KEY, '0');
+        updateCartBadge();
+        return;
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/user/cart`, { // Adjusted to use API_BASE_URL
         method: 'GET',
         headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            // Include JWT token for authorization
+            'Authorization': `Bearer ${authToken}` 
         },
-        // ✅ CRITICAL: Include the HTTP-only cookie in the request
-        credentials: 'include' 
+        // 'credentials: include' is usually for HTTP-only cookies, but JWT is handled via Authorization header. 
+        // We can omit 'credentials' unless using a proxy or strictly cross-origin cookies.
     });
 
     // 2. Handle non-OK response (401, 403, 500)
@@ -800,12 +840,12 @@ async function fetchAndSetPermanentCartState() {
     
     // Ensure the data structure is an array of items (or an empty array)
     const permanentItems = cartData.items && Array.isArray(cartData.items) 
-                           ? cartData.items 
-                           : [];
+                            ? cartData.items 
+                            : [];
 
     // 4. Store the items in the global state/cache
     // Assuming 'globalCartItems' is the variable read by your product page buttons and cart view
-    window.globalCartItems = permanentItems; 
+    globalCartItems = permanentItems; 
     console.log(`Permanent cart loaded with ${permanentItems.length} unique items.`);
     
     // 5. Update the local storage item count and UI badge
@@ -815,8 +855,8 @@ async function fetchAndSetPermanentCartState() {
 
 
 /**
- * Handles create account form submission and transitions to verification view.
- */
+* Handles create account form submission and transitions to verification view.
+*/
 async function handleCreateAccount(event) {
     event.preventDefault();
     const form = event.target;
@@ -919,8 +959,8 @@ async function handleCreateAccount(event) {
                 pendingVerificationEmail = email;
                 document.getElementById('verify-email-display').textContent = email;
 
-                // Display the server's message as a less alarming 'warning' type.
-             //   displayMessage(data.message || `Account already registered or verification code re-send failed. Please check your email and proceed to verification.`, 'warning');
+                // Display a warning message and direct them to verification.
+                displayMessage(data.message || `Account already registered or verification code re-send failed. Please check your email and proceed to verification.`, 'warning');
                 
                 form.reset();
                 document.getElementById('create-state').disabled = true;
@@ -949,8 +989,8 @@ async function handleCreateAccount(event) {
 }
 
 /**
- * Handles account verification code submission.
- */
+* Handles account verification code submission.
+*/
 async function handleVerification(event) {
     event.preventDefault();
     // Trim whitespace from the code input immediately
@@ -1018,13 +1058,10 @@ async function handleVerification(event) {
         } else {
             // ⭐ ADDED LOGIC: If the failure is "already verified" (status 400) 
             // and the function is still running due to a double-call bug, 
-            // we should NOT display an error if the success message has already been triggered 
-            // by the first call (which this function logic cannot see, but we can assume).
-            // Since the external bug is causing the double-call, we suppress the 400 error message.
+            // we suppress the error message but reset the button.
             if (response.status === 400 && data.message && data.message.includes('already verified')) {
-                console.warn('Suppressing redundant "already verified" error message due to double-submission bug.');
-                // Do NOT display error message to the user, but still reset the button to 'Verify Account' 
-                // in case the first call failed for a different reason.
+                console.warn('Suppressing redundant "already verified" error message due to potential double-submission.');
+                displayMessage('This account is already verified. Please proceed to sign in.', 'info');
             } else {
                 // For all other errors, display the failure message
                 const errorMessage = data.message || `Verification API Error (${response.status}).`;
@@ -1046,138 +1083,148 @@ async function handleVerification(event) {
     }
 }
 
-    /**
-     * Starts a cooldown timer for the Resend Code button.
-     */
-    function setResendCooldown(durationSeconds = 60) {
-        const resendBtn = document.getElementById('resend-btn');
-        resendBtn.disabled = true;
-        let timer = durationSeconds;
-        resendBtn.textContent = `Resend Code (${timer}s)`;
+/**
+ * Starts a cooldown timer for the Resend Code button.
+ */
+function setResendCooldown(durationSeconds = 60) {
+    const resendBtn = document.getElementById('resend-btn');
+    resendBtn.disabled = true;
+    let timer = durationSeconds;
+    resendBtn.textContent = `Resend Code (${timer}s)`;
 
-        const interval = setInterval(() => {
-            timer--;
-            if (timer > 0) {
-                resendBtn.textContent = `Resend Code (${timer}s)`;
-            } else {
-                clearInterval(interval);
-                resendBtn.textContent = 'Resend Code';
-                resendBtn.disabled = false;
-            }
+    const interval = setInterval(() => {
+        timer--;
+        if (timer > 0) {
+            resendBtn.textContent = `Resend Code (${timer}s)`;
+        } else {
+            clearInterval(interval);
+            resendBtn.textContent = 'Resend Code';
+            resendBtn.disabled = false;
+        }
+    }, 1000);
+}
+
+/**
+ * Handles resending the verification code with cooldown logic.
+ */
+async function handleResendCode() {
+    const resendBtn = document.getElementById('resend-btn');
+    const email = pendingVerificationEmail;
+
+    if (resendBtn.disabled) {
+        // Cooldown is active, just return
+        return;
+    }
+
+    if (!email) {
+        showView('create');
+        displayMessage('Please create an account first.', 'error');
+        return;
+    }
+
+    // Set cooldown immediately upon clicking
+    setResendCooldown(60); 
+    displayMessage(`Requesting new code for ${email}...`, 'info');
+
+    try {
+        const response = await fetch(RESEND_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email })
+        });
+
+        // ROBUST JSON PARSING
+        let data = {};
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+        } else if (!response.ok) {
+            throw new Error(`Server Error (${response.status}): Netlify could not find the function or the server crashed.`);
+        }
+        // END ROBUST PARSING
+
+        if (response.ok) {
+            displayMessage('New code successfully sent! Check your inbox.', 'success');
+        } else {
+            const errorMessage = data.message || `Resend API Error (${response.status}).`;
+            displayMessage(`Resend Failed: ${errorMessage}`, 'error');
+            // Do NOT reset cooldown here, let it continue to prevent abuse
+        }
+    } catch (error) {
+        console.error('Resend network failed:', error);
+        displayMessage(`Connection Error: ${error.message || 'Could not connect to the resend service.'}`, 'error');
+        // Do NOT reset cooldown here, let it continue to prevent abuse
+    }
+}
+
+/**
+ * Placeholder function for handling forgot password form submission.
+ */
+function handleForgotPassword(event) {
+    event.preventDefault();
+    const email = document.getElementById('forgot-email').value;
+    // In a real app, send API call to trigger password reset email
+    displayMessage(`If an account exists for ${email}, a password reset link has been sent.`, 'success');
+    setTimeout(() => {
+        showView('login');
+    }, 5000);
+}
+
+
+// ------------------------------------------------------------------
+// ⭐ NEW FUNCTION: HANDLE LOGOUT
+// ------------------------------------------------------------------
+
+/**
+ * Handles user logout by calling the backend to clear the HTTP-only cookie.
+ * This is CRITICAL for the secure cookie flow.
+ */
+async function handleLogout() {
+    displayMessage('Logging out...', 'info');
+
+    try {
+        // The cookie is automatically sent with this request due to browser behavior.
+        // The backend should respond by clearing/expiring the cookie.
+        const response = await fetch(LOGOUT_ENDPOINT, {
+            method: 'POST',
+            // CRITICAL: Include the cookie/credentials in the request
+            credentials: 'include', 
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        // No need to check response.ok strictly, as we proceed with client-side cleanup regardless.
+
+        // 1. Clear any local state that might indicate a logged-in user
+        // Note: The local cart key is cleared upon login, but good practice to clear on logout too.
+        localStorage.removeItem(LOCAL_CART_KEY); 
+        // ⭐ CRITICAL FIX: Remove the JWT token from local storage (the token used for API calls)
+        localStorage.removeItem(AUTH_TOKEN_KEY); 
+        
+        // 2. Clear global state
+        globalCartItems = [];
+        localStorage.setItem(CART_STORAGE_KEY, '0');
+        updateCartBadge();
+        
+        // 3. Display success message and redirect
+        displayMessage('You have been successfully signed out.', 'success');
+        
+        setTimeout(() => {
+            window.location.href = 'index.html'; // Redirect to the main landing page
+        }, 1000);
+
+    } catch (error) {
+        console.error('Logout failed:', error);
+        // Even if the network call fails, attempt to redirect the user for consistency
+        displayMessage('Logout failed, but clearing local state. Redirecting...', 'error');
+        
+        // Still clear local tokens on network failure for safety
+        localStorage.removeItem(AUTH_TOKEN_KEY); 
+        
+        setTimeout(() => {
+            window.location.href = 'index.html'; 
         }, 1000);
     }
-
-    /**
-     * Handles resending the verification code with cooldown logic.
-     */
-    async function handleResendCode() {
-        const resendBtn = document.getElementById('resend-btn');
-        const email = pendingVerificationEmail;
-
-        if (resendBtn.disabled) {
-            // Cooldown is active, just return
-            return;
-        }
-
-        if (!email) {
-            showView('create');
-            displayMessage('Please create an account first.', 'error');
-            return;
-        }
-
-        setResendCooldown(60);
-        displayMessage(`Resending code to ${email}...`, 'info');
-
-        try {
-            const response = await fetch(RESEND_ENDPOINT, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: email })
-            });
-
-            // ROBUST JSON PARSING
-            let data = {};
-            const contentType = response.headers.get('content-type');
-            if (contentType && contentType.includes('application/json')) {
-                data = await response.json();
-            } else if (!response.ok) {
-                throw new Error(`Server Error (${response.status}): Netlify could not find the function or the server crashed.`);
-            }
-            // END ROBUST PARSING
-
-            if (response.ok) {
-                displayMessage('New code successfully sent! Check your inbox.', 'success');
-            } else {
-                const errorMessage = data.message || `Resend API Error (${response.status}).`;
-                displayMessage(`Resend Failed: ${errorMessage}`, 'error');
-            }
-        } catch (error) {
-            console.error('Resend network failed:', error);
-            displayMessage(`Connection Error: ${error.message || 'Could not connect to the resend service.'}`, 'error');
-        }
-    }
-
-    /**
-     * Placeholder function for handling forgot password form submission.
-     */
-    function handleForgotPassword(event) {
-        event.preventDefault();
-        const email = document.getElementById('forgot-email').value;
-        // In a real app, send API call to trigger password reset email
-        displayMessage(`If an account exists for ${email}, a password reset link has been sent.`, 'success');
-        setTimeout(() => {
-            showView('login');
-        }, 5000);
-    }
-
-
-    // ------------------------------------------------------------------
-    // ⭐ NEW FUNCTION: HANDLE LOGOUT
-    // ------------------------------------------------------------------
-
-    /**
-     * Handles user logout by calling the backend to clear the HTTP-only cookie.
-     * This is CRITICAL for the secure cookie flow.
-     */
-    async function handleLogout() {
-        displayMessage('Logging out...', 'info');
-
-        try {
-            // The cookie is automatically sent with this request.
-            // The backend should respond by clearing/expiring the cookie.
-            const response = await fetch(LOGOUT_ENDPOINT, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            });
-
-            // No need to check response.ok strictly, as we assume the server clears the cookie
-            // (even on error, we proceed with client-side cleanup).
-
-            // 1. Clear any local state that might indicate a logged-in user
-            localStorage.removeItem('outflickzLocalCart'); 
-            // ⭐ CRITICAL FIX: Remove the JWT token from local storage (the token used for API calls)
-            localStorage.removeItem(AUTH_TOKEN_KEY); 
-            
-            // 2. Display success message and redirect
-            displayMessage('You have been successfully signed out.', 'success');
-            
-            setTimeout(() => {
-                window.location.href = 'index.html'; // Redirect to the main landing page
-            }, 1000);
-
-        } catch (error) {
-            console.error('Logout failed:', error);
-            // Even if the network call fails, attempt to redirect the user for consistency
-            displayMessage('Logout failed, but clearing local state. Redirecting...', 'error');
-            
-            // Still clear local tokens on network failure for safety
-            localStorage.removeItem(AUTH_TOKEN_KEY); 
-            
-            setTimeout(() => {
-                window.location.href = 'index.html'; 
-            }, 1000);
-        }
-    }
+}
 </script>
 </body>
 </html>
