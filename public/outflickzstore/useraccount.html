@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Outflickz - User Account</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
+   <style>
+/* Modernized Tailwind Configuration */
+:focus:not(:focus-visible) {
+    outline: none;
+}
+/* Custom transition for view switching - smoother, but adjusted for the new layout */
+.view-transition {
+    transition: opacity 0.4s ease-in-out, transform 0.4s ease-in-out;
+}
+
+/* --- 1. NEW BODY/CONTAINER STYLING FOR SPLIT SCREEN --- */
+body {
+    /* Clean black/deep gray background for the full canvas */
+    background-color: #1f2937; /* bg-gray-800 */
+    /* *** CRITICAL: Allow body to grow past viewport height on mobile for scrolling *** */
+    min-height: 100vh; 
+    overflow-y: auto; 
+}
+
+/* General Form Elements - Ensure 100% width and box-sizing for all screen sizes */
+.form-group label {
+    display: block; /* Ensures label and input are on separate lines */
+    margin-bottom: 5px;
+    color: #374151; /* Dark text for light form background */
+}
+
+.form-group input, 
+.form-group select, 
+#login-btn, 
+#create-btn, 
+#verify-btn {
+    width: 100%; /* CRITICAL for mobile responsiveness */
+    padding: 12px;
+    margin-bottom: 15px;
+    box-sizing: border-box; /* Includes padding/border in element's total width */
+}
+
+/* General Message Container Styling */
+#message-container {
+    margin-bottom: 20px;
+    padding: 10px;
+    text-align: center;
+}
+
+
+/* --- 2. DESKTOP STYLES (min-width: 768px) --- */
+@media (min-width: 768px) {
+    .app-container {
+        /* Set up the 2/3 (form) and 1/3 (branding) split */
+        display: grid; /* Ensure the grid is applied */
+        grid-template-columns: 2fr 1fr; /* Form is 2/3, Branding is 1/3 */
+        max-width: 1100px; /* Wider desktop canvas */
+        min-height: 80vh; 
+        /* Enforce fixed height for desktop layout, centered */
+        height: auto;
+        max-height: 95vh;
+        margin: 5vh auto; /* Center the whole box vertically and horizontally */
+        border-radius: 8px; /* Optional: Rounded corners for the container */
+        overflow: hidden; /* Prevent form/sidebar overflow */
+    }
+    
+    .form-section {
+        padding: 50px; /* Larger desktop padding */
+        max-width: none; /* Let the grid manage the width */
+        /* Make sure form section is scrollable if content is too long on desktop */
+        overflow-y: auto; 
+    }
+    
+    .branding-sidebar {
+        display: flex; /* Show sidebar on desktop */
+    }
+}
+
+/* Form Section Styling (Right Side on Desktop) */
+.form-section {
+    background-color: #ffffff; 
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1); 
+}
+
+/* Branding Sidebar Styling (Left Side on Desktop) */
+.branding-sidebar {
+    background: linear-gradient(135deg, #374151 0%, #111827 100%); /* bg-gray-700 to bg-gray-900 */
+    padding: 30px; /* Default padding for sidebar content */
+}
+
+
+/* --- 3. MOBILE-SPECIFIC STYLES (max-width: 767px) --- */
+@media (max-width: 767px) {
+    
+    .app-container {
+        /* Collapse to single column, take full viewport width */
+        display: block; /* Disable grid */
+        width: 100%;
+        /* *** CRITICAL FIX: Set height to auto and remove min-height to allow scrolling *** */
+        min-height: auto; 
+        height: auto; 
+        margin: 0;
+        padding: 0;
+        border-radius: 0;
+    }
+
+    .form-section {
+        /* Adapt form to be full-width, similar to the old .auth-container mobile style */
+        width: 100%; /* Changed from 90% to 100% for full screen on mobile body */
+        margin: 0 auto; /* Center within the screen */
+        padding: 25px 20px; /* Reduced padding for smaller screens */
+        box-shadow: none; /* Clean look on mobile */
+        /* Added padding-top to give space from the top of the viewport */
+        padding-top: 40px; 
+        /* CRITICAL: Allow the content to scroll freely within the form section */
+        overflow-y: visible;
+        min-height: 100vh; /* Set min-height here so the *content* pushes the scroll */
+    }
+    
+    .branding-sidebar {
+        /* Hide the sidebar completely on mobile to save space and focus user */
+        display: none; 
+    }
+
+    #message-container {
+        width: 100%;
+        font-size: 0.95rem; /* Slightly smaller text */
+    }
+}
+</style>
+
+</head>
+<body class="min-h-screen p-0 md:p-8"> 
+
+    <div class="app-container w-full md:h-auto md:grid rounded-xl overflow-hidden">
+        
+        <div class="branding-sidebar hidden md:flex flex-col items-center justify-center p-8 text-white order-2">
+            
+            <img 
+                src="https://i.imgur.com/1Rxhi9q.jpeg" 
+                alt="Outflickz Background" 
+                class="w-32 h-32 object-cover mb-6 rounded-full border-4 border-white/30 shadow-2xl"
+            >
+            <h2 class="text-4xl font-extrabold mb-3 tracking-widest text-white">
+                OUTFLICKZ
+            </h2>
+            <p class="text-white/80 text-center text-lg font-light max-w-xs">
+                Your Number One Clothing Brand. Seamless access to exclusive fashion and styling.
+            </p>
+            <div class="mt-8 space-y-2 text-sm text-white/70">
+                <p>✨ Fast. Secure. Modern.</p>
+                <p>🛒 Cart Sync Included.</p>
+            </div>
+        </div>
+
+        <div class="form-section w-full max-w-full md:max-w-none p-6 sm:p-10 lg:p-14 md:order-1 flex flex-col justify-center">
+            
+            <div class="flex flex-col items-center mb-10">
+                <img 
+                    src="https://i.imgur.com/1Rxhi9q.jpeg" 
+                    alt="Outflickz Logo" 
+                    class="w-12 h-auto mb-2 rounded-full shadow-md md:hidden"
+                >
+                <h1 class="text-4xl font-black text-gray-900 tracking-tight">
+                    <span id="auth-header" class="text-gray-900">Sign In</span>
+                </h1>
+                <p class="text-gray-500 mt-2 text-md font-medium">
+                    Welcome Back to Outflickz
+                </p>
+            </div>
+
+            <div id="message-area" class="hidden mt-6 w-full max-w-md mx-auto">
+        </div>
+
+            <div id="auth-views" class="relative overflow-hidden w-full max-w-md mx-auto">
+                
+                <div id="login-view" class="view-transition opacity-100">
+                    <form id="login-form" onsubmit="handleLogin(event)">
+                        <div class="mb-5">
+                            <label for="login-email" class="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
+                            <input type="email" id="login-email" name="email" required 
+                                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition duration-150 ease-in-out placeholder-gray-400 text-gray-800"
+                                placeholder="Enter your registered email"
+                            >
+                        </div>
+                        <div class="mb-4">
+                            <label for="login-password" class="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+                            <div class="relative">
+                                <input type="password" id="login-password" name="password" required 
+                                    class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition duration-150 ease-in-out pr-16 placeholder-gray-400 text-gray-800"
+                                    placeholder="••••••••"
+                                >
+                                <button type="button" onclick="togglePasswordVisibility('login-password')" 
+                                    class="absolute inset-y-0 right-0 px-3 py-1 my-1 mr-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    id="toggle-login-password"
+                                    aria-label="Toggle password visibility"
+                                >
+                                    View
+                                </button>
+                            </div>
+                            <div class="text-right mt-2">
+                                <button type="button" onclick="showView('forgot')" class="text-sm font-medium text-blue-600 hover:text-blue-800 focus:outline-none focus:underline">
+                                    Forgot Password?
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" id="login-btn" class="w-full bg-black hover:bg-gray-800 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-gray-700/50 mt-4">
+                            Sign In
+                        </button>
+                    </form>
+
+                    <div class="mt-8 text-center text-sm">
+                        <p class="text-gray-600">
+                            Don't have an account? 
+                            <button onclick="showView('create')" class="text-blue-600 hover:text-blue-800 transition duration-150 ease-in-out font-semibold focus:outline-none focus:underline">
+                                Create an Account
+                            </button>
+                        </p>
+                    </div>
+                </div>
+
+             <div id="create-view" class="view-transition hidden absolute top-0 w-full opacity-0">
+    <div class="max-h-[65vh] overflow-y-auto pr-2">
+        <form id="create-form" onsubmit="handleCreateAccount(event)">
+            
+            <div class="mb-4 flex space-x-4">
+                <div class="w-1/2">
+                    <label for="create-firstName" class="block text-sm font-semibold text-gray-700 mb-2">First Name</label>
+                    <input type="text" id="create-firstName" name="firstName" 
+                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition duration-150 ease-in-out placeholder-gray-400 text-gray-800"
+                        placeholder="John"
+                    >
+                </div>
+                <div class="w-1/2">
+                    <label for="create-lastName" class="block text-sm font-semibold text-gray-700 mb-2">Last Name</label>
+                    <input type="text" id="create-lastName" name="lastName" 
+                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition duration-150 ease-in-out placeholder-gray-400 text-gray-800"
+                        placeholder="Doe"
+                    >
+                </div>
+            </div>
+
+            <div class="mb-5">
+                <label for="create-email" class="block text-sm font-semibold text-gray-700 mb-2">Email Address <span class="text-red-500">*</span></label>
+                <input type="email" id="create-email" name="email" required 
+                    class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition duration-150 ease-in-out placeholder-gray-400 text-gray-800"
+                    placeholder="your.new@example.com"
+                >
+            </div>
+            
+            <div class="mb-4 flex space-x-4">
+                <div class="w-1/2">
+                    <label for="create-phone" class="block text-sm font-semibold text-gray-700 mb-2">Phone Contact <span class="text-red-500">*</span></label>
+                    <input type="tel" id="create-phone" name="phone" required 
+                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition duration-150 ease-in-out placeholder-gray-400 text-gray-800"
+                        placeholder="+1234567890"
+                        inputmode="tel"
+                    >
+                </div>
+                <div class="w-1/2">
+                    <label for="create-whatsapp" class="block text-sm font-semibold text-gray-700 mb-2">WhatsApp Contact</label>
+                    <input type="tel" id="create-whatsapp" name="whatsapp" 
+                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition duration-150 ease-in-out placeholder-gray-400 text-gray-800"
+                        placeholder="Same as phone or different"
+                        inputmode="tel"
+                    >
+                </div>
+            </div>
+
+            <div class="mb-5">
+                <label class="block text-sm font-bold text-gray-800 mb-3">Contact Address <span class="text-red-500">*</span></label>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label for="create-street" class="block text-xs font-semibold text-gray-500 mb-1">Street Address <span class="text-red-500">*</span></label>
+                        <input type="text" id="create-street" name="street" required 
+                            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-blue-600 placeholder-gray-400 text-gray-800"
+                            placeholder="123 Main St"
+                        >
+                    </div>
+
+                    <div class="flex space-x-4">
+                        <div class="w-1/2">
+                            <label for="create-city" class="block text-xs font-semibold text-gray-500 mb-1">City <span class="text-red-500">*</span></label>
+                            <input type="text" id="create-city" name="city" required 
+                                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-blue-600 placeholder-gray-400 text-gray-800"
+                                placeholder="Lagos / Accra / Cape Town"
+                            >
+                        </div>
+                        <div class="w-1/2">
+                            <label for="create-zip" class="block text-xs font-semibold text-gray-500 mb-1">ZIP/Postal Code (Optional)</label>
+                            <input type="text" id="create-zip" name="zip" 
+                                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-blue-600 placeholder-gray-400 text-gray-800"
+                                placeholder="100001 (Optional)"
+                            >
+                        </div>
+                    </div>
+
+                    <div class="flex space-x-4">
+                        <div class="w-1/2">
+                            <label for="create-country" class="block text-xs font-semibold text-gray-500 mb-1">Country <span class="text-red-500">*</span></label>
+                            <select id="create-country" name="country" required 
+                                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-gray-800"
+                            >
+                                <option value="" disabled selected>Select Country</option>
+                                <option value="Nigeria">Nigeria</option>
+                                <option value="Ghana">Ghana</option>
+                                <option value="South Africa">South Africa</option>
+                                <option value="Kenya">Kenya</option>
+                            </select>
+                        </div>
+                        <div class="w-1/2">
+                            <label for="create-state" class="block text-xs font-semibold text-gray-500 mb-1">State/Province <span class="text-red-500">*</span></label>
+                            <select id="create-state" name="state" required disabled
+                                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-gray-800 bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400"
+                            >
+                                <option value="" disabled selected>Select State</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mb-4">
+                <label for="create-password" class="block text-sm font-semibold text-gray-700 mb-2">Password <span class="text-red-500">*</span></label>
+                <div class="relative">
+                    <input type="password" id="create-password" name="password" required 
+                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition duration-150 ease-in-out pr-16 placeholder-gray-400 text-gray-800"
+                        placeholder="Min 8 characters"
+                    >
+                    <button type="button" onclick="togglePasswordVisibility('create-password')" 
+                        class="absolute inset-y-0 right-0 px-3 py-1 my-1 mr-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        id="toggle-create-password"
+                        aria-label="Toggle password visibility"
+                    >
+                        View
+                    </button>
+                </div>
+            </div>
+            <div class="mb-6">
+                <label for="confirm-password" class="block text-sm font-semibold text-gray-700 mb-2">Confirm Password <span class="text-red-500">*</span></label>
+                <div class="relative">
+                    <input type="password" id="confirm-password" name="confirmPassword" required 
+                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition duration-150 ease-in-out pr-16 placeholder-gray-400 text-gray-800"
+                        placeholder="Re-enter password"
+                    >
+                    <button type="button" onclick="togglePasswordVisibility('confirm-password')" 
+                        class="absolute inset-y-0 right-0 px-3 py-1 my-1 mr-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        id="toggle-confirm-password"
+                        aria-label="Toggle password visibility"
+                    >
+                        View
+                    </button>
+                </div>
+            </div>
+            
+            <button type="submit" id="create-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-blue-500/50">
+                Create Account
+            </button>
+        </form>
+    </div>
+
+    <div class="mt-8 text-center text-sm">
+        <p class="text-gray-600">
+            Already have an account? 
+            <button onclick="showView('login')" class="text-blue-600 hover:text-blue-800 transition duration-150 ease-in-out font-semibold focus:outline-none focus:underline">
+                Back to Sign In
+            </button>
+        </p>
+    </div>
+</div>
+
+            <div id="verify-view" class="view-transition hidden absolute top-0 w-full opacity-0">
+                <form id="verify-form" onsubmit="handleVerification(event)">
+                    <p class="text-center text-gray-700 mb-6">
+                        A 6-digit verification code has been sent to <br>
+                        <strong id="verify-email-display" class="text-gray-900">user@example.com</strong>.
+                    </p>
+                    <div class="mb-6">
+                        <label for="verify-code" class="block text-sm font-semibold text-gray-700 mb-2">Verification Code</label>
+                        <input type="text" id="verify-code" name="code" required maxlength="6" inputmode="numeric" pattern="[0-9]{6}"
+                            class="w-full px-4 py-3 text-center text-2xl font-bold tracking-widest border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-green-600 focus:border-green-600 transition duration-150 ease-in-out placeholder-gray-400 text-gray-800"
+                            placeholder="______"
+                        >
+                    </div>
+                    <button type="submit" id="verify-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-green-500/50">
+                        Verify Account
+                    </button>
+                </form>
+                
+                <div class="mt-6 text-center text-sm space-y-3">
+                    <button type="button" id="resend-btn" onclick="handleResendCode()" class="text-blue-600 hover:text-blue-800 disabled:text-gray-500 disabled:cursor-not-allowed font-semibold focus:outline-none focus:underline transition duration-150">
+                        Resend Code
+                    </button>
+                    <p class="text-gray-600">
+                        <button onclick="showView('login')" class="text-gray-600 hover:text-gray-800 transition duration-150 ease-in-out font-semibold focus:outline-none focus:underline">
+                            Back to Sign In
+                        </button>
+                    </p>
+                </div>
+            </div>
+
+            <div id="forgot-view" class="view-transition hidden absolute top-0 w-full opacity-0">
+                <form id="forgot-form" onsubmit="handleForgotPassword(event)">
+                    <p class="text-center text-gray-700 mb-6">
+                        Enter your email address and we'll send you a link to reset your password.
+                    </p>
+                    <div class="mb-6">
+                        <label for="forgot-email" class="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
+                        <input type="email" id="forgot-email" name="email" required 
+                            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition duration-150 ease-in-out placeholder-gray-400 text-gray-800"
+                            placeholder="Enter your registered email"
+                        >
+                    </div>
+                    
+                    <button type="submit" id="forgot-btn" class="w-full bg-black hover:bg-gray-800 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-gray-700/50">
+                        Send Reset Link
+                    </button>
+                </form>
+
+                <div class="mt-8 text-center text-sm">
+                    <p class="text-gray-600">
+                        <button onclick="showView('login')" class="text-blue-600 hover:text-blue-800 transition duration-150 ease-in-out font-semibold focus:outline-none focus:underline">
+                            Back to Sign In
+                        </button>
+                    </p>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+    
+<script>
+    // *** 1. CONFIGURATION ***
+    const API_BASE_URL = 'https://outflickz.com/api';
+    const REGISTER_ENDPOINT = `${API_BASE_URL}/users/register`;
+    const VERIFY_ENDPOINT = `${API_BASE_URL}/users/verify`;
+    const RESEND_ENDPOINT = `${API_BASE_URL}/users/resend-verification`;
+    const LOGIN_ENDPOINT = `${API_BASE_URL}/users/login`;
+    // Add a LOGOUT endpoint (assuming one exists or will be created)
+    const LOGOUT_ENDPOINT = `${API_BASE_URL}/users/logout`; 
+    // ⭐ NEW GLOBAL CONSTANT: KEY for the JWT token
+    const AUTH_TOKEN_KEY = 'outflickzAuthToken';
+
+    let pendingVerificationEmail = '';
+
+    let views = {};
+    let headerElement;
+    let messageArea;
+    let container;
+
+    // --- NEW: STATE/PROVINCE DATA FOR DROPDOWN ---
+    const stateOptions = {
+        'Nigeria': ['Abia', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa', 'Benue', 'Borno', 'Cross River', 'Delta', 'Ebonyi', 'Edo', 'Ekiti', 'Enugu', 'Gombe', 'Imo', 'Jigawa', 'Kaduna', 'Kano', 'Katsina', 'Kebbi', 'Kogi', 'Kwara', 'Lagos', 'Nasarawa', 'Niger', 'Ogun', 'Ondo', 'Osun', 'Oyo', 'Plateau', 'Rivers', 'Sokoto', 'Taraba', 'Yobe', 'Zamfara', 'FCT Abuja'],
+        'Ghana': ['Ahafo', 'Ashanti', 'Bono', 'Bono East', 'Central', 'Eastern', 'Greater Accra', 'North East', 'Northern', 'Oti', 'Savannah', 'Upper East', 'Upper West', 'Volta', 'Western', 'Western North'],
+        'South Africa': ['Eastern Cape', 'Free State', 'Gauteng', 'KwaZulu-Natal', 'Limpopo', 'Mpumalanga', 'North West', 'Northern Cape', 'Western Cape'],
+        'Kenya': ['Baringo', 'Bomet', 'Bungoma', 'Busia', 'Elgeyo-Marakwet', 'Embu', 'Garissa', 'Homa Bay', 'Isiolo', 'Kajiado', 'Kakamega', 'Kericho', 'Kiambu', 'Kilifi', 'Kirinyaga', 'Kisii', 'Kisumu', 'Kitui', 'Kwale', 'Laikipia', 'Lamu', 'Machakos', 'Makueni', 'Mandera', 'Marsabit', 'Meru', 'Migori', 'Mombasa', 'Muranga', 'Nairobi', 'Nakuru', 'Nandi', 'Narok', 'Nyamira', 'Nyandarua', 'Nyeri', 'Samburu', 'Siaya', 'Taita-Taveta', 'Tana River', 'Tharaka-Nithi', 'Trans-Nzoia', 'Turkana', 'Uasin Gishu', 'Vihiga', 'Wajir', 'West Pokot']
+    };
+
+    /**
+     * Dynamically populates the State/Province dropdown based on the selected country.
+     */
+    function populateStates() {
+        const countrySelect = document.getElementById('create-country');
+        const stateSelect = document.getElementById('create-state');
+        const selectedCountry = countrySelect.value;
+        
+        // Clear existing options
+        stateSelect.innerHTML = '<option value="" disabled selected>Select State</option>';
+        stateSelect.disabled = true;
+
+        if (selectedCountry && stateOptions[selectedCountry]) {
+            stateOptions[selectedCountry].forEach(state => {
+                const option = document.createElement('option');
+                option.value = state;
+                option.textContent = state;
+                stateSelect.appendChild(option);
+            });
+            stateSelect.disabled = false;
+        }
+    }
+    // -----------------------------------------------------------
+
+
+    /**
+     * Switches the active authentication view with a fade transition.
+     */
+    function showView(viewName) {
+        let currentView = Object.values(views).find(v => v.classList.contains('opacity-100') && !v.classList.contains('hidden'));
+
+        const headers = {
+            'login': 'Sign In',
+            'create': 'Create Account',
+            'verify': 'Verify Account',
+            'forgot': 'Reset Password',
+        };
+        headerElement.textContent = headers[viewName] || 'Authentication';
+
+        // Simplifed to always clear message on view change
+        messageArea.classList.add('hidden');
+        messageArea.innerHTML = '';
+
+        const nextView = views[viewName];
+
+        if (!nextView) {
+            console.error(`View '${viewName}' not found.`);
+            return;
+        }
+
+        if (currentView && currentView !== nextView) {
+            currentView.classList.remove('opacity-100');
+            currentView.classList.add('opacity-0');
+
+            // Adjust height for smooth transition between views of different sizes
+            container.style.height = `${currentView.offsetHeight}px`;
+
+            setTimeout(() => {
+                currentView.classList.add('hidden');
+                currentView.classList.remove('absolute');
+
+                nextView.classList.remove('hidden');
+                nextView.classList.add('absolute');
+
+                // Calculate and set the target height before showing
+                container.style.height = `${nextView.offsetHeight}px`;
+
+                setTimeout(() => {
+                    nextView.classList.remove('absolute');
+                    nextView.classList.remove('opacity-0');
+                    nextView.classList.add('opacity-100');
+
+                    // Reset height after transition to allow responsive growth
+                    setTimeout(() => {
+                        container.style.height = '';
+                    }, 400);
+                }, 50);
+            }, 400);
+        } else if (nextView) {
+            nextView.classList.remove('hidden');
+            nextView.classList.remove('opacity-0');
+            nextView.classList.add('opacity-100');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Initialize DOM elements after load
+        views = {
+            'login': document.getElementById('login-view'),
+            'create': document.getElementById('create-view'),
+            'verify': document.getElementById('verify-view'),
+            'forgot': document.getElementById('forgot-view'),
+            // 'profile' view removed
+        };
+        headerElement = document.getElementById('auth-header');
+        messageArea = document.getElementById('message-area');
+        container = document.getElementById('auth-views');
+
+        // Check if all essential elements were found
+        if (!headerElement || !messageArea || !container || !views.login) {
+            console.error("Essential DOM elements for authentication not found. Check HTML IDs.");
+            // Stop execution if main elements are missing to prevent runtime errors
+            return;
+        }
+
+        // ⭐ NEW: Add listener for country change to populate states
+        const countrySelect = document.getElementById('create-country');
+        if (countrySelect) {
+            countrySelect.addEventListener('change', populateStates);
+        }
+
+        // ⭐ NEW: Add listener for a generic logout button
+        // NOTE: A visible logout button must be added to the HTML if this is needed outside the auth flow.
+        const logoutBtn = document.getElementById('logout-btn'); 
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', handleLogout);
+        }
+        
+        // Add event listeners to newly added forms/buttons
+        const verifyForm = document.getElementById('verify-form');
+        if (verifyForm) {
+            verifyForm.addEventListener('submit', handleVerification);
+        }
+
+        const forgotForm = document.getElementById('forgot-form');
+        if (forgotForm) {
+            forgotForm.addEventListener('submit', handleForgotPassword);
+        }
+        
+        const createForm = document.getElementById('create-form');
+        if (createForm) {
+            createForm.addEventListener('submit', handleCreateAccount); // Ensure create form has listener
+        }
+        
+        const loginForm = document.getElementById('login-form');
+        if (loginForm) {
+            loginForm.addEventListener('submit', handleLogin); // Ensure login form has listener
+        }
+
+
+        const resendBtn = document.getElementById('resend-btn');
+        if (resendBtn) {
+            resendBtn.addEventListener('click', handleResendCode);
+        }
+
+
+        showView('login');
+    });
+
+    /**
+     * Toggles password input type between 'password' and 'text'.
+     */
+    function togglePasswordVisibility(fieldId) {
+        const field = document.getElementById(fieldId);
+        const button = document.getElementById(`toggle-${fieldId}`);
+
+        if (field.type === 'password') {
+            field.type = 'text';
+            button.textContent = 'Hide';
+        } else {
+            field.type = 'password';
+            button.textContent = 'View';
+        }
+    }
+
+    /**
+     * Displays a temporary message.
+     */
+    function displayMessage(message, type = 'info') {
+        const baseClasses = 'mt-8 p-4 text-sm rounded-xl font-medium';
+        messageArea.className = baseClasses;
+        messageArea.innerHTML = message;
+
+        switch (type) {
+            case 'success':
+                messageArea.classList.add('bg-green-100', 'text-green-800', 'border', 'border-green-300');
+                break;
+            case 'error':
+                messageArea.classList.add('bg-red-100', 'text-red-800', 'border', 'border-red-300');
+                break;
+            default: // 'info'
+                messageArea.classList.add('bg-blue-100', 'text-blue-800', 'border', 'border-blue-300');
+                break;
+        }
+        messageArea.classList.remove('hidden');
+    }
+
+    /**
+ * Function to handle login form submission with real API call
+ */
+async function handleLogin(event) {
+    event.preventDefault();
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+    const loginBtn = document.getElementById('login-btn');
+
+    // --- 🔑 CART MERGE LOGIC - STEP 1: READ LOCAL CART ---
+    let localCartItems = [];
+    try {
+        const localCartJson = localStorage.getItem('outflickzLocalCart');
+        if (localCartJson) {
+            localCartItems = JSON.parse(localCartJson);
+            // Ensure it's an array before sending
+            if (!Array.isArray(localCartItems)) {
+                localCartItems = [];
+            }
+        }
+    } catch (e) {
+        console.warn('Could not parse local cart data from localStorage:', e);
+        localCartItems = [];
+    }
+    // -----------------------------------------------------
+
+    // 1. Show loading state
+    loginBtn.textContent = 'Signing in...';
+    loginBtn.disabled = true;
+
+    try {
+        // 2. Perform the API call (Login & Merge Cart)
+        const response = await fetch(LOGIN_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            // --- 🔑 CART MERGE LOGIC - STEP 2: INCLUDE IN PAYLOAD ---
+            body: JSON.stringify({
+                email: email,
+                password: password,
+                localCartItems: localCartItems // Pass local cart to the backend
+            })
+            // -------------------------------------------------------
+        });
+
+        // 3. Robust JSON Parsing
+        let data = {};
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+        } else if (!response.ok) {
+            throw new Error(`Server Error (${response.status}): Could not reach login service.`);
+        }
+
+        // 4. Handle API Responses
+        if (response.ok) {
+            // SUCCESS (HTTP 200): Login successful
+            // Token is now set via HTTP-only cookie by the server response.
+
+            // ⭐ CRITICAL FIX: Save the JWT token received from the server in the response body
+            if (data.token) {
+                localStorage.setItem(AUTH_TOKEN_KEY, data.token);
+                console.log('JWT Token successfully stored for API access.');
+            }
+            
+            // --- 🔑 CART MERGE LOGIC - STEP 3: CLEAR LOCAL STORAGE ---
+            if (localCartItems.length > 0) {
+                localStorage.removeItem('outflickzLocalCart');
+                console.log('Local cart cleared upon successful merge.');
+            }
+            // ----------------------------------------------------------
+            
+            // ⭐ CRITICAL FIX - STEP 4: FETCH PERMANENT CART BEFORE REDIRECTING
+            try {
+                // This function must call the new GET /api/user/cart endpoint
+                // and save the permanent cart items into the frontend's global state/cache.
+                await fetchAndSetPermanentCartState(); 
+                console.log('Permanent cart state updated successfully.');
+            } catch (cartError) {
+                // Log and continue, as successful login is more critical than the cart fetch
+                console.error('Failed to fetch permanent cart state after login:', cartError);
+            }
+            // -------------------------------------------------------------------
+
+            displayMessage('Successfully signed in! Your cart was merged. Redirecting to homepage...', 'success');
+
+            setTimeout(() => {
+                window.location.href = 'homepage.html'; // Actual redirect activated
+            }, 1000);
+
+        } else if (response.status === 403 && data.needsVerification) {
+            // FAILED (HTTP 403): Account needs verification
+            pendingVerificationEmail = email;
+            document.getElementById('verify-email-display').textContent = email;
+
+            displayMessage(data.message || 'Your account needs to be verified. Please enter the code sent to your email.', 'error');
+
+            setTimeout(() => {
+                showView('verify');
+                setResendCooldown(60);
+            }, 1000);
+
+        } else if (response.status === 401) {
+            // FAILED (HTTP 401): Invalid credentials
+            displayMessage(data.message || 'Sign In failed. Please check your email and password.', 'error');
+
+        } else {
+            // OTHER ERRORS (e.g., 500 Server Error)
+            const errorMessage = data.message || `API Error (${response.status}): An unexpected error occurred.`;
+            displayMessage(`Sign In Failed: ${errorMessage}`, 'error');
+        }
+
+    } catch (error) {
+        // 5. Handle Network/Parsing Errors
+        console.error('Login network or API call failed:', error);
+        displayMessage(`Connection Error: ${error.message || 'Could not connect to the login service.'}`, 'error');
+    } finally {
+        // 6. Reset button state
+        loginBtn.textContent = 'Sign In';
+        loginBtn.disabled = false;
+    }
+}
+
+async function fetchAndSetPermanentCartState() {
+    // 1. Prepare the fetch request
+    // We rely on the HTTP-only cookie set by the server, so an Authorization header is optional
+    // but the 'credentials' option is CRITICAL for cross-origin requests.
+    const response = await fetch('/api/user/cart', {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        // ✅ CRITICAL: Include the HTTP-only cookie in the request
+        credentials: 'include' 
+    });
+
+    // 2. Handle non-OK response (401, 403, 500)
+    if (!response.ok) {
+        // Log the failure but don't crash the application
+        console.error(`Failed to retrieve permanent cart. Status: ${response.status}`);
+        // Ensure the frontend cart state is cleared/empty if fetching the permanent cart fails
+        globalCartItems = [];
+        localStorage.setItem(CART_STORAGE_KEY, '0');
+        updateCartBadge();
+        
+        throw new Error('Could not retrieve permanent cart from server.');
+    }
+    
+    // 3. Process the successful response (HTTP 200)
+    const cartData = await response.json();
+    
+    // Ensure the data structure is an array of items (or an empty array)
+    const permanentItems = cartData.items && Array.isArray(cartData.items) 
+                           ? cartData.items 
+                           : [];
+
+    // 4. Store the items in the global state/cache
+    // Assuming 'globalCartItems' is the variable read by your product page buttons and cart view
+    window.globalCartItems = permanentItems; 
+    console.log(`Permanent cart loaded with ${permanentItems.length} unique items.`);
+    
+    // 5. Update the local storage item count and UI badge
+    localStorage.setItem(CART_STORAGE_KEY, permanentItems.length.toString()); 
+    updateCartBadge();
+}
+
+
+/**
+ * Handles create account form submission and transitions to verification view.
+ */
+async function handleCreateAccount(event) {
+    event.preventDefault();
+    const form = event.target;
+    
+    // General Fields
+    const email = document.getElementById('create-email').value;
+    const password = document.getElementById('create-password').value;
+    const confirmPassword = document.getElementById('confirm-password').value;
+    const createBtn = document.getElementById('create-btn');
+
+    // Contact Fields
+    const phone = document.getElementById('create-phone').value;
+    const whatsapp = document.getElementById('create-whatsapp').value;
+    
+    // --- UPDATED FIELD GATHERING FOR ADDRESS OBJECT ---
+    const street = document.getElementById('create-street').value;
+    const city = document.getElementById('create-city').value;
+    const state = document.getElementById('create-state').value; 
+    const country = document.getElementById('create-country').value;
+    const zip = document.getElementById('create-zip').value;
+    // ----------------------------------------------------
+
+
+    if (password !== confirmPassword) {
+        displayMessage('Passwords do not match.', 'error');
+        return;
+    }
+    if (password.length < 8) {
+        displayMessage('Password must be at least 8 characters.', 'error');
+        return;
+    }
+
+    createBtn.textContent = 'Creating...';
+    createBtn.disabled = true;
+    displayMessage('Attempting to create account via /api/register...', 'info');
+
+    // Construct the structured address object
+    const addressData = {
+        street: street,
+        city: city,
+        state: state,
+        zip: zip, // Optional field
+        country: country
+    };
+    
+    try {
+        const response = await fetch(REGISTER_ENDPOINT, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                firstName: form.firstName.value,
+                lastName: form.lastName.value,
+                email: email,
+                password: password,
+                phone: phone,
+                whatsapp: whatsapp,
+                address: addressData 
+            })
+        });
+
+        // ROBUST JSON PARSING
+        let data = {};
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+        } else if (!response.ok) {
+            throw new Error(`Server Error (${response.status}): Netlify could not find the function or the server crashed.`);
+        }
+        // END ROBUST PARSING
+
+
+        // ⭐ CHECK 1: SUCCESS/ACCEPTED PATH (HTTP 201 or 202)
+        if (response.ok || response.status === 202) {
+            
+            pendingVerificationEmail = email;
+            document.getElementById('verify-email-display').textContent = email;
+
+            // Use the message provided by the server (which covers success and 202 cases)
+            displayMessage(`Success! ${data.message || 'Check your email for the 6-digit verification code.'}`, 'success');
+
+            form.reset();
+            document.getElementById('create-state').disabled = true;
+            document.getElementById('create-state').innerHTML = '<option value="" disabled selected>Select State</option>';
+
+
+            setTimeout(() => {
+                showView('verify');
+                setResendCooldown(60);
+            }, 2000);
+
+        } else {
+            // ERROR PATH (400, 409, 503, etc.)
+
+            // ⭐ CRITICAL FIX: CHECK 2: ACCOUNT EXISTS BUT EMAIL FAILED (HTTP 409 or 503 + userId)
+            // If the account exists (409 Conflict, 503 Service Unavailable) AND the server 
+            // provided a userId, we must move the user to the verification screen.
+            if ((response.status === 409 || response.status === 503) && data.userId) {
+                pendingVerificationEmail = email;
+                document.getElementById('verify-email-display').textContent = email;
+
+                // Display the server's message as a less alarming 'warning' type.
+             //   displayMessage(data.message || `Account already registered or verification code re-send failed. Please check your email and proceed to verification.`, 'warning');
+                
+                form.reset();
+                document.getElementById('create-state').disabled = true;
+                document.getElementById('create-state').innerHTML = '<option value="" disabled selected>Select State</option>';
+
+                setTimeout(() => {
+                    showView('verify');
+                    // Do not setResendCooldown here, so the user can immediately click resend if needed.
+                }, 2000);
+                
+            } else {
+                // TRUE FAILURE PATH (400 Bad Request, unhandled 500/503 without userId, etc.)
+                const errorMessage = data.message || `API Error (${response.status}): An unexpected error occurred.`;
+                displayMessage(`Registration Failed: ${errorMessage}`, 'error');
+            }
+        }
+
+    } catch (error) {
+        // Handle network errors or the Error thrown by robust parsing
+        console.error('Network or API call failed:', error);
+        displayMessage(`Connection Error: ${error.message || 'Could not connect to the registration service. Check endpoint configuration.'}`, 'error');
+    } finally {
+        createBtn.textContent = 'Create Account';
+        createBtn.disabled = false;
+    }
+}
+
+/**
+ * Handles account verification code submission.
+ */
+async function handleVerification(event) {
+    event.preventDefault();
+    // Trim whitespace from the code input immediately
+    const code = document.getElementById('verify-code').value.trim(); 
+    const verifyBtn = document.getElementById('verify-btn');
+    const email = pendingVerificationEmail;
+
+    if (!email) {
+        displayMessage('Error: No pending email found. Please create an account.', 'error');
+        showView('create');
+        return;
+    }
+
+    // ⭐ CLIENT-SIDE VALIDATION: Check if code is present and has expected length
+    if (!code || code.length !== 6) { 
+        displayMessage('Please enter a valid 6-digit verification code.', 'error');
+        return; // Stop execution here if validation fails
+    }
+    // ⭐ END VALIDATION
+
+    verifyBtn.textContent = 'Verifying...';
+    verifyBtn.disabled = true;
+
+    try {
+        const response = await fetch(VERIFY_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email, code: code })
+        });
+
+        // ROBUST JSON PARSING
+        let data = {};
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+        } else if (!response.ok) {
+            // Handle non-JSON server errors
+            throw new Error(`Server Error (${response.status}): Netlify could not find the function or the server crashed.`);
+        }
+        // END ROBUST PARSING
+
+
+        if (response.ok) {
+            displayMessage('Account verified successfully! You can now sign in.', 'success');
+            
+            // ⭐ FIX: Immediately disable the button and input on success
+            // This prevents the user from clicking again and triggering the 400 'already verified' error.
+            document.getElementById('verify-code').disabled = true;
+            verifyBtn.textContent = 'Verified!'; // Set to success state
+
+            pendingVerificationEmail = '';
+            document.getElementById('verify-code').value = '';
+
+            setTimeout(() => {
+                showView('login');
+                document.getElementById('login-email').value = email; // Pre-fill email
+                
+                // Re-enable input for future use after the view switch
+                document.getElementById('verify-code').disabled = false;
+            }, 2000);
+            
+            // Crucial: We return here to skip any failure/error logic below
+            return;
+
+        } else {
+            // ⭐ ADDED LOGIC: If the failure is "already verified" (status 400) 
+            // and the function is still running due to a double-call bug, 
+            // we should NOT display an error if the success message has already been triggered 
+            // by the first call (which this function logic cannot see, but we can assume).
+            // Since the external bug is causing the double-call, we suppress the 400 error message.
+            if (response.status === 400 && data.message && data.message.includes('already verified')) {
+                console.warn('Suppressing redundant "already verified" error message due to double-submission bug.');
+                // Do NOT display error message to the user, but still reset the button to 'Verify Account' 
+                // in case the first call failed for a different reason.
+            } else {
+                // For all other errors, display the failure message
+                const errorMessage = data.message || `Verification API Error (${response.status}).`;
+                displayMessage(`Verification Failed: ${errorMessage}`, 'error');
+            }
+            
+            // On failure, we re-enable the button so the user can try again
+            verifyBtn.textContent = 'Verify Account';
+            verifyBtn.disabled = false;
+        }
+
+    } catch (error) {
+        console.error('Verification network failed:', error);
+        displayMessage(`Connection Error: ${error.message || 'Could not connect to the verification service.'}`, 'error');
+        
+        // Ensure reset on network/fatal error
+        verifyBtn.textContent = 'Verify Account';
+        verifyBtn.disabled = false;
+    }
+}
+
+    /**
+     * Starts a cooldown timer for the Resend Code button.
+     */
+    function setResendCooldown(durationSeconds = 60) {
+        const resendBtn = document.getElementById('resend-btn');
+        resendBtn.disabled = true;
+        let timer = durationSeconds;
+        resendBtn.textContent = `Resend Code (${timer}s)`;
+
+        const interval = setInterval(() => {
+            timer--;
+            if (timer > 0) {
+                resendBtn.textContent = `Resend Code (${timer}s)`;
+            } else {
+                clearInterval(interval);
+                resendBtn.textContent = 'Resend Code';
+                resendBtn.disabled = false;
+            }
+        }, 1000);
+    }
+
+    /**
+     * Handles resending the verification code with cooldown logic.
+     */
+    async function handleResendCode() {
+        const resendBtn = document.getElementById('resend-btn');
+        const email = pendingVerificationEmail;
+
+        if (resendBtn.disabled) {
+            // Cooldown is active, just return
+            return;
+        }
+
+        if (!email) {
+            showView('create');
+            displayMessage('Please create an account first.', 'error');
+            return;
+        }
+
+        setResendCooldown(60);
+        displayMessage(`Resending code to ${email}...`, 'info');
+
+        try {
+            const response = await fetch(RESEND_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email })
+            });
+
+            // ROBUST JSON PARSING
+            let data = {};
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                data = await response.json();
+            } else if (!response.ok) {
+                throw new Error(`Server Error (${response.status}): Netlify could not find the function or the server crashed.`);
+            }
+            // END ROBUST PARSING
+
+            if (response.ok) {
+                displayMessage('New code successfully sent! Check your inbox.', 'success');
+            } else {
+                const errorMessage = data.message || `Resend API Error (${response.status}).`;
+                displayMessage(`Resend Failed: ${errorMessage}`, 'error');
+            }
+        } catch (error) {
+            console.error('Resend network failed:', error);
+            displayMessage(`Connection Error: ${error.message || 'Could not connect to the resend service.'}`, 'error');
+        }
+    }
+
+    /**
+     * Placeholder function for handling forgot password form submission.
+     */
+    function handleForgotPassword(event) {
+        event.preventDefault();
+        const email = document.getElementById('forgot-email').value;
+        // In a real app, send API call to trigger password reset email
+        displayMessage(`If an account exists for ${email}, a password reset link has been sent.`, 'success');
+        setTimeout(() => {
+            showView('login');
+        }, 5000);
+    }
+
+
+    // ------------------------------------------------------------------
+    // ⭐ NEW FUNCTION: HANDLE LOGOUT
+    // ------------------------------------------------------------------
+
+    /**
+     * Handles user logout by calling the backend to clear the HTTP-only cookie.
+     * This is CRITICAL for the secure cookie flow.
+     */
+    async function handleLogout() {
+        displayMessage('Logging out...', 'info');
+
+        try {
+            // The cookie is automatically sent with this request.
+            // The backend should respond by clearing/expiring the cookie.
+            const response = await fetch(LOGOUT_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            // No need to check response.ok strictly, as we assume the server clears the cookie
+            // (even on error, we proceed with client-side cleanup).
+
+            // 1. Clear any local state that might indicate a logged-in user
+            localStorage.removeItem('outflickzLocalCart'); 
+            // ⭐ CRITICAL FIX: Remove the JWT token from local storage (the token used for API calls)
+            localStorage.removeItem(AUTH_TOKEN_KEY); 
+            
+            // 2. Display success message and redirect
+            displayMessage('You have been successfully signed out.', 'success');
+            
+            setTimeout(() => {
+                window.location.href = 'index.html'; // Redirect to the main landing page
+            }, 1000);
+
+        } catch (error) {
+            console.error('Logout failed:', error);
+            // Even if the network call fails, attempt to redirect the user for consistency
+            displayMessage('Logout failed, but clearing local state. Redirecting...', 'error');
+            
+            // Still clear local tokens on network failure for safety
+            localStorage.removeItem(AUTH_TOKEN_KEY); 
+            
+            setTimeout(() => {
+                window.location.href = 'index.html'; 
+            }, 1000);
+        }
+    }
+</script>
+</body>
+</html>

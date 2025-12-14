@@ -1,0 +1,19 @@
+# USER AGENT: * applies this rule to all search engine bots
+User-agent: *
+
+# SITEMAP: Tells all major search engines where to find your map.
+Sitemap: https://www.outflickz.com/sitemap.xml
+
+# DISALLOW: Pages and sections we DO NOT want indexed.
+
+# 1. Block the entire Admin section (CRITICAL FOR SECURITY)
+# This blocks ALL URLs starting with /outflickzadmin/
+Disallow: /outflickzadmin/ 
+
+# 2. Block the public-facing pages related to accounts, carts, and checkout
+# (These paths do not contain unique public content and should be blocked)
+Disallow: /useraccount
+Disallow: /userprofile
+Disallow: /outflickzstore/cart.html
+Disallow: /outflickzstore/checkout.html
+Disallow: /outflickzstore/orderconfirmation.html

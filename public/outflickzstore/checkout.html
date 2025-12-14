@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="en" class="text-[90%] sm:text-[95%] md:text-[100%]">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout - Outflickz</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://js.paystack.co/v1/inline.js"></script> 
+    <script>
+        // Custom Tailwind Configuration (for colors like ash-red, ash-dark, etc.)
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'ash-dark': '#1e293b', // Slate-800 equivalent
+                        'ash-red': '#dc2626', // Red-600 equivalent
+                        'color-white': '#ffffff',
+                        'color-black': '#000000',
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Load Inter (main font) and Playfair Display (for "OUTFLICKZ" logo) */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+
+        /* Custom styles */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Hide number input arrows/spinners */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+
+        /* Custom styles for the message modal */
+        #message-modal-container {
+            background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent black overlay */
+            transition: opacity 0.3s ease-in-out;
+        }
+        .modal-content {
+            transform: translateY(0);
+            transition: transform 0.3s ease-in-out;
+        }
+        #message-modal-container.hidden .modal-content {
+            transform: translateY(-50px);
+        }
+        
+        /* Step indicator styling */
+        .step-active {
+            @apply bg-ash-red text-white;
+        }
+        .step-inactive {
+            @apply bg-gray-200 text-gray-500;
+        }
+        .step-complete {
+            @apply bg-green-500 text-white;
+        }
+        
+        /* Bank details toggle button icon rotation */
+        .bank-toggle[aria-expanded="true"] svg {
+            transform: rotate(180deg);
+        }
+        
+        /* Added for better readability on small screens */
+        .bank-details-content p span {
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-color-black min-h-screen">
+
+    <div id="message-modal-container" class="fixed inset-0 z-[100] hidden flex justify-center items-start pt-10" role="alert" aria-live="assertive">
+        <div class="modal-content bg-ash-dark text-white p-4 rounded-lg shadow-2xl max-w-sm w-full relative">
+            <p id="message-modal-text" class="text-sm font-medium"></p>
+            <button id="message-modal-close-btn" class="absolute top-1 right-1 text-gray-400 hover:text-white transition" aria-label="Close message">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+    
+    <header class="bg-color-white sticky top-0 z-50 shadow-md border-b border-gray-100">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
+            <a href="homepage.html" class="flex items-center" aria-label="Outflickz Home">
+                <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-10 sm:h-12 lg:h-10">
+            </a>
+            <nav class="hidden md:flex flex-grow justify-center space-x-6 lg:space-x-10 text-sm" aria-label="Main Navigation">
+                <a href="homepage.html" class="font-medium text-color-black hover:text-gray-600 transition">Homepage</a>
+                <a href="wearscollection.html" class="font-bold text-ash-red transition flex items-center border-b-2 border-ash-red">Wears Collections</a>
+                <a href="newarrivals.html" class="font-medium text-color-black hover:text-gray-600 transition">New Arrivals</a>
+                <a href="capcollection.html" class="font-medium text-color-black hover:text-gray-600 transition flex items-center">Cap Collections</a>
+                <a href="preorder.html" class="font-medium text-color-black hover:text-gray-600 transition">Pre Order</a>
+            </nav>
+
+
+            <div class="flex items-center space-x-2 sm:space-x-4">
+                <button id="profile-icon" 
+                class="p-1 sm:p-2 text-gray-700 hover:text-ash-dark transition rounded-full hidden md:block" 
+                aria-label="User Account"
+                onclick="redirectToProfileOrLogin()">
+                    <i class="fas fa-user w-4 h-4 sm:w-5 sm:h-5"></i>
+                </button>
+                <a href="cart.html" class="relative p-1 sm:p-2 text-gray-700 hover:text-ash-dark transition rounded-full" aria-label="Shopping Bag">
+                    <i class="fas fa-shopping-bag w-4 h-4 sm:w-5 sm:h-5"></i>
+                    <span id="cart-badge" class="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-ash-red rounded-full hidden">
+                        0
+                    </span>
+                </a>
+                <button class="md:hidden p-1 sm:p-2 text-gray-700 hover:text-ash-dark transition rounded-full" onclick="toggleMenu()" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open main menu">
+                    <i class="fas fa-bars w-5 h-5 sm:w-6 sm:h-6"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div id="mobile-menu" class="hidden md:hidden bg-color-white border-b border-gray-100 absolute w-full z-40 shadow-lg">
+        <div class="px-2 pt-2 pb-3 space-y-1 text-sm">
+            <a href="homepage.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">Homepage</a>
+             <a href="wearscollection.html" class="block px-3 py-2 font-bold text-ash-red bg-gray-100 rounded-md">Wears Collection</a>
+            <a href="newarrivals.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">New Arrivals</a>
+            <a href="capcollection.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">Cap Collection</a>
+            <a href="preorder.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">Pre Order</a>
+
+            <button 
+                id="mobile-profile-login-button" 
+                class="w-full flex items-center px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md text-left"
+                aria-label="User Account or Login"
+                onclick="redirectToProfileOrLogin()">
+                <i class="fas fa-user w-4 h-4 mr-3"></i>
+                Account / Login
+            </button>
+            </div>
+    </div>
+    
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
+        <h1 class="text-3xl sm:text-4xl font-extrabold text-ash-dark mb-8 uppercase tracking-wide">
+            💳 Secure Checkout
+        </h1>
+
+        <div class="flex justify-between items-center mb-10 text-center relative">
+            <div class="absolute inset-x-0 top-4 h-0.5 bg-gray-200 z-0 hidden sm:block"></div> <div class="flex-1 z-10">
+                <div id="step-indicator-1" class="step-indicator step-active w-8 h-8 rounded-full flex items-center justify-center mx-auto mb-1 text-sm font-bold">1</div>
+                <span class="text-xs sm:text-sm text-ash-dark font-medium">Shipping Info</span>
+            </div>
+            
+            <div class="flex-1 z-10">
+                <div id="step-indicator-2" class="step-indicator step-inactive w-8 h-8 rounded-full flex items-center justify-center mx-auto mb-1 text-sm font-bold">2</div>
+                <span class="text-xs sm:text-sm text-gray-500">Review Order</span>
+            </div>
+            
+            <div class="flex-1 z-10">
+                <div id="step-indicator-3" class="step-indicator step-inactive w-8 h-8 rounded-full flex items-center justify-center mx-auto mb-1 text-sm font-bold">3</div>
+                <span class="text-xs sm:text-sm text-gray-500">Payment</span>
+            </div>
+        </div> 
+        
+        <div class="lg:grid lg:grid-cols-3 lg:gap-10">
+            
+            <div class="lg:col-span-2 space-y-8">
+                
+                <section id="shipping-info-section" class="bg-white p-6 sm:p-8 rounded-lg shadow-md border border-gray-100">
+                    <h2 class="text-xl sm:text-2xl font-bold text-ash-dark mb-6 border-b pb-4">1. Contact & Shipping Information</h2>
+                    <form id="shipping-form" onsubmit="event.preventDefault(); validateAndProceedToReview();">
+                        <div class="grid grid-cols-1 gap-y-6 sm:grid-cols-2 sm:gap-x-6">
+                            <div class="sm:col-span-2">
+                                <label for="email" class="block text-sm font-medium text-gray-700">Email address (for confirmations) <span class="text-ash-red">*</span></label>
+                                <input type="email" id="email" name="email" autocomplete="email" required class="mt-1 block w-full border border-gray-300 rounded-sm shadow-sm py-2 px-3 focus:outline-none focus:ring-ash-red focus:border-ash-red" placeholder="e.g., john.doe@example.com">
+                            </div>
+                            <div class="sm:col-span-2 border-t border-gray-200 pt-6 mt-6">
+                                <h3 class="text-lg font-semibold text-gray-900 mb-3">Shipping Details</h3>
+                            </div>
+
+                            <div>
+                                <label for="first-name" class="block text-sm font-medium text-gray-700">First name <span class="text-ash-red">*</span></label>
+                                <input type="text" id="first-name" name="first-name" autocomplete="given-name" required class="mt-1 block w-full border border-gray-300 rounded-sm shadow-sm py-2 px-3 focus:outline-none focus:ring-ash-red focus:border-ash-red">
+                            </div>
+                            <div>
+                                <label for="last-name" class="block text-sm font-medium text-gray-700">Last name <span class="text-ash-red">*</span></label>
+                                <input type="text" id="last-name" name="last-name" autocomplete="family-name" required class="mt-1 block w-full border border-gray-300 rounded-sm shadow-sm py-2 px-3 focus:outline-none focus:ring-ash-red focus:border-ash-red">
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label for="address-line-1" class="block text-sm font-medium text-gray-700">Street address <span class="text-ash-red">*</span></label>
+                                <input type="text" id="address-line-1" name="address-line-1" autocomplete="street-address" required class="mt-1 block w-full border border-gray-300 rounded-sm shadow-sm py-2 px-3 focus:outline-none focus:ring-ash-red focus:border-ash-red">
+                            </div>
+                            <div>
+                                <label for="city" class="block text-sm font-medium text-gray-700">City <span class="text-ash-red">*</span></label>
+                                <input type="text" id="city" name="city" autocomplete="address-level2" required class="mt-1 block w-full border border-gray-300 rounded-sm shadow-sm py-2 px-3 focus:outline-none focus:ring-ash-red focus:border-ash-red">
+                            </div>
+                            <div>
+                                <label for="state" class="block text-sm font-medium text-gray-700">State / Province <span class="text-ash-red">*</span></label>
+                                <input type="text" id="state" name="state" autocomplete="address-level1" required class="mt-1 block w-full border border-gray-300 rounded-sm shadow-sm py-2 px-3 focus:outline-none focus:ring-ash-red focus:border-ash-red">
+                            </div>
+                            <div>
+                                <label for="zip-code" class="block text-sm font-medium text-gray-700">ZIP / Postal code <span class="text-ash-red">*</span></label>
+                                <input type="text" id="zip-code" name="zip-code" autocomplete="postal-code" required class="mt-1 block w-full border border-gray-300 rounded-sm shadow-sm py-2 px-3 focus:outline-none focus:ring-ash-red focus:border-ash-red">
+                            </div>
+                            <div>
+                                <label for="country" class="block text-sm font-medium text-gray-700">Country <span class="text-ash-red">*</span></label>
+                                <select id="country" name="country" autocomplete="country-name" required class="mt-1 block w-full border border-gray-300 rounded-sm shadow-sm py-2 px-3 focus:outline-none focus:ring-ash-red focus:border-ash-red">
+                                    <option value="Nigeria">Nigeria</option>
+                                    <option value="Ghana">Ghana</option>
+                                    <option value="USA">USA</option>
+                                    <option value="UK">United Kingdom</option>
+                                    </select>
+                            </div>
+                        </div>
+                    </form>
+                </section>
+
+                <section id="review-order-section" class="bg-white p-6 sm:p-8 rounded-lg shadow-md border border-gray-100 hidden">
+                    <h2 class="text-xl sm:text-2xl font-bold text-ash-dark mb-6 border-b pb-4">2. Review & Confirm</h2>
+                    
+                    <div class="space-y-6">
+                        <div>
+                            <div class="flex justify-between items-center mb-2">
+                                <h3 class="text-lg font-semibold text-gray-900">Shipping Address</h3>
+                                <button id="edit-shipping-btn" class="text-sm font-medium text-ash-red hover:text-red-700" onclick="goToStep(1)">Change</button>
+                            </div>
+                            <div class="text-sm text-gray-700 p-4 bg-gray-50 rounded-md border">
+                                <p id="review-address-name" class="font-medium"></p>
+                                <p id="review-address-line1"></p>
+                                <p id="review-address-line2"></p>
+                                <p id="review-contact-info" class="mt-2 text-gray-500"></p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between items-center mb-2">
+                                <h3 class="text-lg font-semibold text-gray-900">Items in Order</h3>
+                                <a href="cart.html" id="edit-order-btn" class="text-sm font-medium text-ash-red hover:text-red-700">Edit Cart</a>
+                            </div>
+                            <div id="review-items-list" class="divide-y divide-gray-100 border border-gray-200 rounded-md p-2">
+                                </div>
+                             <p id="review-shipping-cost" class="text-sm font-medium text-gray-700 mt-2 text-right">Shipping: ₦0.00</p>
+                        </div>
+                    </div>
+                </section>
+
+             <section id="payment-section" class="bg-white p-6 sm:p-8 rounded-lg shadow-md border border-gray-100 hidden">
+    <h2 class="text-xl sm:text-2xl font-bold text-ash-dark mb-6 border-b pb-4">3. Payment</h2>
+    
+    <div class="space-y-6">
+        <p class="text-gray-700">Please select your preferred payment method:</p>
+
+        <div class="space-y-4">
+            
+            <div class="relative flex items-start border border-gray-300 rounded-md p-4 transition-all focus-within:ring-2 focus-within:ring-ash-red">
+                <div class="flex items-center h-5">
+                    <input id="payment-paystack" name="payment-method" type="radio" value="Paystack/Card" checked class="focus:ring-ash-red h-4 w-4 text-ash-red border-gray-300" onchange="hideBankTransferDetails()">
+                </div>
+                <div class="ml-3 text-sm flex-1">
+                    <label for="payment-paystack" class="font-medium text-gray-900 flex justify-between items-center">
+                        Paystack
+                        <img src="https://i.imgur.com/fuT8ucM.png" alt="Paystack" class="h-5">
+                    </label>
+                    
+                    <p id="paystack-description" class="text-gray-500 mt-1">
+                        Pay securely with your Visa, MasterCard, or Verve card.
+                    </p>
+                    <div id="paystack-redirection-message" class="flex items-center text-sm font-semibold text-ash-red mt-2 p-2 bg-red-50 rounded-md">
+                        <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg>
+                        After clicking “Confirm & Pay Now”, you will be redirected to Paystack to complete your purchase securely.
+                    </div>
+                </div>
+            </div>
+            <div class="relative flex items-start border border-gray-300 rounded-md p-4 transition-all focus-within:ring-2 focus-within:ring-ash-red">
+                <div class="flex items-center h-5">
+                    <input id="payment-bank" name="payment-method" type="radio" value="Bank Transfer" class="focus:ring-ash-red h-4 w-4 text-ash-red border-gray-300" onchange="showBankTransferDetails()">
+                </div>
+
+
+                <div class="ml-3 text-sm flex-1">
+                    <label for="payment-bank" class="font-medium text-gray-900">
+                        Direct Bank Transfer (Manual)
+                    </label>
+                    <p id="bank-description" class="text-gray-500">View details below and complete payment manually.</p>
+                    
+                    <div id="bank-details-info" class="mt-3 p-3 bg-gray-100 rounded-md border border-gray-200" style="display:none;">
+                        <h4 class="font-bold text-ash-dark mb-3 text-base">Select Account for Transfer:</h4>
+
+                        <div id="account-dropdowns" class="space-y-3">
+                            
+                            <div class="border border-gray-300 rounded-lg overflow-hidden">
+                                <button type="button" 
+                                        class="bank-toggle w-full flex justify-between items-center p-3 font-semibold text-left transition duration-150 text-base" 
+                                        data-target="moniepoint-details" 
+                                        data-name="Moniepoint"
+                                        aria-expanded="false"
+                                        onclick="toggleBankDetails('moniepoint-details')">
+                                    <span class="flex items-center">
+                                        <img src="https://i.imgur.com/GlrvtEQ.png" alt="Moniepoint Logo" class="h-5 w-auto mr-3">
+                                        Moniepoint MFB
+                                    </span>
+                                    <svg class="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </button>
+                                <div id="moniepoint-details" class="bank-details-content p-3 pt-0 bg-white" style="display: none;">
+                                    <hr class="mb-2 border-gray-200">
+                                    <p class="text-sm font-mono break-words">
+                                        <span class="font-bold block">Account Name: Outflickz Limited</span>
+                                        <span class="font-bold block mt-1">Account Number: 6515769257</span>
+                                    </p>
+                                </div>
+                            </div>
+
+                        </div>
+                        <div id="bank-transfer-receipt-upload" class="hidden mt-4 pt-3 border-t border-gray-300">
+                            <h4 class="font-bold text-ash-dark mb-2 text-base">Upload Payment Receipt <span class="text-ash-red">*</span></h4>
+                            <p class="text-xs text-gray-500 mb-2">Upload a screenshot/proof of payment to proceed with manual verification.</p>
+                            <input type="file" id="bank-receipt-upload" name="bank-receipt-upload" accept="image/*, application/pdf" class="w-full text-sm text-gray-900 border border-gray-300 rounded-sm cursor-pointer bg-white file:py-2 file:px-4 file:border-0 file:bg-ash-red file:text-white hover:file:bg-red-700 transition">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-6 border-t border-gray-200 pt-4">
+            <div class="flex justify-between items-center">
+                <p class="text-lg font-bold text-ash-dark">Total Due Now</p>
+                <p class="text-2xl font-extrabold text-ash-red">₦<span id="summary-estimated-total-final">0.00</span></p>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">By clicking "Confirm & Pay Now", you agree to our Terms of Use.</p>
+        </div>
+    </div>
+</section>
+                
+                <div class="pt-6 border-t border-gray-200">
+                    <button id="checkout-next-btn" class="w-full bg-ash-red text-white hover:bg-red-700 transition duration-300 font-semibold py-4 rounded-sm shadow-lg uppercase tracking-widest text-base disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <span id="checkout-btn-text">Continue to Review</span>
+                    </button>
+                    <a href="cart.html" class="mt-4 block text-center text-sm font-medium text-gray-600 hover:text-ash-red transition">
+                        &leftarrow; Return to Cart
+                    </a>
+                </div>
+
+            </div>
+            
+            <div class="mt-8 lg:mt-0 lg:col-span-1">
+                <div class="bg-color-white p-6 rounded-lg shadow-xl border border-gray-100 lg:sticky lg:top-20">
+                    <h2 class="text-xl font-bold text-ash-dark mb-6">Order Summary</h2>
+                    
+                    <div id="summary-items-placeholder" class="mb-4 hidden">
+                         <h3 class="text-sm font-semibold text-ash-dark mb-2">Items:</h3>
+                         <div id="summary-items-list" class="divide-y divide-gray-100 border border-gray-200 rounded-md p-2 max-h-48 overflow-y-auto">
+                            </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="flex justify-between text-sm text-gray-700">
+                            <span>Subtotal (Items)</span>
+                            <span id="summary-subtotal" class="font-semibold">₦0.00</span>
+                        </div>
+                        <div class="flex justify-between text-sm text-gray-700">
+                            <span>Shipping</span>
+                            <span id="summary-shipping-cost" class="font-semibold">₦0.00</span>
+                        </div>
+                        <div class="flex justify-between text-sm text-gray-700 border-t border-gray-200 pt-4">
+                            <span>Tax Estimate (0%)</span>
+                            <span id="summary-tax-estimate" class="font-semibold">₦0.00</span>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-gray-300 pt-4 mt-6 flex justify-between items-center">
+                        <p class="text-lg font-bold text-ash-dark">Estimated Total</p>
+                        <p id="summary-estimated-total" class="text-xl font-extrabold text-ash-red">₦0.00</p>
+                    </div>
+
+                    <p class="text-xs text-gray-500 mt-2 text-right">Final price includes all duties and fees.</p>
+
+                    <div class="mt-6 border-t border-gray-100 pt-6">
+                        <h3 class="text-sm font-semibold text-ash-dark mb-3">Guaranteed Security</h3>
+                        <div class="flex items-center text-sm text-gray-700 space-x-4">
+                            <i class="fas fa-lock text-lg text-green-600"></i>
+                            <p>All transactions are secured by Paystack and Bank Transfer.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+    
+   <footer class="bg-black text-gray-300 py-6 sm:py-14 border-t border-gray-800 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-8">
+                
+                <div class="col-span-2 lg:col-span-1">
+                    <a href="homepage.html" class="flex items-center mb-3 sm:mb-4"> 
+                        <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-8 filter grayscale invert">
+                    </a>
+                    <p class="text-xs sm:text-sm text-gray-500"> 
+                        The home of exclusive street wear and limited edition drops. Elevate your style.
+                    </p>
+                    <div class="flex space-x-4 mt-4 text-gray-400">
+                        <a href="https://www.instagram.com/outflickz01?igsh=Yzl3d3BjaGt5djll" aria-label="Instagram" class="hover:text-ash-red transition"><i class="fab fa-instagram"></i></a>
+                        <a href="https://www.tiktok.com/@outflickz?_r=1&_t=ZS-92AInaYzuTt" aria-label="TikTok" class="hover:text-ash-red transition"><i class="fab fa-tiktok"></i></a>
+                        <a href="https://www.facebook.com/profile.php?id=61584421929170" aria-label="Facebook" class="hover:text-ash-red transition"><i class="fab fa-facebook-f"></i></a>
+                    </div>
+                </div>
+
+                <div class="col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Quick Links</h3> 
+                    <ul class="space-y-1.5 sm:space-y-2 text-xs sm:text-sm"> 
+                        <li><a href="wearscollection.html" class="text-gray-400 hover:text-ash-red transition">Wears</a></li>
+                        <li><a href="newarrivals.html" class="text-gray-400 hover:text-ash-red transition">New Arrivals</a></li>
+                        <li><a href="capcollection.html" class="text-gray-400 hover:text-ash-red transition">Caps</a></li>
+                        <li><a href="preorder.html" class="text-gray-400 hover:text-ash-red transition">Pre-Order</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Customer Care</h3> 
+                    <ul class="space-y-1.5 sm:space-y-2 text-xs sm:text-sm"> 
+                        <li><a href="contact.html" class="text-gray-400 hover:text-ash-red transition">Contact Us</a></li>
+                        <li><a href="shipping_returns.html" class="text-gray-400 hover:text-ash-red transition">Shipping & Returns</a></li>
+                        <li><a href="faq.html" class="text-gray-400 hover:text-ash-red transition">FAQ</a></li>
+                        <li><a href="size_guide.html" class="text-gray-400 hover:text-ash-red transition">Size Guide</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-span-2 md:col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Get In Touch</h3> 
+                    <address class="text-xs sm:text-sm not-italic space-y-2"> 
+                        <p class="text-gray-400">
+                            <i class="fas fa-map-marker-alt mr-2 text-ash-red"></i> Lagos , Nigeria
+                        </p>
+                        <p class="text-gray-400">
+                            <i class="fas fa-envelope mr-2 text-ash-red"></i> outflickzlimited@gmail.com 
+                        </p>
+                        <p class="text-gray-400">
+                            <i class="fas fa-phone mr-2 text-ash-red"></i> +234 7042882706
+                        </p>
+                    </address>
+                </div>
+                
+            </div>
+
+            <div class="border-t border-gray-800 mt-6 sm:mt-10 pt-4 sm:pt-6"> 
+                <p class="text-center text-xs text-gray-500">
+                    &copy; 2025 Outflickz. All rights reserved. | <a href="#" class="hover:text-ash-red">Privacy Policy</a> | <a href="#" class="hover:text-ash-red">Terms of Use</a>
+                </p>
+            </div>
+        </div>
+    </footer>
+    
+    <a href="https://t.me/+2347042882706" 
+        target="_blank"
+        class="fixed bottom-6 right-24 z-50 
+               bg-[#24A1DE] text-white 
+               p-3 rounded-full 
+               shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 
+               flex items-center justify-center w-14 h-14" 
+        aria-label="Chat with us on Telegram">
+        
+        <i class="fab fa-telegram-plane fa-2x"></i>
+    </a>
+    
+    <a href="https://wa.me/2347042882706?text=HELLO%20OUTFLICKZ!%20My%20name%20is%20..."
+        target="_blank"
+        class="fixed bottom-6 right-6 z-50 
+               bg-[#25D366] text-white 
+               p-3 rounded-full 
+               shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 
+               flex items-center justify-center w-14 h-14" 
+        aria-label="Chat with us on WhatsApp">
+        
+        <i class="fab fa-whatsapp fa-2x"></i>
+    </a>
+    
+ <script>
+    // Customizing Tailwind colors to match the theme (Unchanged)
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    'ash-dark': '#111111',
+                    'ash-red': '#a80000',
+                    'color-white': '#FFFFFF',
+                    'color-black': '#000000',
+                    'racing-grey': '#333333',
+                    'racing-silver': '#AAAAAA',
+                }
+            }
+        }
+    }
+
+    // Global Constants (Unchanged)
+    const CART_STORAGE_KEY = 'outflickzCartCount';
+    const LOCAL_CART_KEY = 'outflickzLocalCart';
+    const BUY_NOW_KEY = 'buyNowItem'; 
+    const API_BASE_URL = 'https://outflickzz.netlify.app';
+    const DEFAULT_ADMIN_EMAIL = "outflickzlimited@gmail.com"; 
+
+    // --- PAYSTACK CONSTANTS --- (Unchanged - **REMINDER: REPLACE KEY**)
+    const PAYSTACK_PUBLIC_KEY = 'pk_live_914b068e58d4ff0d8c50e5a035cae86b1142da35'; 
+    const CURRENCY_CODE = 'NGN'; 
+    const CURRENCY_SYMBOL = '₦';
+
+    // --- MESSAGE & MODAL DISPLAY FUNCTION (Unchanged) ---
+    function displayMessage(message) {
+        const modalContainer = document.getElementById('message-modal-container');
+        const modalText = document.getElementById('message-modal-text');
+
+        if (modalContainer && modalText) {
+            modalText.textContent = message;
+            modalContainer.classList.remove('hidden');
+
+            modalContainer.onclick = (e) => {
+                if (e.target === modalContainer) {
+                    hideMessageModal();
+                }
+            };
+
+            setTimeout(hideMessageModal, 4000);
+        } else {
+            console.warn("Modal elements not found. Message:", message);
+        }
+    }
+
+    function hideMessageModal() {
+        const modalContainer = document.getElementById('message-modal-container');
+        if (modalContainer) {
+            modalContainer.classList.add('hidden');
+            modalContainer.onclick = null;
+        }
+    }
+
+    // --- USER AUTHENTICATION & REDIRECTION FUNCTIONS (Unchanged) ---
+    function isUserLoggedIn() {
+        return localStorage.getItem('outflickzAuthStatus') === 'loggedIn';
+    }
+
+    function redirectToProfileOrLogin() {
+        if (isUserLoggedIn()) {
+            window.location.href = 'userprofile.html';
+        } else {
+            window.location.href = 'useraccount.html';
+        }
+    }
+    
+    function updateCartBadge() {
+        const badge = document.getElementById('cart-badge');
+        if (!badge) return;
+        const count = parseInt(localStorage.getItem(CART_STORAGE_KEY) || '0');
+        
+        if (count > 0) {
+            badge.textContent = count;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    }
+
+    // --- FETCH USER DATA TO PRE-FILL FORM (Unchanged) ---
+    async function fetchUserData() {
+        if (!isUserLoggedIn()) {
+            return;
+        }
+
+        try {
+            // NOTE: Assuming this endpoint returns a combined object with email, profile, and address
+            const response = await fetch('/api/users/account', {
+                method: 'GET',
+                // Assuming Authentication is handled via a token or session on the server
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch user data. Please log in again.');
+            }
+
+            const userData = await response.json();
+            const userProfile = userData.profile || {};
+            const userAddress = userData.address || {};
+
+            // Pre-fill Contact Info
+            document.getElementById('email').value = userData.email || '';
+
+            // Pre-fill Shipping Info
+            const firstNameEl = document.getElementById('first-name');
+            const lastNameEl = document.getElementById('last-name');
+
+            if (userProfile.firstName) firstNameEl.value = userProfile.firstName;
+            if (userProfile.lastName) lastNameEl.value = userProfile.lastName;
+
+            if (userData.address) {
+                if (userAddress.street) document.getElementById('address-line-1').value = userAddress.street;
+                if (userAddress.city) document.getElementById('city').value = userAddress.city;
+                if (userAddress.state) document.getElementById('state').value = userAddress.state;
+                if (userAddress.zipCode) document.getElementById('zip-code').value = userAddress.zipCode;
+                if (userAddress.country) document.getElementById('country').value = userAddress.country;
+            }
+
+            // Save to local storage for use in the review step (Step 2)
+            localStorage.setItem('outflickzShippingData', JSON.stringify({
+                firstName: userProfile.firstName, 
+                lastName: userProfile.lastName, 
+                email: userData.email,
+                street: userAddress.street,
+                city: userAddress.city,
+                state: userAddress.state,
+                zipCode: userAddress.zipCode,
+                country: userAddress.country
+            }));
+
+        } catch (error) {
+            console.error('Error fetching user data:', error);
+            displayMessage('Could not load saved address. Please enter manually.');
+        }
+    }
+
+    // ---------------------------------------------------
+    // --- CHECKOUT LOGIC ---
+    // ---------------------------------------------------
+
+    let checkoutStep = 1; 
+    const STEPS = [
+        { id: 1, name: 'Shipping Info', sectionId: 'shipping-info-section' },
+        { id: 2, name: 'Review Order', sectionId: 'review-order-section' },
+        { id: 3, name: 'Payment', sectionId: 'payment-section' }
+    ];
+
+    /**
+     * Renders the correct step content and updates the step indicators. (Unchanged)
+     */
+    function updateCheckoutView() {
+        // 1. Update Step Indicators
+        STEPS.forEach(step => {
+            const indicator = document.getElementById(`step-indicator-${step.id}`);
+            const section = document.getElementById(step.sectionId);
+            
+            section.classList.add('hidden'); // Hide all sections initially
+
+            if (step.id < checkoutStep) {
+                indicator.className = 'step-indicator step-complete';
+                indicator.innerHTML = '<i class="fas fa-check"></i>';
+            } else if (step.id === checkoutStep) {
+                indicator.className = 'step-indicator step-active';
+                indicator.textContent = step.id;
+                section.classList.remove('hidden'); // Show current section
+            } else {
+                indicator.className = 'step-indicator step-inactive';
+                indicator.textContent = step.id;
+            }
+        });
+        
+        // 2. Update button text/action based on the step
+        const nextBtn = document.getElementById('checkout-next-btn');
+        const btnText = document.getElementById('checkout-btn-text');
+        
+        if (checkoutStep === 1) {
+            btnText.textContent = 'Continue to Review';
+            nextBtn.onclick = validateAndProceedToReview;
+        } else if (checkoutStep === 2) {
+            btnText.textContent = 'Proceed to Payment';
+            nextBtn.onclick = proceedToPayment;
+        } else if (checkoutStep === 3) {
+            btnText.textContent = 'Confirm & Pay Now';
+            nextBtn.onclick = handleFinalOrderPlacement; // This acts as a router
+        }
+    }
+
+    /**
+    * Validates shipping form data and moves to Step 2 (Review). (Unchanged)
+    */
+    function validateAndProceedToReview() {
+        const form = document.getElementById('shipping-form');
+        
+        // --- Logic to handle optional ZIP code validation remains the same ---
+        const zipCodeEl = document.getElementById('zip-code');
+        const isZipRequired = zipCodeEl.hasAttribute('required');
+        if (isZipRequired) zipCodeEl.removeAttribute('required');
+
+        if (!form.checkValidity()) {
+            if (isZipRequired) zipCodeEl.setAttribute('required', '');
+            form.reportValidity();
+            displayMessage('Please fill out all required shipping fields.');
+            return;
+        }
+        if (isZipRequired) zipCodeEl.setAttribute('required', '');
+        // --- End ZIP code logic ---
+
+
+        // Capture the data
+        const shippingData = {
+            firstName: document.getElementById('first-name').value,
+            lastName: document.getElementById('last-name').value,
+            email: document.getElementById('email').value,
+            street: document.getElementById('address-line-1').value,
+            city: document.getElementById('city').value,
+            state: document.getElementById('state').value,
+            zipCode: document.getElementById('zip-code').value, 
+            country: document.getElementById('country').value,
+        };
+        localStorage.setItem('outflickzShippingData', JSON.stringify(shippingData));
+
+        // Update the review section with the data
+        document.getElementById('review-address-name').textContent = `${shippingData.firstName} ${shippingData.lastName}`;
+        document.getElementById('review-address-line1').textContent = shippingData.street;
+        
+        const reviewZipCode = shippingData.zipCode ? `, ${shippingData.zipCode}` : '';
+        document.getElementById('review-address-line2').textContent = `${shippingData.city}, ${shippingData.state}${reviewZipCode}, ${shippingData.country}`;
+        
+        document.getElementById('review-contact-info').textContent = `${shippingData.email}`;
+
+        checkoutStep = 2;
+        updateCheckoutView();
+        window.scrollTo(0, 0); 
+    }
+
+    /**
+     * Moves to Step 3 (Payment). (Unchanged)
+     */
+    function proceedToPayment() {
+        checkoutStep = 3;
+        updateCheckoutView();
+        window.scrollTo(0, 0); 
+    }
+
+    // --- HELPER FUNCTION TO RENDER CART DATA (Unchanged) ---
+    function renderCartData(cartData, paymentBtn) {
+        const subtotalEl = document.getElementById('summary-subtotal');
+        const shippingCostEl = document.getElementById('summary-shipping-cost');
+        const taxEstimateEl = document.getElementById('summary-tax-estimate');
+        const estimatedTotalEl = document.getElementById('summary-estimated-total');
+        const finalTotalEl = document.getElementById('summary-estimated-total-final');
+        const itemsListEl = document.getElementById('review-items-list');
+
+        // Render Summary
+        const subtotal = cartData.subtotal || 0;
+        const shipping = cartData.shipping || 0;
+        const tax = cartData.tax || 0;
+        const total = cartData.estimatedTotal || (subtotal + shipping + tax);
+
+        const formatCurrency = (amount) => `${CURRENCY_SYMBOL}${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+        
+        subtotalEl.textContent = formatCurrency(subtotal);
+        shippingCostEl.textContent = formatCurrency(shipping);
+        taxEstimateEl.textContent = formatCurrency(tax);
+        estimatedTotalEl.textContent = formatCurrency(total);
+        finalTotalEl.textContent = total.toLocaleString(undefined, { minimumFractionDigits: 2 }); // For Step 3
+
+        // Render Review Items List
+        itemsListEl.innerHTML = cartData.items.map(item => `
+            <div class="flex justify-between items-start py-2">
+                <div class="flex items-center">
+                    <img src="${item.imageUrl}" alt="${item.name}" class="w-10 h-10 rounded-md border mr-3">
+                    <div class="text-sm">
+                        <p class="font-medium text-gray-900">${item.name}</p>
+                        <p class="text-xs text-gray-500">${item.size} / ${item.color} (Qty: ${item.quantity})</p>
+                    </div>
+                </div>
+                <span class="text-sm font-semibold text-gray-900">${formatCurrency(item.price * item.quantity)}</span>
+            </div>
+        `).join('');
+        
+        // Store order components for server-side processing later
+        localStorage.setItem('outflickzOrderItems', JSON.stringify(cartData.items));
+        localStorage.setItem('outflickzOrderTotal', total.toFixed(2));
+        localStorage.setItem('outflickzOrderSubtotal', subtotal.toFixed(2));
+        localStorage.setItem('outflickzOrderShipping', shipping.toFixed(2));
+        localStorage.setItem('outflickzOrderTax', tax.toFixed(2));
+
+        // Enable button
+        paymentBtn.disabled = false;
+    }
+
+
+    /**
+    * Fetches the initial cart data, CHECKING FOR A 'BUY NOW' ITEM FIRST. (Unchanged, but important for flow)
+    */
+    async function fetchInitialCartData() {
+        const subtotalEl = document.getElementById('summary-subtotal');
+        const shippingCostEl = document.getElementById('summary-shipping-cost');
+        const taxEstimateEl = document.getElementById('summary-tax-estimate');
+        const estimatedTotalEl = document.getElementById('summary-estimated-total');
+        const finalTotalEl = document.getElementById('summary-estimated-total-final');
+        const itemsListEl = document.getElementById('review-items-list');
+        const paymentBtn = document.getElementById('checkout-next-btn');
+        
+        // Set loading state
+        subtotalEl.textContent = '...';
+        shippingCostEl.textContent = '...';
+        taxEstimateEl.textContent = '...';
+        estimatedTotalEl.textContent = '...';
+        finalTotalEl.textContent = '...';
+        itemsListEl.innerHTML = '<div class="text-center py-6 text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i> Loading order details...</div>';
+        paymentBtn.disabled = true;
+
+        let cartData;
+
+        // =========================================================================
+        // 🎯 BUY NOW / PRE-ORDER LOGIC START: CALLING NEW API
+        // =========================================================================
+        const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
+        
+        if (buyNowItemJSON) {
+            console.log("Processing Buy Now flow...");
+            
+            let item = JSON.parse(buyNowItemJSON);
+
+            // ⭐ CRITICAL FIXES FOR SERVER VALIDATION ⭐
+            // 1. Fix invalid 'productType'. If it's a Cap that somehow lost its type, it 
+            // must be defaulted to 'Caps' to prevent lookup in the 'Wears' collection.
+            if (!item.productType || item.productType === "undefined" || item.productType === null) {
+                item.productType || 'Uncategorized'; // Fallback to 'Uncategorized' if all else fails,
+                console.warn(`Fixed invalid productType to '${item.productType}' for Buy Now item.`);
+            }
+
+            // 2. Fix empty 'size' field (Critical for Caps which use variation/color as size equivalent)
+            if (!item.size && item.variation) {
+                item.size = item.variation; // Use the variation (colorHex or variation string) as the identifier for size/variant
+                console.warn("Fixed empty size by using variation value for Buy Now item (Cap fix).");
+            }
+
+            // 3. Fix 0-based variationIndex if server expects >= 1
+            // If the index is 0 (which often represents the first item in a 0-based array)
+            // and the server schema expects >= 1, we must adjust it.
+            if (item.variationIndex === 0) {
+                item.variationIndex = 1; 
+                console.warn("Fixed 0-based variationIndex to 1 for Buy Now item.");
+            }
+            
+
+            try {
+                // Fetch the calculated totals from the new dedicated API endpoint
+                const response = await fetch(`${API_BASE_URL}/api/orders/calculate-buy-now`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('userToken')}` 
+                    },
+                    body: JSON.stringify(item) // Send the corrected item object
+                });
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            throw new Error(errorData.message || 'Failed to calculate Buy Now totals from API.');
+                        }
+
+                        cartData = await response.json(); // cartData will contain { items: [...], subtotal, shipping, tax, estimatedTotal }
+
+                        // Go straight to rendering the server-calculated data
+                        renderCartData(cartData, paymentBtn);
+                        return; // EXIT: Buy Now flow complete
+
+                    } catch (error) {
+                        console.error('Error fetching Buy Now totals:', error);
+                        itemsListEl.innerHTML = '<div class="text-center py-6 text-red-500">Error calculating totals. Please try again.</div>';
+                        displayMessage(error.message || 'A critical error occurred. Cannot proceed to checkout.');
+                        return;
+                    }
+                }
+        // =========================================================================
+
+        // --- STANDARD CART LOGIC START ---
+        
+        // Check for empty local cart if user is NOT logged in (API is assumed to handle authenticated empty cart)
+        if (!isUserLoggedIn()) {
+            const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
+            if (localCart.length === 0) {
+                displayMessage('Your cart is empty. Redirecting to home.');
+                setTimeout(() => window.location.href = 'homepage.html', 1500);
+                return;
+            } 
+        }
+
+        try {
+            // === REAL API CALL FOR STANDARD CART ===
+            const response = await fetch('/api/users/cart', { // Corrected path assumption
+                method: 'GET',
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to fetch cart data from API.');
+            }
+
+            cartData = await response.json();
+
+            if (!cartData.items || cartData.items.length === 0) {
+                displayMessage('Your cart is empty. Redirecting to home.');
+                setTimeout(() => window.location.href = 'homepage.html', 1500);
+                return;
+            }
+            
+            // Render the data received from the API
+            renderCartData(cartData, paymentBtn);
+            
+        } catch (error) {
+            console.error('Error fetching cart data for checkout:', error);
+            itemsListEl.innerHTML = '<div class="text-center py-6 text-red-500">Error loading cart. Please go back to cart.</div>';
+            displayMessage(error.message || 'An error occurred loading your cart. Please try again.');
+            paymentBtn.disabled = true;
+        }
+    }
+
+    /**
+     * Helper function to notify admin of a new order. (Unchanged, but used in finalizeOrderOnServer)
+     */
+    async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = null) {
+        const orderTotal = localStorage.getItem('outflickzOrderTotal');
+        const shippingData = localStorage.getItem('outflickzShippingData');
+        const orderItems = localStorage.getItem('outflickzOrderItems');
+
+       const notificationPayload = {
+        orderId: orderId,
+        totalAmount: orderTotal,
+        paymentMethod: paymentMethod,
+        shippingDetails: JSON.parse(shippingData || '{}'),
+        items: JSON.parse(orderItems || '[]'),
+        adminEmail: DEFAULT_ADMIN_EMAIL,
+        paymentReceiptUrl: receiptUrl // Pass the receipt URL if available
+       };
+
+        try {
+            const response = await fetch('/api/notifications/admin-order-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(notificationPayload)
+            });
+
+            if (!response.ok) {
+                console.error('Failed to send admin notification email:', response.status);
+            }
+        } catch (error) {
+            console.error('Network error while sending admin notification:', error);
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // ⭐ PAYMENT PROCESSING FUNCTIONS (UPDATED FOR WEBHOOK) ⭐
+    // -----------------------------------------------------------------
+
+    /**
+     * ⭐ NEW: Handles client-side cleanup and redirect after a successful Paystack payment.
+     * The server-side finalization (status update, cart clear, email) is handled by the webhook.
+     * @param {string} orderRef - The Paystack transaction reference.
+     */
+    function handlePaystackSuccessRedirect(orderRef) {
+        // 1. Clear local storage items (cleanup)
+        localStorage.removeItem(LOCAL_CART_KEY);
+        localStorage.setItem(CART_STORAGE_KEY, '0');
+        localStorage.removeItem('outflickzOrderTotal');
+        localStorage.removeItem('outflickzOrderItems'); 
+        localStorage.removeItem('outflickzOrderSubtotal');
+        localStorage.removeItem('outflickzOrderShipping');
+        localStorage.removeItem('outflickzOrderTax');
+        
+        // Clear Buy Now flag from sessionStorage
+        sessionStorage.removeItem(BUY_NOW_KEY); 
+
+        updateCartBadge();
+        
+        // 2. Display message and redirect
+        displayMessage('Payment successful! Your order is being confirmed. Redirecting...');
+        
+        setTimeout(() => {
+            // Redirect using the transaction reference for Paystack
+            window.location.href = `orderconfirmation.html?ref=${orderRef}&method=paystack`;
+        }, 2000);
+    }
+
+    // -----------------------------------------------------------------
+    // ⭐ NEW FUNCTION: IMMEDIATE BUY NOW LOGOUT CHECK ⭐
+    // -----------------------------------------------------------------
+    
+    /**
+     * ⭐ UPDATED: Centralized function to finalize the order.
+     * ONLY used by Bank Transfer to perform client-side cleanup and notification.
+     * It explicitly PREVENTS Paystack orders from using the client-initiated finalize API.
+     * @param {object} payload - The order and payment details.
+     * @param {string} orderType - 'paystack' or 'banktransfer'.
+     */
+    async function finalizeOrderOnServer(payload, orderType) {
+        const payBtn = document.getElementById('checkout-next-btn');
+        // NOTE: isBuyNow check is not strictly needed here as we don't hit the server API
+        
+        try {
+            payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Completing Order...';
+
+            // CRITICAL FIX: Paystack/Card orders MUST be finalized by the server-side webhook.
+            if (orderType === 'paystack') {
+                console.error('CRITICAL ERROR: Paystack order should be finalized by webhook, not by client-side call to finalizeOrderOnServer.');
+                // We throw an error here, preventing further execution if somehow Paystack flow reaches this point
+                throw new Error('Payment finalization error. Please contact support.');
+            }
+
+            // --- Logic for Bank Transfer (server work already done by /pending) ---
+            if (orderType === 'banktransfer') {
+                console.log('Bank Transfer: Skipping server finalization call. Performing client cleanup and redirect.');
+                
+                // 🎯 STEP 1: Send Admin Notification (using server-provided orderId)
+                sendAdminOrderNotification(
+                    payload.orderId || payload.orderRef, 
+                    payload.paymentMethod, 
+                    payload.receiptUrl
+                );
+
+                // STEP 2: Clear local storage items (cleanup)
+                localStorage.removeItem(LOCAL_CART_KEY);
+                localStorage.setItem(CART_STORAGE_KEY, '0');
+                localStorage.removeItem('outflickzOrderTotal');
+                localStorage.removeItem('outflickzOrderItems'); 
+                localStorage.removeItem('outflickzOrderSubtotal');
+                localStorage.removeItem('outflickzOrderShipping');
+                localStorage.removeItem('outflickzOrderTax');
+                sessionStorage.removeItem(BUY_NOW_KEY); // <-- Clean up BUY_NOW flag after successful order
+
+                updateCartBadge();
+                displayMessage('Pending order placed successfully! Awaiting verification...');
+
+                // STEP 3: Redirect
+                setTimeout(() => {
+                    const queryParam = `id=${payload.orderId}`; 
+                    window.location.href = `orderconfirmation.html?${queryParam}&method=${orderType}`;
+                }, 2000);
+                
+                return; // Terminate function execution for Bank Transfer
+            }
+
+        } catch (error) {
+            console.error('Order Finalization Error:', error);
+            displayMessage(error.message || 'A network error occurred during order finalization. Please contact support.');
+            payBtn.disabled = false;
+            payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
+        }
+    }
+
+    /**
+     * ⭐ UPDATED: Handles Paystack Payment Flow.
+     */
+    function processPaystackPayment(totalAmount, email) {
+        const payBtn = document.getElementById('checkout-next-btn');
+        const paymentMethod = 'Paystack/Card';
+        const reference = `outflickz_${Date.now()}`;
+        
+        if (typeof PaystackPop === 'undefined') {
+            displayMessage('Paystack script not loaded. Please check your internet connection and page HTML.');
+            payBtn.disabled = false;
+            payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
+            return;
+        }
+
+        const handler = PaystackPop.setup({
+            key: PAYSTACK_PUBLIC_KEY,
+            email: email,
+            amount: totalAmount * 100, // Paystack expects amount in Kobo
+            ref: reference,
+            currency: CURRENCY_CODE,
+            
+            callback: function(response){
+                // ⭐ CRITICAL FIX: DO NOT call finalizeOrderOnServer for Paystack.
+                // The webhook at /api/paystack/webhook will handle server finalization.
+                handlePaystackSuccessRedirect(response.reference);
+            },
+            
+            onClose: function(){
+                displayMessage('Payment cancelled or abandoned. Please try again.');
+                payBtn.disabled = false;
+                payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
+            }
+        });
+        
+        handler.openIframe();
+    }
+
+    /**
+     * ⭐ CORRECTED: Handles Bank Transfer Receipt Upload and Pending Order Creation.
+     * Combines data and receipt into a single FormData POST to /api/orders/place/pending.
+     */
+    async function processBankTransferOrder(totalAmount, shippingAddress) {
+        const payBtn = document.getElementById('checkout-next-btn');
+        const paymentMethod = 'Bank Transfer';
+        const receiptInput = document.getElementById('bank-receipt-upload');
+        const isBuyNow = sessionStorage.getItem(BUY_NOW_KEY) !== null; // Check Buy Now flag
+
+        // ... (Receipt validation and loading text remain the same) ...
+
+        if (!receiptInput || !receiptInput.files || receiptInput.files.length === 0) {
+            displayMessage('Please upload the payment receipt image to complete the bank transfer order.');
+            payBtn.disabled = false;
+            payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
+            if (receiptInput) receiptInput.focus();
+            return;
+        }
+        
+        payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Uploading & Placing Pending Order...';
+        
+        // --- Create a single FormData object for the unified API ---
+        // NOTE: The 'orderItems' variable is still collected from localStorage 
+        // but its value is ONLY appended if isBuyNow is true.
+        const orderItems = localStorage.getItem('outflickzOrderItems'); // May be null/empty for standard cart setup
+        
+        const orderFormData = new FormData();
+        orderFormData.append('receipt', receiptInput.files[0]); // The file itself
+        
+        // Append all order details as form fields (as the backend expects strings for JSON/float parsing)
+        orderFormData.append('shippingAddress', JSON.stringify(shippingAddress));
+        orderFormData.append('paymentMethod', paymentMethod);
+        orderFormData.append('totalAmount', totalAmount.toFixed(2));
+        orderFormData.append('subtotal', localStorage.getItem('outflickzOrderSubtotal'));
+        orderFormData.append('shippingFee', localStorage.getItem('outflickzOrderShipping'));
+        orderFormData.append('tax', localStorage.getItem('outflickzOrderTax'));
+        
+        // ⭐ NO CHANGE NEEDED HERE - THIS IS CORRECT! ⭐
+        // For Standard Cart (isBuyNow = false), we rely on the server's Cart model.
+        // For Buy Now (isBuyNow = true), we must send the items to override the cart.
+        if (isBuyNow) {
+            // CRITICAL: Ensure the Buy Now item data is actually present
+            if (!orderItems) {
+                console.error("Buy Now item data is missing from local storage.");
+                displayMessage("Error: Buy Now data corrupted. Please restart checkout.");
+                // Reset button state and exit early
+                payBtn.disabled = false;
+                payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
+                return;
+            }
+            orderFormData.append('orderItems', orderItems);
+        }
+        // --- End FormData setup ---
+
+        let pendingOrderRef = `bank_${Date.now()}`; // Client-side reference
+
+        try {
+            // ⭐ Fetch against the new unified backend endpoint to place the PENDING order
+            const response = await fetch(`${API_BASE_URL}/api/orders/place/pending`, {
+                method: 'POST',
+                // The browser sets the Content-Type header correctly for FormData (multipart/form-data)
+                body: orderFormData 
+            });
+
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.message || 'Failed to place pending bank transfer order.');
+            }
+            
+            // Prepare payload for the centralized finalizer to handle notification & cleanup
+            const payload = {
+                paymentMethod: paymentMethod,
+                orderRef: pendingOrderRef, 
+                receiptUrl: data.ReceiptUrl, // Get the permanent URL back from the server
+                orderId: data.orderId // Use the actual server-created Order ID
+            };
+
+            // Use the centralized finalizer. The 'banktransfer' flag ensures it only does client cleanup/redirect.
+            await finalizeOrderOnServer(payload, 'banktransfer');
+
+        } catch (error) {
+            console.error('Bank Transfer Order Error:', error);
+            displayMessage(error.message || 'Error placing bank transfer order. Please try again.');
+            payBtn.disabled = false;
+            payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
+            return;
+        }
+    }
+    /**
+     * Handles the final step: Payment confirmation and order creation (Router).
+     */
+    async function handleFinalOrderPlacement() {
+        const paymentMethod = document.querySelector('input[name="payment-method"]:checked');
+        if (!paymentMethod) {
+            displayMessage('Please select a payment method.');
+            return;
+        }
+
+        const totalAmount = parseFloat(localStorage.getItem('outflickzOrderTotal') || 0);
+        const shippingAddress = JSON.parse(localStorage.getItem('outflickzShippingData'));
+        const email = shippingAddress?.email;
+
+        if (totalAmount <= 0 || !shippingAddress || !email) {
+            displayMessage('Order or contact data missing. Please refresh and try again.');
+            return;
+        }
+
+        // Disable button to prevent double submission
+        const payBtn = document.getElementById('checkout-next-btn');
+        payBtn.disabled = true;
+        payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Initializing Payment...';
+
+        if (paymentMethod.value === 'Paystack/Card') {
+            processPaystackPayment(totalAmount, email);
+        } else if (paymentMethod.value === 'Bank Transfer') {
+            await processBankTransferOrder(totalAmount, shippingAddress);
+        } else {
+            // Fallback for other payment methods if needed
+            displayMessage(`Payment method ${paymentMethod.value} selected, but not yet implemented.`);
+            payBtn.disabled = false;
+            payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
+        }
+    }
+
+
+    // -----------------------------------------------------------------
+    // ⭐ NEW ACCORDION/DROPDOWN LOGIC FOR BANK TRANSFER DETAILS ⭐
+    // -----------------------------------------------------------------
+
+    /**
+     * Toggles the visibility of the bank details section and the receipt upload section.
+     * This is called when the main 'Bank Transfer' radio button is checked/unchecked.
+     */
+    function showBankTransferDetails() {
+        const bankRadio = document.getElementById('payment-bank');
+        const bankDetailsInfo = document.getElementById('bank-details-info');
+        const receiptUploadSection = document.getElementById('bank-transfer-receipt-upload');
+        const receiptInput = document.getElementById('bank-receipt-upload');
+        
+        const isBankChecked = bankRadio && bankRadio.checked;
+
+        if (bankDetailsInfo) bankDetailsInfo.style.display = isBankChecked ? 'block' : 'none';
+        
+        // Show/Hide the receipt upload section
+        if (receiptUploadSection) receiptUploadSection.classList.toggle('hidden', !isBankChecked);
+
+        // Set required attribute dynamically on the receipt input
+        if (receiptInput) {
+            if (isBankChecked) {
+                receiptInput.setAttribute('required', 'required');
+            } else {
+                receiptInput.removeAttribute('required');
+            }
+        }
+        
+        // Close all accordions when the main radio button is unchecked
+        if (!isBankChecked) {
+            document.querySelectorAll('.bank-details-content').forEach(content => {
+                content.style.display = 'none';
+            });
+            document.querySelectorAll('.bank-toggle svg').forEach(icon => {
+                icon.classList.remove('rotate-180');
+            });
+        }
+    }
+
+    /**
+ * Handles the accordion behavior for individual bank account details.
+ * This is called by the Moniepoint and OPay buttons.
+ * @param {string} targetId - The ID of the bank details div to toggle.
+ */
+function toggleBankDetails(targetId) {
+    const targetElement = document.getElementById(targetId);
+    const allContent = document.querySelectorAll('.bank-details-content');
+    const isVisible = targetElement.style.display === 'block';
+
+    // 1. Close all other details and reset their icons
+    allContent.forEach(content => {
+        if (content.id !== targetId) {
+            content.style.display = 'none';
+            // Ensure you are selecting the correct SVG within the button
+            const otherToggle = document.querySelector(`.bank-toggle[data-target="${content.id}"]`);
+            if (otherToggle) {
+                otherToggle.querySelector('svg').classList.remove('rotate-180');
+            }
+        }
+    });
+    
+    // 2. Toggle the target element and its icon
+    const targetToggle = document.querySelector(`.bank-toggle[data-target="${targetId}"]`);
+
+    if (isVisible) {
+        targetElement.style.display = 'none';
+        if (targetToggle) targetToggle.querySelector('svg').classList.remove('rotate-180');
+    } else {
+        targetElement.style.display = 'block';
+        if (targetToggle) targetToggle.querySelector('svg').classList.add('rotate-180');
+    }
+}
+
+    /**
+ * Toggles the visibility of the main manual bank transfer details section 
+ * and the receipt upload field based on which payment radio button is checked.
+ * This resolves the ReferenceError you were seeing.
+ */
+function toggleBankTransferDetails() {
+    // Get the radio buttons
+    const paystackRadio = document.getElementById('payment-paystack');
+    const bankRadio = document.getElementById('payment-bank');
+    
+    // Get the main bank transfer containers
+    const bankDetailsInfo = document.getElementById('bank-details-info');
+    const receiptUpload = document.getElementById('bank-transfer-receipt-upload');
+    
+    // Check if the Bank Transfer radio button is checked
+    if (bankRadio && bankRadio.checked) {
+        // --- Bank Transfer selected: SHOW DETAILS ---
+        
+        // Ensure the main bank details section is visible
+        if (bankDetailsInfo) {
+            bankDetailsInfo.style.display = 'block';
+        }
+        
+        // Ensure the receipt upload is visible (as it's a manual process)
+        if (receiptUpload) {
+            receiptUpload.style.display = 'block';
+        }
+
+        // OPTIONAL: If the bank details accordion should auto-open one account, 
+        // you would call toggleBankDetails('moniepoint-details') here.
+
+    } else {
+        // --- Paystack/Card selected: HIDE DETAILS ---
+
+        // Hide the main bank details section
+        if (bankDetailsInfo) {
+            bankDetailsInfo.style.display = 'none';
+        }
+        
+        // Hide the receipt upload field
+        if (receiptUpload) {
+            receiptUpload.style.display = 'none';
+        }
+        
+        // OPTIONAL: Close any open bank accordions when switching away
+        // const allContent = document.querySelectorAll('.bank-details-content');
+        // allContent.forEach(content => {
+        //     content.style.display = 'none';
+        //     // Logic to reset the SVG icon (similar to your toggleBankDetails logic)
+        // });
+    }
+}
+
+/**
+ * Checks if the current checkout is a Buy Now flow and if the user is 
+ * not logged in, redirects them to useraccount.html to force login/registration.
+ * @returns {boolean} True if a redirect occurred, false otherwise.
+ */
+function handleBuyNowImmediateLogout() {
+    const isBuyNow = sessionStorage.getItem(BUY_NOW_KEY) !== null;
+    
+    // Check if it's a Buy Now flow AND the user is NOT logged in.
+    if (isBuyNow && !isUserLoggedIn()) {
+        console.warn("Buy Now flow initiated but user is not logged in. Redirecting to account page.");
+        
+        // Save the current URL so the user can be redirected back after logging in/registering
+        sessionStorage.setItem('outflickzRedirectAfterAuth', window.location.href); 
+        
+        // This is the source of your *previous* redirect, now called conditionally.
+        window.location.href = 'useraccount.html'; 
+        return true; // Indicate that a redirect happened
+    }
+    
+    // Crucial: Clear the redirect flag if they successfully landed here while logged in.
+    if (isBuyNow && isUserLoggedIn()) {
+        sessionStorage.removeItem('outflickzRedirectAfterAuth');
+    }
+    
+    return false; // Indicate no redirect happened
+}
+
+    // --- Main Initialization (Modified to handle both Logged-In and Guest users) ---
+document.addEventListener('DOMContentLoaded', () => {
+    
+    // ... (Buy Now console logging) ...
+    sessionStorage.getItem(BUY_NOW_KEY); 
+    console.log("CRITICAL FIX APPLIED: Checked 'buyNowItem' from sessionStorage to force standard cart load.");
+
+    // ======================================================================
+    // ⭐ CRITICAL INTEGRATION POINT: Check for immediate logout requirement
+    // ======================================================================
+    // We MUST keep this check in case a redirect is necessary for Buy Now flow.
+   // const didLogout = handleBuyNowImmediateLogout();
+    //if (didLogout) return; // HALT execution if redirect occurred
+    // ======================================================================
+    
+
+    // --- Initialization Logic Starts Here ---
+    
+    // If the user is NOT logged in, we MUST stop them if the checkout 
+    // is designed ONLY for logged-in users (which the old code implied).
+    // If you intend to allow GUEST CHECKOUT, you must modify this logic below.
+
+    // 🛑 SOLUTION 1: If you MUST force login (original intent, but stops the redirect loop)
+    /*
+    if (!isUserLoggedIn()) {
+        // Since the user is coming from Buy Now, they should be redirected to register/login
+        // and then return to the checkout page. The old code was buggy because it didn't
+        // handle the 'Buy Now' case properly when redirecting back.
+        // For now, if the page requires login, we put the redirect back.
+        // This *will* redirect the user to useraccount.html if they are not logged in.
+        redirectToProfileOrLogin();
+        return;
+    }
+    */
+
+    // ⭐ SOLUTION 2: The preferred method (Allow Guest, but conditionally fetch user data) ⭐
+    // We only need to pre-fill the form if the user is logged in.
+    if (isUserLoggedIn()) {
+        fetchUserData(); // ONLY run this if logged in to pre-fill the form
+    }
+    
+    // These functions MUST run for both logged-in users and guests to display the cart and steps.
+    updateCartBadge();
+    fetchInitialCartData(); // Loads order summary (handles Buy Now item or local cart for guest)
+    updateCheckoutView(); // Renders step 1
+    
+    // Attach event listener to the main button
+    const nextBtn = document.getElementById('checkout-next-btn');
+    if (nextBtn) {
+        nextBtn.onclick = validateAndProceedToReview; // Starts the flow at step 1
+    }
+    
+    // Attach event listeners to Edit buttons in Review step (Step 2)
+    document.getElementById('edit-shipping-btn').onclick = () => {
+        checkoutStep = 1;
+        updateCheckoutView();
+        window.scrollTo(0, 0); 
+    };
+    
+    document.getElementById('edit-order-btn').onclick = () => {
+        // This should take the user to the cart page to edit items
+        window.location.href = 'cart.html';
+    };
+    
+    // ----------------------------------------------------------------------
+    // ⭐ UPDATED BANK TRANSFER EVENT LISTENERS (Kept in the original spot) ⭐
+    // ----------------------------------------------------------------------
+    const bankRadio = document.getElementById('payment-bank');
+    const paystackRadio = document.getElementById('payment-paystack');
+
+    if (paystackRadio) {
+        // When Paystack is clicked, call the show function to ensure the bank section is closed
+        paystackRadio.onclick = showBankTransferDetails; 
+    }
+    
+    // Initial call to hide bank details
+    showBankTransferDetails(); 
+    
+    // Attach the hideMessageModal function to the close button
+    const closeButton = document.getElementById('message-modal-close-btn');
+    if (closeButton) {
+        closeButton.addEventListener('click', hideMessageModal);
+    }
+});
+</script>
+<script src="https://js.paystack.co/v1/inline.js"></script>
+</body>
+</html>

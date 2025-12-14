@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-commerce Admin - User Orders</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
+    <style>
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #05744b; /* emerald-400 */
+            border-radius: 4px;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.95rem; /* Slightly reduced base font size */
+        }
+        .text-xl-reduced {
+            font-size: 1.5rem; /* Custom size for headings */
+        }
+        /* Custom style for the active link on this page */
+        #btn-userorders.active-link {
+            background-color: #059669; /* emerald-600 */
+            color: white;
+        }
+        .content-section {
+            min-height: calc(100vh - 3rem); /* Ensure full height for content sections */
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex">
+
+    <aside id="sidebar" class="fixed top-0 left-0 h-full w-64 bg-emerald-900 text-white transform transition-transform duration-300 z-30 lg:translate-x-0 -translate-x-full shadow-2xl flex flex-col">
+        <div class="p-6 flex-shrink-0">
+            <img src="https://i.imgur.com/Fz9w1BA.png" alt="E-commerce Logo" class="h-10 w-auto mb-6 rounded-lg shadow-md border border-emerald-700">
+            <h1 class="text-xl font-extrabold text-emerald-400 border-t border-emerald-800 pt-4">Commerce Hub</h1>
+        </div>
+        
+        <nav class="space-y-2 px-4 flex-grow overflow-y-auto">
+            <button id="btn-dashboard" onclick="navigateToDashboard()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l-7-7-7 7m10 0v10a1 1 0 01-1 1h-3m-3 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-9 0h10"></path></svg>
+                Dashboard
+            </button>
+            
+            <button id="btn-userorders" onclick="showContent('userorders')" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out bg-emerald-600 hover:bg-emerald-700 active-link">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                User Orders
+            </button>
+
+            <button id="btn-wearscollection" onclick="navigateToWearsCollection()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+                Wears Collection
+            </button>
+
+            <button id="btn-capscollection" onclick="navigateToCapsCollection()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 13h10M4 19v-6a3 3 0 013-3h10a3 3 0 013 3v6a3 3 0 01-3 3H7a3 3 0 01-3-3z"></path></svg>
+                Caps Collection
+            </button>
+            
+            <button id="btn-newarrivals" onclick="navigateToNewArrivals()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                New Arrivals
+            </button>
+            
+            <button id="btn-preorders" onclick="navigateToPreOrders()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                Pre-Order 
+            </button>
+            
+            <button id="btn-membership" onclick="navigateToMembership()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3v-5a2 2 0 00-2-2H5a2 2 0 00-2 2v5a3 3 0 003 3z"></path></svg>
+                Membership
+            </button>
+            <button id="btn-settings" onclick="navigateToSettings()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.526.34.813.486 1.066-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                Settings
+            </button>
+        </nav>
+        
+        <div class="p-4 flex-shrink-0 border-t border-emerald-800">
+            <button id="btn-logout" onclick="logoutAdmin()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out bg-red-600 hover:bg-red-700 text-white shadow-lg">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                Log Out
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 lg:ml-64 p-4 transition-all duration-300">
+        <button id="sidebar-toggle" class="lg:hidden fixed top-4 left-4 z-40 p-2 bg-emerald-600 text-white rounded-lg shadow-lg hover:bg-emerald-700 transition">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+        </button>
+
+        <section id="content-userorders" class="content-section p-6 pt-16 lg:pt-6">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6">Pending User Orders Management 📦</h2>
+
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <div class="flex justify-between items-center mb-4 border-b pb-3">
+                    <h3 class="text-xl font-semibold text-gray-700">Orders Awaiting Confirmation</h3>
+                    <span id="pending-count" class="text-sm font-bold text-red-600 bg-red-100 px-3 py-1 rounded-full">0 Pending</span>
+                </div>
+
+                <div id="loading-indicator" class="text-center p-10">
+                    <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 inline-block"></div>
+                    <p class="mt-4 text-gray-600 text-sm">Fetching user orders...</p>
+                </div>
+
+                <div id="orders-table-container" class="overflow-x-auto hidden">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Amount</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="orders-table-body" class="bg-white divide-y divide-gray-200">
+                            </tbody>
+                    </table>
+                </div>
+
+                <div id="empty-state" class="text-center p-10 hidden">
+                    <svg class="w-16 h-16 mx-auto text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                    <p class="mt-3 text-lg font-medium text-gray-700">All caught up!</p>
+                    <p class="text-sm text-gray-500">There are currently no orders requiring your confirmation.</p>
+                </div>
+                
+                <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+            </div>
+        </section>
+        
+        <section id="content-orderdetails" class="content-section p-6 pt-16 lg:pt-6 hidden">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold text-gray-800">Order Details: <span id="detail-order-id" class="text-emerald-600"></span></h2>
+                <button onclick="showContent('userorders')" class="flex items-center text-sm font-medium text-gray-600 hover:text-gray-800 transition">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                    Back to Pending List
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 space-y-6">
+                    <div class="bg-white p-6 rounded-xl shadow-lg">
+                        <h3 class="text-xl font-semibold text-gray-700 mb-4">Ordered Items</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variation</th>
+                                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                                        <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
+                                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Subtotal</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="detail-items-body" class="bg-white divide-y divide-gray-200">
+                                    </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-xl shadow-lg">
+                        <h3 class="text-xl font-semibold text-gray-700 mb-4">Payment Receipt 🧾</h3>
+                        <div id="receipt-container" class="border border-gray-200 p-4 rounded-lg bg-gray-50 text-center">
+                            </div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-1 space-y-6">
+                    <div class="bg-white p-6 rounded-xl shadow-lg">
+                        <h3 class="text-xl font-semibold text-gray-700 mb-4">Order Summary</h3>
+                        <div class="space-y-2 text-sm">
+                            <p class="flex justify-between border-b pb-1"><span>Customer:</span> <span id="detail-customer-name" class="font-medium text-gray-900"></span></p>
+                            <p class="flex justify-between border-b pb-1"><span>Email:</span> <span id="detail-customer-email" class="font-medium text-gray-900"></span></p>
+                            <p class="flex justify-between border-b pb-1"><span>Date Placed:</span> <span id="detail-date" class="font-medium text-gray-900"></span></p>
+                            <p class="flex justify-between border-b pb-1"><span>Payment Method:</span> <span id="detail-payment-method" class="font-medium text-gray-900"></span></p>
+                            <p class="flex justify-between border-b pb-1"><span>Subtotal:</span> <span id="detail-subtotal" class="font-medium text-gray-900"></span></p>
+                            <p class="flex justify-between border-b pb-1"><span>Shipping Fee:</span> <span id="detail-shipping" class="font-medium text-gray-900"></span></p>
+                            <p class="flex justify-between border-b pb-1"><span>Tax:</span> <span id="detail-tax" class="font-medium text-gray-900"></span></p>
+                            <p class="flex justify-between pt-2 border-t border-gray-300">
+                                <span class="text-lg font-bold">Total Amount:</span> 
+                                <span id="detail-total" class="text-lg font-bold text-emerald-600"></span>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div id="detail-actions-card" class="bg-white p-6 rounded-xl shadow-lg border border-yellow-300">
+                        <h3 class="text-xl font-semibold text-red-600 mb-4">Confirm Order Payment</h3>
+                        <p class="text-sm text-gray-600 mb-4">Confirming this order will verify the payment, set the status to 'Processing', and initiate **inventory deduction** on the backend.</p>
+
+                        <div class="space-y-3">
+                            <button 
+                                id="detail-confirm-btn" 
+                                onclick="confirmOrderFromDetails()"
+                                class="w-full bg-emerald-600 text-white py-3 rounded-lg font-bold text-base hover:bg-emerald-700 transition duration-150 shadow-md"
+                            >
+                                ✅ Confirm Payment & Process Order
+                            </button>
+                            <button 
+                                id="detail-cancel-btn" 
+                                onclick="cancelOrderFromDetails()"
+                                class="w-full bg-red-600 text-white py-3 rounded-lg font-bold text-base hover:bg-red-700 transition duration-150 shadow-md"
+                            >
+                                ❌ Cancel Order
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+  <script>
+    // --- Shared JS Elements and Functions (Identical to Dashboard) ---
+    const sidebar = document.getElementById('sidebar');
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    const navButtons = document.querySelectorAll('nav button');
+    
+    // Navigation Functions (Redirects to other pages)
+    function navigateToDashboard() { window.location.href = './admin-dashboard.html'; }
+    function navigateToWearsCollection() { window.location.href = './wearscollection.html'; }
+    function navigateToCapsCollection() { window.location.href = './capscollection.html'; }
+    function navigateToNewArrivals() { window.location.href = './newarrivals.html'; }
+    function navigateToPreOrders() { window.location.href = './preorders.html'; }
+    function navigateToMembership() { window.location.href = './membership.html'; }
+    function navigateToSettings() { window.location.href = './settings.html'; } 
+    
+    // Log out function
+    function logoutAdmin() {
+        console.log("Logging out... Clearing admin token.");
+        localStorage.removeItem('adminToken');
+        window.location.href = './admin-login.html'; 
+    }
+
+    // Global variable to store the currently loaded orders
+    let globalOrdersData = [];
+
+    // Show/Hide Content Sections
+    function showContent(sectionId) {
+        document.querySelectorAll('.content-section').forEach(section => {
+            section.classList.add('hidden');
+        });
+        document.getElementById(`content-${sectionId}`).classList.remove('hidden');
+        
+        // Re-hide sidebar on mobile after navigation
+        if (window.innerWidth < 1024) {
+            sidebar.classList.add('-translate-x-full');
+        }
+    }
+    
+    // Helper function for date formatting
+    function formatDate(dateString) {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    // 🌟 THE CRITICAL FIX: CONSOLIDATED AND CORRECTED formatNaira FUNCTION 🌟
+    /**
+     * Helper function for currency formatting (NGN). Ensures two decimal places.
+     * @param {string|number} amount - The amount to format.
+     * @returns {string} The formatted Naira string (e.g., ₦40,000.00).
+     */
+    function formatNaira(amount) {
+        const numAmount = Number(amount) || 0; 
+        if (isNaN(numAmount)) return 'N/A';
+        
+        return new Intl.NumberFormat('en-NG', {
+            style: 'currency',
+            currency: 'NGN',
+            // Setting minimumFractionDigits to 2 ensures N0.00 displays as ₦0.00
+            minimumFractionDigits: 2, 
+            maximumFractionDigits: 2
+        }).format(numAmount);
+    }
+    // ------------------------------------------------------------------------
+
+    // --- Order Specific JS Logic ---
+    const loadingIndicator = document.getElementById('loading-indicator');
+    const ordersTableContainer = document.getElementById('orders-table-container');
+    const ordersTableBody = document.getElementById('orders-table-body');
+    const pendingCountElement = document.getElementById('pending-count');
+    const emptyState = document.getElementById('empty-state');
+    const toastContainer = document.getElementById('toast-container');
+    const detailItemsBody = document.getElementById('detail-items-body');
+
+    // Use a global variable to hold the ID of the order currently displayed in details
+    let currentDetailOrderId = null; 
+
+    /**
+    * Displays a temporary notification (toast).
+    * @param {string} message - The message to display.
+    * @param {string} bgColorClass - Tailwind class for background color (e.g., 'bg-emerald-500').
+    */
+    function showToast(message, bgColorClass) {
+        const toast = document.createElement('div');
+        toast.className = `p-4 rounded-lg shadow-xl text-white ${bgColorClass} transition-opacity duration-300`;
+        toast.textContent = message;
+        
+        toastContainer.appendChild(toast);
+        
+        // Auto-hide the toast after 3 seconds
+        setTimeout(() => {
+            toast.classList.add('opacity-0');
+            setTimeout(() => toast.remove(), 500); // Remove from DOM after fade out
+        }, 3000);
+    }
+
+    // --- CONFIRMATION HANDLERS (Called from Detail View) ---
+
+    async function confirmOrderFromDetails() {
+        if (currentDetailOrderId) {
+            await confirmOrder(currentDetailOrderId);
+            // After confirmation, navigate back to the list
+            showContent('userorders');
+        }
+    }
+
+    // Placeholder for the Cancel functionality
+    function cancelOrderFromDetails() {
+        if (currentDetailOrderId) {
+            if (confirm(`Are you sure you want to CANCEL Order #${currentDetailOrderId.substring(0, 8)}? This action is usually irreversible.`)) {
+                // TODO: Implement API call to PUT /api/admin/orders/:orderId/cancel
+                showToast(`Order #${currentDetailOrderId.substring(0, 8)} cancelled (Backend not implemented yet).`, 'bg-amber-500');
+                // For now, just navigate back to the list and reload
+                showContent('userorders');
+                loadUserOrders();
+            }
+        }
+    }
+
+    /**
+* Sends a request to the API to confirm (complete) an order.
+* @param {string} orderId - The ID of the order to confirm.
+*/
+async function confirmOrder(orderId) {
+    const token = localStorage.getItem('adminToken');
+    if (!token) {
+        logoutAdmin();
+        return;
+    }
+    
+    const button = document.getElementById(`detail-confirm-btn`) || document.getElementById(`confirm-btn-${orderId}`);
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Confirming...';
+        button.classList.add('opacity-50');
+    }
+
+    try {
+        const response = await fetch(`/api/admin/orders/${orderId}/confirm`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        let responseData = {};
+
+        // 💡 CRITICAL CLIENT FIX: Check if the response is JSON before parsing.
+        // This prevents the SyntaxError when a non-JSON error page (like a 503) is returned.
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+            responseData = await response.json();
+        } else {
+            // Read as text if not JSON (likely a server/gateway error page)
+            const errorText = await response.text();
+            
+            // Handle 503 specifically
+            if (response.status === 503) {
+                throw new Error('Server Unavailable (503). The function likely timed out. Please check Netlify function logs.');
+            }
+            // Use the text as the error message if the status is bad
+            if (!response.ok) {
+                throw new Error(errorText || `Network Error: Status ${response.status}`);
+            }
+        }
+
+        if (!response.ok) {
+             // Use the server's error message if available, otherwise fall back to a generic message.
+            throw new Error(responseData.error || responseData.message || `Failed to confirm order: Status ${response.status}`);
+        }
+        
+        showToast(`Order #${orderId.substring(0, 8)} confirmed and processed successfully!`, 'bg-emerald-500');
+        
+        await loadUserOrders();
+
+    } catch (error) {
+        console.error('Confirmation error:', error);
+        
+        if (currentDetailOrderId === orderId) {
+            const actionCard = document.getElementById('detail-actions-card');
+            actionCard.classList.remove('border-yellow-300');
+            actionCard.classList.add('border-red-500');
+            showToast(error.message || `Failed to confirm order #${orderId.substring(0, 8)}.`, 'bg-red-500');
+        } else {
+            showToast(error.message || `Failed to confirm order #${orderId.substring(0, 8)}.`, 'bg-red-500');
+        }
+        
+        // Re-enable button on failure
+        if (button) {
+            button.disabled = false;
+            button.textContent = '✅ Confirm Payment & Process Order';
+            button.classList.remove('opacity-50');
+        }
+    }
+}
+
+    /**
+    * Fetches a list of pending orders from the API.
+    */
+    async function fetchOrders() {
+        const token = localStorage.getItem('adminToken');
+        if (!token) {
+            logoutAdmin();
+            return [];
+        }
+
+        try {
+            const response = await fetch('/api/admin/orders/pending', { 
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}` 
+                }
+            });
+
+            if (!response.ok) {
+                if (response.status === 401 || response.status === 403) {
+                    logoutAdmin();
+                    return [];
+                }
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('Error fetching orders:', error);
+            showToast('Failed to load orders. API error.', 'bg-red-500');
+            return [];
+        }
+    }
+
+    /**
+    * Fetches detailed order information.
+    * @param {string} orderId - The ID of the order to confirm.
+    * @returns {Promise<Object|null>} - The full, augmented order object.
+    */
+    async function fetchDetailedOrder(orderId) {
+        const token = localStorage.getItem('adminToken');
+        if (!token) {
+            logoutAdmin();
+            return null;
+        }
+        
+        try {
+            const response = await fetch(`/api/admin/orders/${orderId}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            
+            if (!response.ok) {
+                if (response.status === 404) {
+                    throw new Error("Order not found.");
+                }
+                throw new Error(`Failed to fetch order details. Status: ${response.status}`);
+            }
+
+            return await response.json();
+
+        } catch (error) {
+            console.error('Error fetching detailed order:', error);
+            showToast(error.message || `Failed to load details for order #${orderId.substring(0, 8)}.`, 'bg-red-500');
+            return null;
+        }
+    }
+
+    /**
+    * Renders the full details of a single order into the dedicated section.
+    * @param {Object} order - The single order object with full details.
+    */
+    function renderOrderDetail(order) {
+        currentDetailOrderId = order._id; // Set the current order ID
+        showContent('orderdetails'); // Switch view
+
+        // 1. HEADER
+        document.getElementById('detail-order-id').textContent = order._id.substring(0, 8);
+
+        // 2. SUMMARY CARD (FIXED SECTION)
+        document.getElementById('detail-customer-name').textContent = order.customerName || 'N/A';
+        document.getElementById('detail-customer-email').textContent = order.email || 'N/A';
+        document.getElementById('detail-date').textContent = formatDate(order.createdAt);
+        document.getElementById('detail-payment-method').textContent = order.paymentMethod || 'Bank Transfer'; // Default if missing
+        
+        // Ensure all financial numbers are parsed safely as floats before formatting
+        const safeSubtotal = parseFloat(order.subtotal) || 0;
+        const safeShippingFee = parseFloat(order.shippingFee) || 0; 
+        const safeTax = parseFloat(order.tax) || 0;
+        const safeTotalAmount = parseFloat(order.totalAmount) || 0;
+
+        // Populate fields using the correctly configured formatNaira
+        document.getElementById('detail-subtotal').textContent = formatNaira(safeSubtotal);
+        document.getElementById('detail-shipping').textContent = formatNaira(safeShippingFee);
+        document.getElementById('detail-tax').textContent = formatNaira(safeTax);
+        document.getElementById('detail-total').textContent = formatNaira(safeTotalAmount);
+        
+        // 3. ORDER ITEMS
+        detailItemsBody.innerHTML = '';
+        order.items.forEach(item => {
+            const itemRow = document.createElement('tr');
+            itemRow.className = 'border-b hover:bg-gray-50';
+            
+            // Determine the price to display (use the priceAtTimeOfPurchase from the order item)
+            const itemPrice = parseFloat(item.priceAtTimeOfPurchase || item.price) || 0;
+            // Calculate subtotal for the row
+            const itemSubtotal = parseFloat(item.quantity * itemPrice) || 0; 
+
+            // ⭐ CRITICAL FIX: Robust check for item.imageUrl to prevent broken image icon for empty string URL
+            const itemImageSource = item.imageUrl && item.imageUrl.trim() 
+                ? item.imageUrl 
+                : 'https://placehold.co/32x32/CBD5E1/475569/png?text=P';
+
+            itemRow.innerHTML = `
+                <td class="px-4 py-3 text-sm font-medium text-gray-900 flex items-center">
+                    <img src="${itemImageSource}" 
+                        alt="${item.name} image" class="w-8 h-8 rounded mr-2 object-cover">
+                    ${item.name}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-600">${item.variation || 'N/A'}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right">${formatNaira(itemPrice)}</td>
+                <td class="px-4 py-3 text-sm text-gray-600 text-center">${item.quantity}</td>
+                <td class="px-4 py-3 text-sm font-semibold text-gray-900 text-right">${formatNaira(itemSubtotal)}</td>
+            `;
+            detailItemsBody.appendChild(itemRow);
+        });
+
+        // 4. PAYMENT RECEIPT
+    const receiptContainer = document.getElementById('receipt-container');
+receiptContainer.innerHTML = ''; // Clear previous content
+
+// Use trim() to treat whitespace-only or empty strings as falsy
+if (order.paymentReceiptUrl && order.paymentReceiptUrl.trim()) { 
+    receiptContainer.innerHTML = `
+        <a href="${order.paymentReceiptUrl}" target="_blank" class="block w-full h-80 overflow-hidden bg-gray-100 rounded-lg group">
+            <img src="${order.paymentReceiptUrl}" alt="Payment Receipt" class="object-contain w-full h-full transition duration-300 group-hover:opacity-80"/>
+        </a>
+        <a href="${order.paymentReceiptUrl}" target="_blank" class="mt-3 inline-flex items-center text-sm font-medium text-emerald-600 hover:text-emerald-800 transition">
+            View Full Receipt in New Tab 
+            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+        </a>
+    `;
+} else {
+    receiptContainer.innerHTML = '<p class="text-gray-500 p-8">No receipt image uploaded for this order.</p>';
+}
+        
+        // Update Action Card state (Color) based on status
+        const actionCard = document.getElementById('detail-actions-card');
+        actionCard.classList.remove('border-red-500', 'border-gray-300', 'border-yellow-300');
+        if (order.status === 'Pending') {
+            actionCard.classList.add('border-yellow-300');
+        } else {
+            actionCard.classList.add('border-gray-300'); 
+        }
+        
+        // Update action button visibility/text
+        const confirmBtn = document.getElementById('detail-confirm-btn');
+        const cancelBtn = document.getElementById('detail-cancel-btn');
+
+        if (order.status === 'Pending') {
+            confirmBtn.classList.remove('hidden');
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = '✅ Confirm Payment & Process Order';
+            confirmBtn.classList.remove('opacity-50');
+            cancelBtn.classList.remove('hidden');
+        } else {
+            // If not pending, hide action buttons
+            confirmBtn.classList.add('hidden');
+            cancelBtn.classList.add('hidden');
+        }
+    }
+
+    /**
+    * Renders the fetched orders into the table.
+    * @param {Array<Object>} orders - The list of orders to render.
+    */
+    function renderOrders(orders) {
+        ordersTableBody.innerHTML = '';
+        globalOrdersData = orders; // Save data globally 
+        
+        // Only display orders that are strictly 'Pending' for this view.
+        const pendingOrders = orders.filter(order => order.status === 'Pending');
+
+        pendingCountElement.textContent = `${pendingOrders.length} Pending`;
+
+        if (pendingOrders.length === 0) {
+            ordersTableContainer.classList.add('hidden');
+            emptyState.classList.remove('hidden');
+            return;
+        }
+
+        emptyState.classList.add('hidden');
+        ordersTableContainer.classList.remove('hidden');
+
+        pendingOrders.forEach(order => {
+            const tr = document.createElement('tr');
+            tr.className = 'hover:bg-gray-50';
+            
+            const date = formatDate(order.createdAt);
+            
+            // Logic to display customer name or fallback to email
+            let customerDisplay = order.email || 'Unknown'; 
+
+            if (order.userName && order.userName !== 'N/A' && 
+                !order.userName.toLowerCase().includes('undefined') && 
+                order.userName.trim().length > 1) {
+                
+                customerDisplay = order.userName;
+            }
+
+            tr.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${order._id.substring(0, 8)}...</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${customerDisplay}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-emerald-600">${formatNaira(order.totalAmount)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${date}</td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                        ${order.status}
+                    </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                    <button 
+                        id="view-btn-${order._id}"
+                        onclick="handleViewDetails('${order._id}')" 
+                        class="text-white bg-blue-600 hover:bg-blue-700 py-1 px-3 rounded-lg text-xs transition duration-150 shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                    >
+                        View Details
+                    </button>
+                </td>
+            `;
+            ordersTableBody.appendChild(tr);
+        });
+    }
+        
+    /**
+    /**
+* Handles the click on 'View Details' and loads the order details section.
+* @param {string} orderId - The ID of the order to view.
+*/
+async function handleViewDetails(orderId) {
+    // Show loading state 
+    showToast(`Loading details for order #${orderId.substring(0, 8)}...`, 'bg-blue-600');
+    
+    // Call the REAL API endpoint
+    const response = await fetchDetailedOrder(orderId); 
+    
+    // ⭐ CRITICAL FIX APPLIED: Unwrap the actual order object from the API response payload.
+    const orderDetails = response ? response.order : null; 
+    
+    if (orderDetails) {
+        renderOrderDetail(orderDetails);
+        // Dismiss the loading toast if successful (it will fade automatically, but clearing ensures no overlap)
+        toastContainer.innerHTML = '';
+    } else {
+        // If fetch fails, revert to the list view
+        showContent('userorders');
+    }
+}
+
+    /**
+    * Main function to fetch and display orders.
+    */
+    async function loadUserOrders() {
+        loadingIndicator.classList.remove('hidden');
+        ordersTableContainer.classList.add('hidden');
+        emptyState.classList.add('hidden');
+
+        const orders = await fetchOrders();
+
+        loadingIndicator.classList.add('hidden');
+        
+        renderOrders(orders);
+    }
+
+    // Sidebar Toggle & Initial Load
+    document.addEventListener('DOMContentLoaded', () => {
+        // Highlight the current page's button
+        document.getElementById('btn-userorders').classList.add('bg-emerald-600', 'hover:bg-emerald-700', 'active-link', 'text-white');
+        document.getElementById('btn-userorders').classList.remove('hover:bg-emerald-800', 'text-emerald-200');
+        
+        sidebarToggle.addEventListener('click', () => {
+            sidebar.classList.toggle('-translate-x-full');
+        });
+        
+        // Initial Data Load
+        loadUserOrders(); 
+    });
+
+</script>
+</body>
+</html>

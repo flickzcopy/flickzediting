@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings | E-commerce Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+    <style>
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #05744b; /* emerald-700 */
+            border-radius: 4px;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.95rem;
+        }
+        /* Ensure the main content shifts correctly when the sidebar is visible */
+        .content-shifted {
+            margin-left: 16rem; /* 64px for lg:ml-64 */
+        }
+
+        /* Responsive Chart Wrapper (Ensures chart is readable on mobile) */
+        .responsive-chart-wrapper {
+            position: relative;
+            height: 320px; /* Base height for mobile */
+        }
+        @media (min-width: 768px) { /* md breakpoint */
+            .responsive-chart-wrapper {
+                height: 384px; /* md:h-96 */
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex">
+
+    <aside id="sidebar" class="fixed top-0 left-0 h-full w-64 bg-emerald-900 text-white transform transition-transform duration-300 z-50 lg:translate-x-0 -translate-x-full shadow-2xl flex flex-col">
+        <div class="p-6 flex-shrink-0">
+            <img src="https://i.imgur.com/Fz9w1BA.png" alt="E-commerce Logo" class="h-10 w-auto mb-6 rounded-lg shadow-md border border-emerald-700">
+            <h1 class="text-xl font-extrabold text-emerald-400 border-t border-emerald-800 pt-4">Commerce Hub</h1>
+        </div>
+        
+          <nav class="space-y-2 px-4 flex-grow overflow-y-auto">
+            
+            <a href="admin-dashboard.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l-7-7-7 7m10 0v10a1 1 0 01-1 1h-3m-3 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-9 0h10"></path></svg>
+                Dashboard
+            </a>
+            <a href="userorders.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l-7-7-7 7m10 0v10a1 1 0 01-1 1h-3m-3 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-9 0h10"></path></svg>
+                    User Orders
+                </a>
+            <a href="wearscollection.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+                Wears Collection
+            </a>
+
+            <a href="capscollection.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out bg-emerald-600 hover:bg-emerald-700 active-link">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14v12a2 2 0 01-2 2H7a2 2 0 01-2-2V9z"></path></svg>
+                Caps Collection
+            </a>
+            
+            <a href="newarrivals.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg active-link-page">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                New Arrivals
+            </a>
+            <a href="preorders.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Pre-Order
+            </a>
+            <a href="membership.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l-7-7-7 7m10 0v10a1 1 0 01-1 1h-3m-3 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-9 0h10"></path></svg>
+                    Membership
+                </a>
+            <a href="settings.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.526.34.813.486 1.066-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                Settings
+            </a>
+        </nav>
+        
+        <div class="p-4 flex-shrink-0 border-t border-emerald-800">
+            <button id="btn-logout" onclick="logoutAdmin()" class="w-full flex items-center p-3 text-base font-medium rounded-lg shadow-md transition duration-150 ease-in-out bg-red-600 hover:bg-red-700 text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                Log Out
+            </button>
+        </div>
+    </aside>
+
+    <main id="main-content" class="flex-1 lg:ml-64 p-4 transition-all duration-300 overflow-x-hidden w-full">
+        
+        <button id="sidebar-toggle" class="lg:hidden fixed top-4 left-4 z-50 p-2 bg-emerald-600 text-white rounded-lg shadow-lg hover:bg-emerald-700 transition">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+        </button>
+
+        <section id="content-settings" class="content-section p-6 pt-12 lg:pt-6 w-full">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6">Application Settings & Admin Profile ⚙️</h2>
+            
+            <div class="bg-white p-6 rounded-xl shadow-lg mb-8 w-full">
+                <h3 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Platform Configuration</h3>
+                <p class="text-gray-700 text-sm">Manage core configurations and system parameters for the e-commerce platform.</p>
+                <div class="mt-6 space-y-4">
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <label for="maintenance-mode" class="text-gray-600 text-sm mb-2 sm:mb-0">Enable Maintenance Mode</label>
+                        <input type="checkbox" id="maintenance-mode" class="h-5 w-5 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500">
+                    </div>
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <label for="max-users" class="block text-gray-600 text-sm mb-2 sm:mb-0">Max Registered Users Limit</label>
+                        <input type="number" id="max-users" value="1000" class="w-full sm:w-24 border border-gray-300 rounded-md p-1 text-center text-sm focus:border-emerald-500 focus:ring-emerald-500">
+                    </div>
+                </div>
+                <button class="mt-6 w-full md:w-auto py-2 px-6 bg-emerald-600 text-white font-medium rounded-lg shadow-md hover:bg-emerald-700 transition duration-200">
+                    Save Global Settings
+                </button>
+            </div>
+            
+            <div class="bg-white p-6 rounded-xl shadow-lg mb-8 border-t-4 border-emerald-500 w-full">
+                <h3 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Website Visitor Trends 📈</h3>
+                
+                <div class="flex space-x-2 sm:space-x-4 mb-6">
+                    <button id="chart-daily" class="py-2 px-4 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition">Daily</button>
+                    <button id="chart-monthly" class="py-2 px-4 text-sm font-medium rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition">Monthly</button>
+                    <button id="chart-yearly" class="py-2 px-4 text-sm font-medium rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition">Yearly</button>
+                </div>
+
+                <div class="responsive-chart-wrapper">
+                    <canvas id="visitor-chart"></canvas>
+                    <div id="chart-nodata-message" class="absolute inset-0 flex items-center justify-center text-red-500 font-medium hidden">
+                        No data available or error loading data.
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-red-500 w-full">
+                <h3 class="text-xl font-semibold text-red-700 mb-4 border-b pb-2">Admin Password Management</h3>
+                <div id="password-status-message" class="hidden p-3 mb-4 rounded-lg text-sm transition duration-300" role="alert"></div>
+                
+                <form id="change-admin-password-form">
+                    <div class="space-y-4">
+                        <div>
+                            <label for="current-password" class="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+                            <div class="relative">
+                                <input type="password" id="current-password" name="currentPassword" required class="w-full border border-gray-300 rounded-lg p-3 pr-10 focus:ring-red-500 focus:border-red-500" placeholder="Enter your current password">
+                                <button type="button" data-target="current-password" class="view-password-toggle absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                    <svg class="w-5 h-5 toggle-icon-show" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                                    <svg class="w-5 h-5 toggle-icon-hide hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 1.052 0 2.062.203 3.013.585M12 7a5 5 0 015 5m-5 0a5 5 0 00-5 5m5-5l-1-1m-1 1l-1-1M13 12l1 1m-1-1l-1-1M5.922 6.182L17.82 17.82"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="new-password" class="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                            <div class="relative">
+                                <input type="password" id="new-password" name="newPassword" required class="w-full border border-gray-300 rounded-lg p-3 pr-10 focus:ring-red-500 focus:border-red-500" placeholder="Minimum 8 characters">
+                                <button type="button" data-target="new-password" class="view-password-toggle absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                    <svg class="w-5 h-5 toggle-icon-show" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                                    <svg class="w-5 h-5 toggle-icon-hide hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 1.052 0 2.062.203 3.013.585M12 7a5 5 0 015 5m-5 0a5 5 0 00-5 5m5-5l-1-1m-1 1l-1-1M13 12l1 1m-1-1l-1-1M5.922 6.182L17.82 17.82"></path></svg>
+                                </button>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">Must be at least 8 characters long.</p>
+                        </div>
+                        <div>
+                            <label for="confirm-new-password" class="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                            <div class="relative">
+                                <input type="password" id="confirm-new-password" required class="w-full border border-gray-300 rounded-lg p-3 pr-10 focus:ring-red-500 focus:border-red-500" placeholder="Re-enter new password">
+                                <button type="button" data-target="confirm-new-password" class="view-password-toggle absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                    <svg class="w-5 h-5 toggle-icon-show" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                                    <svg class="w-5 h-5 toggle-icon-hide hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 1.052 0 2.062.203 3.013.585M12 7a5 5 0 015 5m-5 0a5 5 0 00-5 5m5-5l-1-1m-1 1l-1-1M13 12l1 1m-1-1l-1-1M5.922 6.182L17.82 17.82"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" id="submit-password-btn" class="mt-6 w-full py-2 px-6 bg-red-600 text-white font-medium rounded-lg shadow-md hover:bg-red-700 transition duration-200">
+                        Change Password
+                    </button>
+                </form>
+            </div>
+
+        </section>
+
+    </main>
+
+    <script>
+    // --- JAVASCRIPT LOGIC (No changes needed, the original JS supports the UI/responsiveness logic) ---
+
+    const sidebar = document.getElementById('sidebar');
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    const mainContent = document.getElementById('main-content'); // New reference for content shift
+    const passwordForm = document.getElementById('change-admin-password-form');
+    const passwordStatusMessage = document.getElementById('password-status-message');
+
+    // Chart elements
+    const chartCanvas = document.getElementById('visitor-chart');
+    const dailyBtn = document.getElementById('chart-daily');
+    const monthlyBtn = document.getElementById('chart-monthly');
+    const yearlyBtn = document.getElementById('chart-yearly');
+    let visitorChart; // Variable to hold the Chart.js instance
+
+    // API_BASE_URL is not defined in the provided HTML, assuming it's relative or needs defining.
+    const API_BASE_URL = 'https://outflickz.com';
+
+    // --- UTILITY FUNCTIONS ---
+
+    function logoutAdmin() {
+        console.log("Logging out... Clearing admin token.");
+        localStorage.removeItem('adminToken');
+        window.location.href = './admin-login.html'; 
+    }
+
+    function showPasswordStatusMessage(message, isSuccess) {
+        passwordStatusMessage.textContent = message;
+        passwordStatusMessage.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
+        
+        if (isSuccess) {
+            passwordStatusMessage.classList.add('bg-green-100', 'text-green-700');
+        } else {
+            passwordStatusMessage.classList.add('bg-red-100', 'text-red-700');
+        }
+    }
+
+    // --- API DATA FETCHING LOGIC (No changes needed) ---
+
+    async function fetchVisitorData(period) {
+        const token = localStorage.getItem('adminToken');
+        if (!token) {
+            console.error("Authentication token missing for chart data.");
+            showPasswordStatusMessage('Session expired. Please log in again.', false);
+            setTimeout(logoutAdmin, 2000);
+            return { labels: [], data: [] };
+        }
+        
+        // Construct the endpoint based on the period
+        // NOTE: Backend needs to support /api/analytics/visitors/daily, /monthly, /yearly
+        const endpoint = `${API_BASE_URL}/api/analytics/visitors/${period}`; 
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: 'Unknown API error' }));
+                console.error(`Error fetching ${period} visitor data:`, errorData.message);
+                
+                if (response.status === 401 || response.status === 403) {
+                     showPasswordStatusMessage('Session expired. Please log in again.', false);
+                     setTimeout(logoutAdmin, 2000);
+                }
+                
+                return { labels: [], data: [] }; 
+            }
+
+            const data = await response.json();
+            
+            // Assuming the API response structure is { labels: [...], data: [...] }
+            return data; 
+
+        } catch (error) {
+            console.error('Network error fetching visitor data:', error);
+            return { labels: [], data: [] };
+        }
+    }
+
+
+    // --- CHART LOGIC (No changes needed) ---
+
+    async function renderVisitorChart(period) {
+        const ctx = chartCanvas.getContext('2d');
+
+        // 1. Destroy existing chart instance to clear the canvas/old chart
+        if (visitorChart) {
+            visitorChart.destroy();
+            visitorChart = null;
+        }
+
+        // Optional: Display a temporary "Loading..." message
+        ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+        ctx.font = '16px Inter, sans-serif';
+        ctx.fillStyle = '#6b7280'; // gray-500
+        ctx.textAlign = 'center';
+        ctx.fillText('Loading visitor data...', chartCanvas.width / 2, chartCanvas.height / 2);
+
+
+        // 2. Fetch data from API
+        const dataSet = await fetchVisitorData(period); 
+        
+        // 3. Check data validity and handle errors
+        if (!dataSet || !dataSet.data || dataSet.data.length === 0) {
+            // Clear loading text and display error/no data message
+            ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+            ctx.fillStyle = '#ef4444'; // red-500
+            ctx.fillText('No data available or error loading data.', chartCanvas.width / 2, chartCanvas.height / 2);
+            return;
+        }
+
+        // 4. Render the new chart instance
+        visitorChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: dataSet.labels, // Use fetched labels
+                datasets: [{
+                    label: `Total Visitors (${period.charAt(0).toUpperCase() + period.slice(1)})`,
+                    data: dataSet.data, // Use fetched data
+                    borderColor: '#059669', // emerald-600
+                    backgroundColor: 'rgba(5, 150, 105, 0.1)', // Light emerald fill
+                    tension: 0.4, // Smooth curve
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false, // Must be false for the chart wrapper height to take effect
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                    },
+                    tooltip: {
+                         callbacks: {
+                             label: function(context) {
+                                 let label = context.dataset.label || '';
+                                 if (label) {
+                                     label += ': ';
+                                 }
+                                 if (context.parsed.y !== null) {
+                                     label += new Intl.NumberFormat('en-US').format(context.parsed.y);
+                                 }
+                                 return label;
+                             }
+                         }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Visitors'
+                        },
+                        ticks: {
+                            callback: function(value, index, ticks) {
+                                return new Intl.NumberFormat('en-US').format(value);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+     * Updates the UI to highlight the active chart button.
+     * @param {HTMLElement} activeElement 
+     */
+    function setActiveButton(activeElement) {
+        const buttons = [dailyBtn, monthlyBtn, yearlyBtn];
+        buttons.forEach(btn => {
+            btn.classList.remove('bg-emerald-600', 'text-white', 'hover:bg-emerald-700');
+            btn.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+        });
+        activeElement.classList.remove('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+        activeElement.classList.add('bg-emerald-600', 'text-white', 'hover:bg-emerald-700');
+    }
+
+
+    // --- PASSWORD CHANGE LOGIC (No changes needed) ---
+
+    async function submitChangeAdminPassword(event) {
+        event.preventDefault();
+        const button = document.getElementById('submit-password-btn');
+        const originalText = button.textContent;
+        passwordStatusMessage.classList.add('hidden'); 
+
+        const currentPassword = document.getElementById('current-password').value;
+        const newPassword = document.getElementById('new-password').value;
+        const confirmPassword = document.getElementById('confirm-new-password').value;
+        const token = localStorage.getItem('adminToken');
+
+        if (!token) {
+            showPasswordStatusMessage('Authentication token missing. Please log in.', false);
+            setTimeout(logoutAdmin, 1500);
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            showPasswordStatusMessage('New password and confirmation do not match.', false);
+            return;
+        }
+
+        if (newPassword.length < 8) {
+             showPasswordStatusMessage('New password must be at least 8 characters long.', false);
+             return;
+        }
+
+        // Set loading state
+        button.disabled = true;
+        button.textContent = 'Updating...';
+
+        const passwordData = {
+            currentPassword: currentPassword,
+            newPassword: newPassword
+        };
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/admin/change-password`, {
+                method: 'PUT',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}` 
+                },
+                body: JSON.stringify(passwordData)
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                const errorMessage = data.message || 'Failed to change password.';
+                showPasswordStatusMessage(errorMessage, false);
+                console.error('Password Change Error:', errorMessage);
+                if (response.status === 401 || response.status === 403) {
+                     setTimeout(logoutAdmin, 2000); 
+                }
+                throw new Error(errorMessage);
+            }
+
+            // SUCCESS
+            showPasswordStatusMessage('Password updated successfully! You will be logged out to re-authenticate.', true);
+            
+            setTimeout(logoutAdmin, 3000); 
+
+        } catch (error) {
+            console.error('Password Change Error:', error);
+            if (error.message && error.message.includes('Failed to fetch')) {
+                showPasswordStatusMessage('Network error: Could not reach the server.', false);
+            }
+        } finally {
+            if (!document.getElementById('password-status-message').textContent.includes('logged out')) {
+                 button.disabled = false;
+                 button.textContent = originalText;
+            }
+        }
+    }
+
+
+    // --- INITIALIZATION AND UI LOGIC ---
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Check for admin token on load, redirect if missing
+        if (!localStorage.getItem('adminToken')) {
+            console.log("No token found, redirecting to admin login.");
+            window.location.href = './admin-login.html';
+            return;
+        }
+        
+        // Initialize the visitor chart to 'Daily' when the page loads
+        renderVisitorChart('daily');
+        setActiveButton(dailyBtn);
+
+        // Event listeners for Chart Buttons
+        dailyBtn.addEventListener('click', () => {
+            renderVisitorChart('daily');
+            setActiveButton(dailyBtn);
+        });
+
+        monthlyBtn.addEventListener('click', () => {
+            renderVisitorChart('monthly');
+            setActiveButton(monthlyBtn);
+        });
+
+        yearlyBtn.addEventListener('click', () => {
+            renderVisitorChart('yearly');
+            setActiveButton(yearlyBtn);
+        });
+
+
+        // Sidebar toggle logic
+        sidebarToggle.addEventListener('click', (event) => {
+            event.stopPropagation();
+            sidebar.classList.toggle('-translate-x-full');
+            // Optional: Toggle overlay class for mobile when sidebar is open
+        });
+
+        // Event listener for closing sidebar on main content click (mobile)
+        document.querySelector('main').addEventListener('click', (event) => {
+             if (!sidebar.classList.contains('-translate-x-full') && window.innerWidth < 1024) {
+                 sidebar.classList.add('-translate-x-full');
+             }
+        });
+        
+        // Prevent click inside sidebar from closing it (on mobile)
+        sidebar.addEventListener('click', (event) => {
+            event.stopPropagation();
+        });
+
+        // **NEW** Password visibility toggle logic
+        document.querySelectorAll('.view-password-toggle').forEach(button => {
+            button.addEventListener('click', () => {
+                const targetId = button.getAttribute('data-target');
+                const targetInput = document.getElementById(targetId);
+                const showIcon = button.querySelector('.toggle-icon-show');
+                const hideIcon = button.querySelector('.toggle-icon-hide');
+
+                if (targetInput.type === 'password') {
+                    targetInput.type = 'text';
+                    showIcon.classList.add('hidden');
+                    hideIcon.classList.remove('hidden');
+                } else {
+                    targetInput.type = 'password';
+                    showIcon.classList.remove('hidden');
+                    hideIcon.classList.add('hidden');
+                }
+            });
+        });
+
+        // Attach password form submission handler
+        passwordForm.addEventListener('submit', submitChangeAdminPassword);
+    });
+
+    </script>
+</body>
+</html>

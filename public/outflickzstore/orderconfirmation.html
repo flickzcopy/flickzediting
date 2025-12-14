@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Confirmation | Outflickz</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet">
+    <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        // Define custom colors for consistent branding
+                        'ash-red': '#EF4444', 
+                        'ash-dark': '#1F2937', 
+                        'color-white': '#FFFFFF',
+                        'color-black': '#111827',
+                        'primary-indigo': '#4F46E5', // Used for main CTA/links
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Ensures smooth animation for mobile menu */
+        .mobile-menu-transition {
+            transition: all 0.3s ease-in-out;
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+        }
+        .mobile-menu-open {
+            max-height: 500px; /* Large enough to cover content */
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen font-sans antialiased">
+
+    <header class="bg-color-white sticky top-0 z-50 shadow-md border-b border-gray-100">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
+            <a href="homepage.html" class="flex items-center" aria-label="Outflickz Home">
+                <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-7 sm:h-9 rounded-full">
+            </a>
+
+            <nav class="hidden md:flex flex-grow justify-center space-x-6 lg:space-x-10 text-sm" aria-label="Main Navigation">
+                <a href="homepage.html" class="font-medium text-color-black hover:text-gray-600 transition">Homepage</a>
+                <a href="wearscollection.html" class="font-bold text-ash-red transition flex items-center border-b-2 border-ash-red">Wears Collections</a>
+                <a href="newarrivals.html" class="font-medium text-color-black hover:text-gray-600 transition">New Arrivals</a>
+                <a href="capcollection.html" class="font-medium text-color-black hover:text-gray-600 transition flex items-center">Cap Collections</a>
+                <a href="preorder.html" class="font-medium text-color-black hover:text-gray-600 transition">Pre Order</a>
+            </nav>
+
+
+            <div class="flex items-center space-x-2 sm:space-x-4">
+                <button id="profile-icon" 
+                class="p-1 sm:p-2 text-gray-700 hover:text-ash-dark transition rounded-full hidden md:block" 
+                aria-label="User Account"
+                onclick="redirectToProfileOrLogin()">
+                    <i class="fas fa-user w-4 h-4 sm:w-5 sm:h-5"></i>
+                </button>
+                <a href="cart.html" class="relative p-1 sm:p-2 text-gray-700 hover:text-ash-dark transition rounded-full" aria-label="Shopping Bag">
+                    <i class="fas fa-shopping-bag w-4 h-4 sm:w-5 sm:h-5"></i>
+                    <span id="cart-badge" class="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-ash-red rounded-full hidden">
+                        0
+                    </span>
+                </a>
+                <button class="md:hidden p-1 sm:p-2 text-gray-700 hover:text-ash-dark transition rounded-full" onclick="toggleMenu()" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open main menu">
+                    <i id="mobile-menu-icon" class="fas fa-bars w-5 h-5 sm:w-6 sm:h-6"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+ <div id="mobile-menu" class="hidden md:hidden bg-color-white border-b border-gray-100 absolute w-full z-40 shadow-lg">
+    <div class="px-2 pt-2 pb-3 space-y-1 text-sm">
+        <a href="homepage.html" class="block px-3 py-2 font-bold text-ash-red bg-gray-100 rounded-md">Homepage</a>
+        <a href="wearscollection.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">Wears Collection</a>
+        <a href="newarrivals.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">New Arrivals</a>
+        <a href="capcollection.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">Cap Collection</a>
+        <a href="preorder.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">Pre Order</a>
+
+        <button 
+            id="mobile-profile-login-button" 
+            class="w-full flex items-center px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md text-left"
+            aria-label="User Account or Login"
+            onclick="redirectToProfileOrLogin()">
+            <i class="fas fa-user w-4 h-4 mr-3"></i>
+            Account / Login
+        </button>
+    </div>
+</div>
+
+
+    <main class="max-w-4xl mx-auto py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
+        <div id="confirmation-card" class="bg-white shadow-2xl rounded-xl p-6 sm:p-10 text-center border-t-4 border-primary-indigo transition duration-300">
+            
+            <i id="confirmation-icon" class="fas fa-check-circle text-5xl sm:text-6xl text-green-500 mb-6 animate-pulse"></i>
+            
+            <h2 class="text-2xl sm:text-4xl font-extrabold text-gray-900 mb-3">
+                <span id="confirmation-title">Thank You for Your Order!</span>
+            </h2>
+            <p id="confirmation-message" class="text-base sm:text-lg text-gray-600 mb-8 max-w-xl mx-auto">
+                Your order has been successfully placed and is now being processed. A detailed confirmation email has been sent.
+            </p>
+
+            <div id="order-details-container" class="border border-indigo-200 rounded-xl p-4 sm:p-6 bg-indigo-50/50">
+                <div class="flex flex-col sm:flex-row justify-center items-center mb-2">
+                    <p class="text-sm sm:text-lg font-semibold text-gray-700 mb-1 sm:mb-0">Order Confirmation Number:</p>
+                    <p id="order-ref-number" class="ml-0 sm:ml-4 text-xl sm:text-3xl font-extrabold text-primary-indigo tracking-wider">#LOADING...</p>
+                </div>
+                <p id="payment-method-message" class="text-sm text-gray-500 mt-2"></p>
+                <p id="bank-transfer-details" class="text-sm text-green-semibold mt-4 hidden text-left p-3 bg-red-50 rounded-lg border border-red-200">
+                    <i class="fas fa-exclamation-triangle mr-2"></i> Your Order will be confirm shortly. You wil receive email notification once payment is confirmed.
+                </p>
+            </div>
+            
+            <div id="order-items-section" class="mt-8 text-left">
+                <h3 class="text-xl font-bold text-gray-800 mb-4 border-b pb-2">Order Summary</h3>
+                <div id="order-items-list" class="space-y-4">
+                    <div class="text-center py-6 text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i> Loading order details...</div>
+                </div>
+
+                <div id="price-summary" class="mt-8 pt-4 border-t-2 border-gray-100 text-right space-y-2">
+                    </div>
+            </div>
+
+            <div class="mt-10 flex flex-col sm:flex-row justify-center items-center space-y-3 sm:space-y-0 sm:space-x-4">
+                <a href="homepage.html" class="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-lg shadow-md text-white bg-primary-indigo hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150">
+                    <i class="fas fa-home mr-2"></i>
+                    Continue Shopping
+                </a>
+                <a id="view-orders-btn" href="userprofile.html" class="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3 border border-gray-300 text-base font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition duration-150">
+                    <i class="fas fa-list-alt mr-2"></i>
+                    View Order History
+                </a>
+            </div>
+        </div>
+    </main>
+    
+    <div id="cart-alert" class="hidden fixed top-16 left-1/2 transform -translate-x-1/2 mt-4 bg-green-500 text-white text-sm px-4 py-2 rounded-lg shadow-xl z-50 transition-all duration-500 opacity-0 -translate-y-10">
+        Item(s) added to cart!
+    </div>
+
+    <footer class="bg-black text-gray-300 py-6 sm:py-14 border-t border-gray-800 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-8">
+                
+                <div class="col-span-2 lg:col-span-1">
+                    <a href="homepage.html" class="flex items-center mb-3 sm:mb-4"> 
+                        <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-8 filter grayscale invert">
+                    </a>
+                    <p class="text-xs sm:text-sm text-gray-500"> 
+                        The home of exclusive street wear and limited edition drops. Elevate your style.
+                    </p>
+                    <div class="flex space-x-4 mt-4 text-gray-400">
+                        <a href="https://www.instagram.com/outflickz01?igsh=Yzl3d3BjaGt5djll" aria-label="Instagram" class="hover:text-ash-red transition"><i class="fab fa-instagram"></i></a>
+                        <a href="https://www.tiktok.com/@outflickz?_r=1&_t=ZS-92AInaYzuTt" aria-label="TikTok" class="hover:text-ash-red transition"><i class="fab fa-tiktok"></i></a>
+                        <a href="https://www.facebook.com/profile.php?id=61584421929170" aria-label="Facebook" class="hover:text-ash-red transition"><i class="fab fa-facebook-f"></i></a>
+                    </div>
+                </div>
+
+                <div class="col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Quick Links</h3> 
+                    <ul class="space-y-1.5 sm:space-y-2 text-xs sm:text-sm"> 
+                        <li><a href="wearscollection.html" class="text-gray-400 hover:text-ash-red transition">Wears</a></li>
+                        <li><a href="newarrivals.html" class="text-gray-400 hover:text-ash-red transition">New Arrivals</a></li>
+                        <li><a href="capcollection.html" class="text-gray-400 hover:text-ash-red transition">Caps</a></li>
+                        <li><a href="preorder.html" class="text-gray-400 hover:text-ash-red transition">Pre-Order</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Customer Care</h3> 
+                    <ul class="space-y-1.5 sm:space-y-2 text-xs sm:text-sm"> 
+                        <li><a href="contact.html" class="text-gray-400 hover:text-ash-red transition">Contact Us</a></li>
+                        <li><a href="shipping_returns.html" class="text-gray-400 hover:text-ash-red transition">Shipping & Returns</a></li>
+                        <li><a href="faq.html" class="text-gray-400 hover:text-ash-red transition">FAQ</a></li>
+                        <li><a href="size_guide.html" class="text-gray-400 hover:text-ash-red transition">Size Guide</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-span-2 md:col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Get In Touch</h3> 
+                    <address class="text-xs sm:text-sm not-italic space-y-2"> 
+                        <p class="text-gray-400">
+                            <i class="fas fa-map-marker-alt mr-2 text-ash-red"></i> Lagos , Nigeria
+                        </p>
+                        <p class="text-gray-400">
+                            <i class="fas fa-envelope mr-2 text-ash-red"></i> outflickzlimited@gmail.com 
+                        </p>
+                        <p class="text-gray-400">
+                            <i class="fas fa-phone mr-2 text-ash-red"></i> +234 7042882706
+                        </p>
+                    </address>
+                </div>
+                
+            </div>
+
+            <div class="border-t border-gray-800 mt-6 sm:mt-10 pt-4 sm:pt-6"> 
+                <p class="text-center text-xs text-gray-500">
+                    &copy; 2025 Outflickz. All rights reserved. | <a href="#" class="hover:text-ash-red">Privacy Policy</a> | <a href="#" class="hover:text-ash-red">Terms of Use</a>
+                </p>
+            </div>
+        </div>
+    </footer>
+    
+    <a href="https://t.me/+2347042882706" 
+        target="_blank"
+        class="fixed bottom-6 right-24 z-50 
+               bg-[#24A1DE] text-white 
+               p-3 rounded-full 
+               shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 
+               flex items-center justify-center w-14 h-14" 
+        aria-label="Chat with us on Telegram">
+        
+        <i class="fab fa-telegram-plane fa-2x"></i>
+    </a>
+    
+    <a href="https://wa.me/2347042882706?text=HELLO%20OUTFLICKZ!%20My%20name%20is%20..."
+        target="_blank"
+        class="fixed bottom-6 right-6 z-50 
+               bg-[#25D366] text-white 
+               p-3 rounded-full 
+               shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 
+               flex items-center justify-center w-14 h-14" 
+        aria-label="Chat with us on WhatsApp">
+        
+        <i class="fab fa-whatsapp fa-2x"></i>
+    </a>
+    
+<script>
+// Global constants
+const LOCAL_TAX_RATE = 0.00; 
+const LOCAL_CART_KEY = 'outflickzLocalCart'; 
+const CART_STORAGE_KEY = 'outflickzCartCount';
+const CURRENCY_SYMBOL = '₦'; 
+    const API_BASE_URL = 'https://outflickz.com';
+
+// =================================================================
+// 🚀 AUTHENTICATION & UTILITY FUNCTIONS
+// =================================================================
+
+/**
+ * Retrieves the user's JWT token from local storage (used for specific data APIs like orders).
+ * @returns {string | null} The JWT token or null if not found.
+ */
+function getAuthToken() {
+    const token = localStorage.getItem('outflickzAuthToken');
+    console.log(`[Auth] Retrieved token: ${token ? 'Present (***' + token.substring(token.length - 4) + ')' : 'Missing'}`);
+    return token ? token.trim() : null; 
+}
+
+/**
+ * Checks the user's authentication status via the API (/api/auth/status) 
+ * which relies on the HTTP-only cookie for proof of session.
+ * @returns {boolean} True if the API returns 200, false otherwise.
+ */
+async function isUserLoggedIn() {
+    try {
+        console.log('[Auth] Checking login status via /api/auth/status (Cookie check)...');
+        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
+            method: 'GET'
+        });
+        const status = response.status === 200;
+        console.log(`[Auth] Status check complete. Response status: ${response.status}. Logged in: ${status}`);
+        return status;
+    } catch (error) {
+        // Treat network errors as logged out
+        console.error('[Auth] isUserLoggedIn check failed:', error);
+        return false;
+    }
+}
+
+/**
+ * Checks the user's authentication status and redirects to the appropriate page.
+ * Uses the new HTTP-only cookie check.
+ */
+async function redirectToProfileOrLogin() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
+            method: 'GET'
+        });
+
+        if (response.status === 200) {
+            console.log('[Redirect] User is logged in (Cookie valid). Redirecting to userprofile.html.');
+            // Server confirms user is authenticated (Cookie is valid)
+            window.location.href = 'userprofile.html'; 
+        } else {
+            console.log('[Redirect] User is NOT logged in (Cookie invalid/missing). Redirecting to useraccount.html.');
+            // Server returned 401/403 (Cookie is missing or expired)
+            window.location.href = 'useraccount.html';
+        }
+
+    } catch (error) {
+        // Handle network errors
+        console.error('[Redirect] Authentication status check failed:', error);
+        window.location.href = 'useraccount.html';
+    }
+}
+
+
+/**
+ * Updates the visual cart badge count in the header.
+ */
+function updateCartBadge() {
+    const count = parseInt(localStorage.getItem(CART_STORAGE_KEY) || '0', 10);
+    const badgeEl = document.getElementById('cart-badge');
+    if (badgeEl) {
+        badgeEl.textContent = count;
+        if (count > 0) {
+            badgeEl.classList.remove('hidden');
+        } else {
+            badgeEl.classList.add('hidden');
+        }
+    }
+    console.log(`[Cart] Cart badge updated with count: ${count}`);
+}
+
+
+/**
+ * Toggles the mobile menu open/closed state using CSS transitions.
+ */
+function toggleMenu() {
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIcon = document.getElementById('mobile-menu-icon');
+    const isExpanded = mobileMenu.classList.contains('mobile-menu-open');
+    
+    if (isExpanded) {
+        console.log('[UI] Closing mobile menu.');
+        // Closing: Start transition by removing open class
+        mobileMenu.classList.remove('mobile-menu-open');
+        // Add 'hidden' only after the transition completes (300ms)
+        setTimeout(() => {
+            // Note: 'hidden' class should ONLY be added here to avoid breaking the transition on close
+            mobileMenu.classList.add('hidden'); 
+        }, 300); 
+        
+        menuIcon.classList.replace('fa-times', 'fa-bars');
+        document.querySelector('button[aria-controls="mobile-menu"]').setAttribute('aria-expanded', 'false');
+    } else {
+        console.log('[UI] Opening mobile menu.');
+        // Opening: Remove hidden immediately, then force reflow and add open class
+        // NOTE: The 'hidden' class was removed from the HTML for better CSS transition control
+        mobileMenu.classList.remove('hidden');
+        void mobileMenu.offsetWidth; 
+        mobileMenu.classList.add('mobile-menu-open');
+        menuIcon.classList.replace('fa-bars', 'fa-times');
+        document.querySelector('button[aria-controls="mobile-menu"]').setAttribute('aria-expanded', 'true');
+    }
+}
+
+/**
+ * Updates the profile icon's appearance and Aria label based on login status.
+ */
+async function updateProfileIconStatus() {
+    console.log('[UI] Updating profile icon status...');
+    // Check status using the primary cookie method
+    const isLoggedIn = await isUserLoggedIn(); 
+    const profileIconBtn = document.getElementById('profile-icon');
+    
+    if (profileIconBtn) {
+        profileIconBtn.classList.remove('hidden'); // Ensure the button is visible on desktop
+        if (isLoggedIn) {
+            // User is logged in
+            console.log('[UI] Profile icon set to LOGGED IN state.');
+            profileIconBtn.setAttribute('aria-label', 'User Account');
+            profileIconBtn.classList.add('text-primary-indigo', 'border-primary-indigo', 'border');
+            profileIconBtn.classList.remove('text-gray-700', 'border-transparent');
+        } else {
+            // User is logged out
+            console.log('[UI] Profile icon set to LOGGED OUT state.');
+            profileIconBtn.setAttribute('aria-label', 'Login or Register');
+            profileIconBtn.classList.add('text-gray-700');
+            profileIconBtn.classList.remove('text-primary-indigo', 'border-primary-indigo', 'border');
+        }
+    }
+}
+    
+/**
+ * Fetches the full order details (items, final amount) from the server.
+ * @param {string} orderId - The MongoDB _id or reference of the order.
+ */
+async function fetchOrderCollection(orderId) {
+    console.log(`[OrderFetch] Starting fetch for Order ID: ${orderId}`);
+    const itemsListEl = document.getElementById('order-items-list');
+    const priceSummaryEl = document.getElementById('price-summary');
+    
+    // Get the Local Storage JWT token
+    const token = getAuthToken();
+    
+    // Helper function to render login prompt (omitted for brevity)
+    const renderLoginPrompt = (isExpired = false) => {
+        // ... (function body remains the same)
+         // Construct the full URL for redirection
+        const currentUrl = window.location.pathname + window.location.search;
+        const redirectUrl = `useraccount.html?redirect=${encodeURIComponent(currentUrl)}`;
+        const message = isExpired 
+            ? 'Your session has expired or you do not have permission.' 
+            : 'You must be logged in to view detailed order history.';
+        
+        return `<div class="text-center py-4 text-red-500">
+            <i class="fas fa-exclamation-triangle mr-2"></i> ${message} 
+            <a href="${redirectUrl}" class="font-semibold underline text-primary-indigo hover:text-indigo-800">Click here to log in.</a>
+        </div>`;
+    };
+
+    // 🆕 FIX: Use the reliable cookie check first to prevent login prompt when session is active.
+    const isLoggedIn = await isUserLoggedIn();
+
+    if (!isLoggedIn) {
+        console.warn('[OrderFetch] User is NOT logged in (Cookie invalid). Displaying login prompt.');
+        // If the cookie session is NOT valid (server says logged out), show the login prompt.
+        itemsListEl.innerHTML = renderLoginPrompt(false);
+        priceSummaryEl.innerHTML = '';
+        return;
+    }
+
+    if (isLoggedIn && !token) {
+        console.error('[OrderFetch] 🛑 Session Mismatch Detected: Cookie is valid, but JWT token is missing.');
+        // If the cookie is valid but the JWT (needed for the order API call) is missing, 
+        // display a specific error and guide the user to re-authenticate.
+        itemsListEl.innerHTML = `<div class="text-center py-4 text-orange-500">
+            <i class="fas fa-exclamation-circle mr-2"></i> **Session Mismatch:** Your login status is confirmed, but the token required to fetch order data is missing. Please **log out and log back in** to resolve this.
+        </div>`;
+        priceSummaryEl.innerHTML = '';
+        // We stop here because the API call (which requires the JWT token) will fail anyway.
+        return;
+    }
+    
+    // Log the successful pre-check before the API call
+    console.log('[OrderFetch] Pre-check passed: Logged in (Cookie valid) and JWT token present. Proceeding to API call.');
+
+    try {
+        // We proceed because isLoggedIn is true AND token is present.
+        // CALLING BACKEND ENDPOINT: GET /api/orders/:orderId
+        const fetchUrl = `${API_BASE_URL}/api/orders/${orderId}`;
+        console.log(`[OrderFetch] Calling API: ${fetchUrl}`);
+        
+        const response = await fetch(fetchUrl, {
+            method: 'GET',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`, // Pass the JWT token
+            },
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Server error' }));
+            
+            // 🛑 SECONDARY CHECK: If the JWT token is invalid or expired
+            if (response.status === 401 || response.status === 403) {
+                console.error(`[OrderFetch] API call failed with status ${response.status}: JWT Token expired/invalid. Clearing token.`);
+                 // Clear the invalid JWT token immediately
+                 localStorage.removeItem('outflickzAuthToken');
+                 // Also ensure the header icon updates based on cookie status if it was relying on the JWT
+                 updateProfileIconStatus(); 
+                 
+                 itemsListEl.innerHTML = renderLoginPrompt(true);
+                 priceSummaryEl.innerHTML = '';
+                 return;
+            }
+
+            // Other errors (e.g., 404 order not found)
+            console.error(`[OrderFetch] Other API error (Status: ${response.status}):`, errorData.message);
+            throw new Error(errorData.message || `Failed to retrieve order details (Status: ${response.status}).`);
+        }
+
+        // The backend endpoint GET /api/orders/:orderId returns the populated order object
+        const orderDetails = await response.json(); 
+        console.log('[OrderFetch] Order details successfully retrieved:', orderDetails);
+        
+        if (!orderDetails.items || orderDetails.items.length === 0) {
+            console.warn('[OrderFetch] Order contains no items.');
+            itemsListEl.innerHTML = `<div class="text-center py-4 text-gray-500">No items found for this order.</div>`;
+            return;
+        }
+
+        // Price calculations (amounts are already fetched from the backend, use them)
+        const subtotal = orderDetails.subtotal || 0.00;
+        const shippingFee = orderDetails.shippingFee || 0.00;
+        const tax = orderDetails.tax || 0.00; 
+        const total = orderDetails.totalAmount || (subtotal + shippingFee + tax); 
+        console.log(`[OrderFetch] Calculated Total: ${CURRENCY_SYMBOL}${total.toFixed(2)}`);
+
+        // Helper function to format currency for display
+        const formatNaira = (amount) => amount.toLocaleString(undefined, { minimumFractionDigits: 2 });
+
+
+        // 1. Render Collection Details
+        itemsListEl.innerHTML = `
+            ${orderDetails.items.map(item => `
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3 border-b border-gray-100 last:border-b-0 transition duration-150 hover:bg-gray-50 rounded-md px-2">
+                    <div class="flex items-start flex-grow">
+                        <img src="${item.imageUrl || 'https://placehold.co/60x60/f8f8f8/999999?text=NO+IMG'}" alt="${item.name}" class="w-16 h-16 rounded-lg border mr-4 object-cover">
+                        <div class="text-sm">
+                            <p class="font-bold text-gray-900">${item.name}</p>
+                            <p class="text-xs text-gray-500 mt-1">
+                                <span class="font-medium">Size:</span> ${item.size} <span class="mx-1 text-gray-300">|</span> 
+                                <span class="font-medium">Color:</span> ${item.color || 'N/A'}
+                            </p>
+                            <p class="text-xs text-gray-500"><span class="font-medium">Qty:</span> ${item.quantity}</p>
+                            
+                        </div>
+                    </div>
+                    <div class="mt-2 sm:mt-0 text-right sm:pl-4 w-full sm:w-auto">
+                        <span class="text-sm font-bold text-gray-900">${CURRENCY_SYMBOL}${formatNaira(item.priceAtTimeOfPurchase * item.quantity)}</span>
+                        <p class="text-xs text-gray-400">@ ${CURRENCY_SYMBOL}${formatNaira(item.priceAtTimeOfPurchase)} each</p>
+                    </div>
+                </div>
+            `).join('')}
+        `;
+
+        // 2. Render Price Summary
+        priceSummaryEl.innerHTML = `
+            <p class="text-sm text-gray-700">Subtotal: <span class="font-semibold">${CURRENCY_SYMBOL}${formatNaira(subtotal)}</span></p>
+            <p class="text-sm text-gray-700">Shipping: <span class="font-semibold">${CURRENCY_SYMBOL}${formatNaira(shippingFee)}</span></p>
+            <p class="text-sm text-gray-700">Tax (${(LOCAL_TAX_RATE * 100).toFixed(0)}%): <span class="font-semibold">${CURRENCY_SYMBOL}${formatNaira(tax)}</span></p>
+            <p class="text-xl font-extrabold text-primary-indigo border-t pt-2 mt-4">Order Total: ${CURRENCY_SYMBOL}${formatNaira(total)}</p>
+        `;
+
+        // Log confirmation of email send
+        console.log(`[OrderFetch] Order details loaded successfully.`);
+
+    } catch (error) {
+        console.error('[OrderFetch] General Error during order fetch:', error);
+        itemsListEl.innerHTML = `<div class="text-center py-4 text-red-500"><i class="fas fa-exclamation-triangle mr-2"></i> Failed to load order items. Please verify your internet connection or login status.</div>`;
+        priceSummaryEl.innerHTML = '';
+    }
+}
+
+/**
+ * Parses the URL parameters and displays the appropriate confirmation message.
+ * Also handles clearing the local cart and badge count upon successful order creation.
+ */
+function displayConfirmationDetails() {
+    console.log('[Confirmation] Starting displayConfirmationDetails.');
+    const urlParams = new URLSearchParams(window.location.search);
+    const orderId = urlParams.get('id') || urlParams.get('ref'); 
+    const method = urlParams.get('method');
+    
+    console.log(`[Confirmation] URL Params - ID/Ref: ${orderId}, Method: ${method}`);
+
+    const orderRefEl = document.getElementById('order-ref-number');
+    const confTitleEl = document.getElementById('confirmation-title');
+    const confMsgEl = document.getElementById('confirmation-message');
+    const confIconEl = document.getElementById('confirmation-icon');
+    const payMethodMsgEl = document.getElementById('payment-method-message');
+    const bankDetailsEl = document.getElementById('bank-transfer-details');
+
+    if (!orderId || !method) {
+        console.error('[Confirmation] Missing order ID or payment method in URL.');
+        orderRefEl.textContent = 'N/A';
+        // Assuming 'ash-red' is defined in your Tailwind config
+        confIconEl.classList.remove('fa-check-circle', 'text-green-500', 'animate-pulse');
+        confIconEl.classList.add('fa-exclamation-circle', 'text-ash-red');
+        confTitleEl.textContent = 'Confirmation Error';
+        confMsgEl.textContent = 'Order details were not provided in the link. Please check your email or contact support.';
+        return;
+    }
+
+
+    if (method === 'paystack') {
+        console.log('[Confirmation] Processing successful Paystack payment.');
+        // Successful Paystack/Card Payment
+        
+        // --- 🎯 CRITICAL CART CLEARING FIXES APPLIED HERE ---
+        
+        // 1. Remove temp checkout data (Shipping/Total)
+        localStorage.removeItem('outflickzShippingData'); 
+        localStorage.removeItem('outflickzOrderTotal');
+        
+        // 2. Remove the actual cart item array (LOCAL_CART_KEY)
+        localStorage.removeItem(LOCAL_CART_KEY); 
+        
+        // 3. Clear the count storage key to zero
+        localStorage.setItem(CART_STORAGE_KEY, '0');
+        
+        console.log('[Confirmation] Cleared shipping/total data, local cart array, and reset cart count.');
+
+        // Update UI elements for successful payment
+        orderRefEl.textContent = `#${orderId}`;
+        payMethodMsgEl.textContent = `Payment was completed successfully via Paystack (Card). Your order will be shipped soon!`;
+
+    } else if (method === 'banktransfer') {
+        console.log('[Confirmation] Processing pending Bank Transfer order.');
+        // Pending Bank Transfer Order
+        
+        // --- 🎯 CRITICAL CART CLEARING FIXES APPLIED HERE ---
+        
+        // 1. Remove the actual cart item array (LOCAL_CART_KEY)
+        // Cart must be cleared as the items are now confirmed as an order on the server.
+        localStorage.removeItem(LOCAL_CART_KEY); 
+        
+        // 2. Clear the count storage key to zero
+        localStorage.setItem(CART_STORAGE_KEY, '0');
+        
+        console.log('[Confirmation] Order created via Bank Transfer. Local cart cleared.');
+
+        // Update UI elements for pending bank transfer
+        orderRefEl.textContent = `#${orderId}`;
+        confIconEl.classList.remove('fa-check-circle', 'text-green-500', 'animate-pulse');
+        confIconEl.classList.add('fa-clock', 'text-yellow-600');
+        confTitleEl.textContent = 'Order Created (Payment Pending)';
+        confMsgEl.textContent = 'Thank you for your order! We are now waiting for your bank transfer confirmation. You will receive an email once payment is verified.';
+        payMethodMsgEl.textContent = `You selected **Bank Transfer**. Please transfer the total amount using the order number above as reference.`;
+        
+        // Display bank transfer instructions
+        if (bankDetailsEl) {
+            bankDetailsEl.classList.remove('hidden');
+            console.log('[Confirmation] Displaying bank transfer instructions.');
+        }
+
+    } else {
+        console.warn(`[Confirmation] Unknown payment method: ${method}`);
+        // Fallback for unknown method, keep successful state but log warning
+        orderRefEl.textContent = `#${orderId}`;
+        payMethodMsgEl.textContent = `Order successfully placed. Payment method: ${method}.`;
+    }
+    
+    // **CRITICAL**: Call function to fetch collection details using the Order ID.
+    fetchOrderCollection(orderId);
+
+    // Ensure the cart badge is updated (This runs after both payment clearing paths)
+    updateCartBadge();
+}
+
+// --- Main Initialization ---
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('--- Document Loaded: Initializing Order Confirmation Page ---');
+    // We don't need enforceAuthGate() here since this page is confirmation, 
+    // but we use the new check for the header icon
+    updateCartBadge(); 
+    updateProfileIconStatus(); // Use the new cookie-based check to update the profile icon
+    displayConfirmationDetails(); 
+    console.log('--- Initialization Complete ---');
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wears Collection Management - Commerce Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
+    <style>
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #05744b; /* emerald-400 */
+            border-radius: 4px;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.95rem; /* Slightly reduced base font size */
+        }
+        /* Custom styles for the color input preview */
+        .color-preview {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid #e5e7eb; /* gray-200 */
+            transition: all 0.2s;
+        }
+        .color-preview:hover {
+            border-color: #059669; /* emerald-600 */
+        }
+        /* Modal Backdrop */
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(2px);
+        }
+        /* Text selection style for better visibility of markdown output */
+        mark {
+            background-color: #fef08a; /* yellow-200 */
+            color: #1f2937; /* gray-800 */
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex">
+
+    <aside id="sidebar" class="fixed top-0 left-0 h-full w-64 bg-emerald-900 text-white transform transition-transform duration-300 z-30 lg:translate-x-0 -translate-x-full shadow-2xl flex flex-col">
+        <div class="p-6 flex-shrink-0">
+            <img src="https://i.imgur.com/Fz9w1BA.png" alt="E-commerce Logo" class="h-10 w-auto mb-6 rounded-lg shadow-md border border-emerald-700">
+            <h1 class="text-xl font-extrabold text-emerald-400 pb-4">Commerce Hub</h1>
+        </div>
+        
+        <div class="flex-grow overflow-y-auto">
+            <nav class="space-y-2 px-4">
+                <a href="admin-dashboard.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l-7-7-7 7m10 0v10a1 1 0 01-1 1h-3m-3 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-9 0h10"></path></svg>
+                    Dashboard
+                </a>
+                <a href="userorders.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l-7-7-7 7m10 0v10a1 1 0 01-1 1h-3m-3 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-9 0h10"></path></svg>
+                    User Orders
+                </a>
+                <a href="wearscollection.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out bg-emerald-600 hover:bg-emerald-700 active-link">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14v12a2 2 0 01-2 2H7a2 2 0 01-2-2V9z"></path></svg>
+                    Wears Collection
+                </a>
+                
+                  <a href="capscollection.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out bg-emerald-600 hover:bg-emerald-700 active-link">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14v12a2 2 0 01-2 2H7a2 2 0 01-2-2V9z"></path></svg>
+                    Caps Collection
+                </a>
+
+            <a href="newarrivals.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg active-link-page">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                New Arrivals
+            </a>
+
+              <a href="preorders.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Pre-Order
+                </a>
+                  <a href="membership.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Membership
+                </a>
+                
+                  <a href="./emailnews.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out active-link">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                Email News
+            </a>
+            
+                <a href="settings.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.526.34.813.486 1.066-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    Settings
+                </a>
+            </nav>
+        </div>
+
+        <div class="p-4 flex-shrink-0 border-t border-emerald-800">
+            <button id="btn-logout" onclick="logoutAdmin()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out bg-red-600 hover:bg-red-700 text-white shadow-lg">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                Log Out
+            </button>
+        </div>
+    </aside>
+    <main class="flex-1 lg:ml-64 p-4 transition-all duration-300">
+        <button id="sidebar-toggle" class="lg:hidden fixed top-4 left-4 z-40 p-2 bg-emerald-600 text-white rounded-lg shadow-lg hover:bg-emerald-700 transition">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+        </button>
+        
+        <section id="content-wearscollection" class="content-section p-6 pt-16 lg:pt-6">
+            <h2 class="text-3xl font-bold text-gray-800 mb-8 border-b pb-2">🛍️ Wears Collection Management</h2>
+            
+            <h3 id="form-title" class="text-2xl font-semibold text-gray-800 mb-6 mt-10">➕ Create New Collection</h3>
+            
+            <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-emerald-500">
+                <form id="wears-collection-form" onsubmit="handleCollectionSubmit(event)">
+                    
+                    <h4 class="text-xl font-semibold mb-4 text-gray-700 border-b pb-2">Collection Details</h4>
+                    
+                    <div class="space-y-4 mb-8">
+                        <div>
+                            <label for="collection-name" class="block text-sm font-medium text-gray-700">Collection Name</label>
+                            <input type="text" id="collection-name" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="collection-description" class="block text-sm font-medium text-gray-700">Description/Tag</label>
+                                <select id="collection-description" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-emerald-500 focus:border-emerald-500">
+                                    <option value="" disabled selected>Select a collection tag</option>
+                                    <option value="Top Deal">Top Deal</option>
+                                    <option value="Hot Deal">Hot Deal</option>
+                                    <option value="New">New</option>
+                                    <option value="Seasonal">Seasonal</option>
+                                    <option value="Clearance">Clearance</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label for="collection-price" class="block text-sm font-medium text-gray-700">Collection Price (NGN)</label>
+                                <input type="number" id="collection-price" min="0.01" step="0.01" value="00.00" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-emerald-500 focus:border-emerald-500">
+                                <p class="mt-1 text-xs text-gray-500">Base price for items in this collection.</p>
+                            </div>
+                            </div>
+
+                        <div class="flex items-center space-x-4">
+                            <input type="checkbox" id="is-active" class="h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500">
+                            <label for="is-active" class="text-sm font-medium text-gray-700">Collection is Active</label>
+                        </div>
+                    </div>
+                    
+                    <h4 class="text-xl font-semibold mb-4 text-gray-700 border-b pb-2">Product Variations (Max 4)</h4>
+                    <p class="text-sm text-gray-500 mb-6">Define the four available product options (e.g., different styles or images) for this collection.</p>
+
+                    <div id="product-sections" class="space-y-6">
+                        </div>
+
+                    <button type="button" id="add-section-btn" class="mt-4 px-4 py-2 text-sm font-medium rounded-lg text-emerald-600 border border-emerald-600 hover:bg-emerald-50 transition duration-200">
+                        + Add Product Variation
+                    </button>
+                    
+                    <button type="button" id="reset-form-btn" onclick="resetForm()" class="mt-4 ml-3 px-4 py-2 text-sm font-medium rounded-lg text-gray-600 border border-gray-300 hover:bg-gray-100 transition duration-200 hidden">
+                        Cancel Edit
+                    </button>
+                    
+                    <hr class="my-8 border-gray-200">
+
+                        <div>
+                            <label for="available-stock" class="block text-sm font-medium text-gray-700">Total Available Stock Number</label>
+                            <input type="number" id="available-stock" min="0" value="100" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-emerald-500 focus:border-emerald-500">
+                            <p class="mt-1 text-xs text-gray-500">This is the total stock quantity for the entire collection.</p>
+                        </div>
+                    </div>
+
+                    <button type="submit" id="submit-btn" class="w-full py-3 px-4 bg-emerald-600 text-white font-semibold text-lg rounded-lg shadow-md hover:bg-emerald-700 transition duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500">
+                        Submit Collection
+                    </button>
+                    
+                </form>
+            </div>
+        </section>
+        <hr class="my-12 border-gray-300">
+        <section id="content-managecollection" class="content-section p-6">
+            <h3 class="text-2xl font-semibold text-gray-800 mb-6">📋 Manage Existing Collections</h3>
+            <div id="loading-indicator" class="text-center p-8 text-gray-500 hidden">Loading collections...</div>
+            <div id="collections-error" class="text-center p-8 text-red-500 hidden">Error loading collections.</div>
+
+            <div class="bg-white p-6 rounded-xl shadow-lg overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tag</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variations</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="collections-table-body" class="bg-white divide-y divide-gray-200">
+                        </tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <div id="success-modal" class="fixed inset-0 z-50 items-center justify-center hidden modal-backdrop">
+        <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full mx-4 p-6 transform transition-all">
+            <div class="text-center">
+                <div class="w-12 h-12 mx-auto bg-green-100 rounded-full flex items-center justify-center">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                </div>
+                <h3 class="mt-4 text-lg leading-6 font-medium text-gray-900">Operation Successful</h3>
+                <div class="mt-2">
+                    <p id="success-modal-message" class="text-sm text-gray-500"></p>
+                </div>
+            </div>
+            <div class="mt-5 sm:mt-6">
+                <button type="button" onclick="document.getElementById('success-modal').classList.add('hidden')" class="inline-flex justify-center w-full rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:text-sm">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="error-modal" class="fixed inset-0 z-50 items-center justify-center hidden modal-backdrop">
+        <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full mx-4 p-6 transform transition-all">
+            <div class="text-center">
+                <div class="w-12 h-12 mx-auto bg-red-100 rounded-full flex items-center justify-center">
+                    <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.398 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                </div>
+                <h3 class="mt-4 text-lg leading-6 font-medium text-gray-900">Operation Failed</h3>
+                <div class="mt-2">
+                    <p id="error-modal-message" class="text-sm text-gray-500"></p>
+                </div>
+            </div>
+            <div class="mt-5 sm:mt-6">
+                <button type="button" onclick="document.getElementById('error-modal').classList.add('hidden')" class="inline-flex justify-center w-full rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:text-sm">
+                    Dismiss
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirmation-modal" class="fixed inset-0 z-50 items-center justify-center hidden modal-backdrop">
+        <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 p-6 transform transition-all">
+            <div class="text-center">
+                <div class="w-12 h-12 mx-auto bg-yellow-100 rounded-full flex items-center justify-center">
+                    <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.398 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                </div>
+                <h3 class="mt-4 text-lg leading-6 font-medium text-gray-900">Confirm Action</h3>
+                <div class="mt-2">
+                    <p id="confirmation-modal-message" class="text-sm text-gray-500"></p>
+                </div>
+            </div>
+            <div class="mt-5 sm:mt-6 sm:flex sm:flex-row-reverse">
+                <button id="confirm-yes-btn" type="button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm">
+                    Yes, Proceed
+                </button>
+                <button id="confirm-no-btn" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="restock-modal" class="fixed inset-0 z-50 items-center justify-center hidden modal-backdrop">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 p-6 transform transition-all">
+            <div class="text-center">
+                <div class="w-12 h-12 mx-auto bg-emerald-100 rounded-full flex items-center justify-center">
+                    <svg class="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                </div>
+                <h3 class="mt-4 text-lg leading-6 font-medium text-gray-900">📦 Quick Restock & Activation</h3>
+                <p id="restock-modal-name" class="mt-2 text-sm font-semibold text-gray-700"></p>
+                <div class="mt-4">
+                    <label for="restock-input" class="block text-sm font-medium text-gray-700 text-left mb-2">New Total Stock Quantity (must be > 0)</label>
+                    <input type="number" id="restock-input" min="1" value="100" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-center focus:ring-emerald-500 focus:border-emerald-500">
+                </div>
+                <p class="mt-2 text-xs text-gray-500">The collection will be marked **Active** with this new stock quantity.</p>
+            </div>
+            <div class="mt-5 sm:mt-6 sm:flex sm:flex-row-reverse">
+                <button id="restock-confirm-btn" type="button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-emerald-600 text-base font-medium text-white hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 sm:ml-3 sm:w-auto sm:text-sm">
+                    Confirm Restock
+                </button>
+                <button id="restock-cancel-btn" type="button" onclick="document.getElementById('restock-modal').classList.add('hidden');" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+// --- JAVASCRIPT LOGIC ---
+
+const sidebar = document.getElementById('sidebar');
+const sidebarToggle = document.getElementById('sidebar-toggle');
+const productSectionsContainer = document.getElementById('product-sections');
+const addSectionBtn = document.getElementById('add-section-btn');
+const submitBtn = document.getElementById('submit-btn');
+const formTitle = document.getElementById('form-title');
+const resetFormBtn = document.getElementById('reset-form-btn');
+const collectionsTableBody = document.getElementById('collections-table-body');
+const loadingIndicator = document.getElementById('loading-indicator');
+const collectionsError = document.getElementById('collections-error');
+
+// --- Modal Elements ---
+const successModal = document.getElementById('success-modal');
+const successModalMessage = document.getElementById('success-modal-message');
+const errorModal = document.getElementById('error-modal');
+const errorModalMessage = document.getElementById('error-modal-message');
+const confirmationModal = document.getElementById('confirmation-modal');
+const confirmationModalMessage = document.getElementById('confirmation-modal-message');
+const confirmYesBtn = document.getElementById('confirm-yes-btn');
+const confirmNoBtn = document.getElementById('confirm-no-btn');
+const restockModal = document.getElementById('restock-modal');
+const restockModalName = document.getElementById('restock-modal-name');
+const restockInput = document.getElementById('restock-input');
+const restockConfirmBtn = document.getElementById('restock-confirm-btn');
+const restockCancelBtn = document.getElementById('restock-cancel-btn');
+
+
+let sectionCount = 0; // Tracks the number of variations currently in the form
+let collectionIdToUpdate = null; // Stores the ID of the collection being edited (null for creation)
+let confirmationResolver = null; // Used to resolve the confirmation modal promise.
+
+const API_BASE_URL = '/api/admin/wearscollections'; // Consistent API endpoint
+const MAX_VARIATIONS = 4;
+
+// --- MODAL FUNCTIONS (Updated to use custom HTML Modals) ---
+function showModal(modalElement, messageElement, message) {
+    messageElement.innerHTML = message;
+    modalElement.classList.remove('hidden');
+    modalElement.classList.add('flex');
+}
+
+function showSuccessModal(message) {
+    showModal(successModal, successModalMessage, message);
+}
+
+function showErrorModal(message) {
+    showModal(errorModal, errorModalMessage, message);
+}
+
+/**
+ * Custom Confirmation Modal using Promises.
+ * @param {string} message - The message to display.
+ * @returns {Promise<boolean>} - Resolves to true if confirmed, false otherwise.
+ */
+function showConfirmationModal(message) {
+    confirmationModalMessage.textContent = message;
+    confirmationModal.classList.remove('hidden');
+    confirmationModal.classList.add('flex');
+
+    return new Promise(resolve => {
+        confirmationResolver = resolve;
+
+        const handleConfirm = () => {
+            confirmationModal.classList.remove('flex');
+            confirmationModal.classList.add('hidden');
+            resolve(true);
+            removeListeners();
+        };
+
+        const handleCancel = () => {
+            confirmationModal.classList.remove('flex');
+            confirmationModal.classList.add('hidden');
+            resolve(false);
+            removeListeners();
+        };
+
+        const removeListeners = () => {
+            confirmYesBtn.removeEventListener('click', handleConfirm);
+            confirmNoBtn.removeEventListener('click', handleCancel);
+        };
+
+        confirmYesBtn.addEventListener('click', handleConfirm);
+        confirmNoBtn.addEventListener('click', handleCancel);
+    });
+}
+// ------------------------------------------------------------------------------------------
+
+// --- GLOBAL FUNCTIONS REQUIRED FOR INLINE HTML HANDLERS ---
+// Making these functions globally accessible for the onclick handlers in the HTML table.
+window.updateColorPreview = updateColorPreview;
+window.editCollection = editCollection;
+window.deleteCollection = deleteCollection;
+window.removeProductSection = removeProductSection;
+window.quickRestockAndActivate = quickRestockAndActivate;
+window.logoutAdmin = logoutAdmin;
+window.addSizeStockInput = addSizeStockInput; // NEW
+window.removeSizeStockInput = removeSizeStockInput; // NEW
+// ---------------------------------------------------------
+
+// --- UTILITY FUNCTIONS ---
+function getAuthToken() {
+    const token = localStorage.getItem('adminToken');
+    if (!token) {
+        showErrorModal("Authentication required. Please log in.");
+        window.location.href = './admin-login.html';
+        return null;
+    }
+    return token;
+}
+
+// --- LOGOUT FUNCTIONALITY ---
+function logoutAdmin() {
+    console.log('Logging out admin...');
+    localStorage.removeItem('adminToken');
+    window.location.href = './admin-login.html';
+}
+// ----------------------------
+
+// --- COLLECTION MANAGEMENT (FRONTEND) ---
+
+/**
+ * Resets the form to "Create New Collection" mode.
+ */
+function resetForm() {
+    document.getElementById('wears-collection-form').reset();
+    collectionIdToUpdate = null;
+    formTitle.textContent = '➕ Create New Collection';
+    submitBtn.textContent = 'Submit Collection';
+    submitBtn.classList.remove('bg-yellow-600', 'hover:bg-yellow-700');
+    submitBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+    resetFormBtn.classList.add('hidden');
+
+    // Clear and re-initialize product sections
+    productSectionsContainer.innerHTML = '';
+    sectionCount = 0;
+    addProductSection(); // Start with one empty variation
+
+    // Scroll to the form
+    document.getElementById('content-wearscollection').scrollIntoView({ behavior: 'smooth' });
+}
+
+
+/**
+ * Fetches all collections and renders them to the table.
+ */
+async function fetchCollections() {
+    const token = getAuthToken();
+    if (!token) return;
+
+    collectionsTableBody.innerHTML = ''; // Clear existing
+    loadingIndicator.classList.remove('hidden');
+    collectionsError.classList.add('hidden');
+
+    try {
+        const response = await fetch(API_BASE_URL, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) {
+            // Robust error handling to catch non-JSON responses (like HTML 404/500 pages)
+            const errorText = await response.text();
+            let errorMessage = `HTTP error! Status: ${response.status}.`;
+
+            try {
+                const errorData = JSON.parse(errorText);
+                errorMessage = errorData.message || errorMessage;
+            } catch (e) {
+                // Non-JSON response (e.g., HTML page from Netlify 404 or backend server)
+                console.error('Raw non-JSON error response (likely 404 or 500 HTML page):', errorText);
+                // Use a more helpful message for the user
+                errorMessage = `${errorMessage} The server returned an invalid response. (See console for raw data).`;
+            }
+
+            throw new Error(errorMessage);
+        }
+
+        const collections = await response.json();
+        renderCollectionsTable(collections);
+
+    } catch (error) {
+        console.error('Error fetching collections:', error);
+        collectionsError.textContent = `Error fetching collections: ${error.message}`;
+        collectionsError.classList.remove('hidden');
+    } finally {
+        loadingIndicator.classList.add('hidden');
+    }
+}
+
+/**
+ * Renders the fetched collections data into the HTML table.
+ */
+function renderCollectionsTable(collections) {
+    collectionsTableBody.innerHTML = '';
+    if (collections.length === 0) {
+        collectionsTableBody.innerHTML = '<tr><td colspan="8" class="px-6 py-4 text-center text-gray-500">No collections found.</td></tr>';
+        return;
+    }
+
+    collections.forEach(collection => {
+        const tagClass = getTagClass(collection.tag);
+        const isActiveAndStocked = collection.isActive && collection.totalStock > 0;
+        const statusClass = isActiveAndStocked ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+        const statusText = isActiveAndStocked ? 'Active' : 'Out of Stock / Inactive';
+
+        // CRITICAL UPDATE: Extract the FIRST variation's imageUrl (which is now a direct URL)
+        const firstImageUrl = collection.variations[0]?.frontImageUrl || 'https://via.placeholder.com/64?text=N/A';
+        const imagePreview = `<img src="${firstImageUrl}" alt="Preview" class="w-10 h-10 object-cover rounded-full inline mr-2 shadow-sm">`;
+        
+        // --- UPDATED PRICE FORMAT TO NAIRA (₦) ---
+        const formattedPrice = `₦${(collection.price || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
+
+        // --- NEW LOGIC FOR RESTOCK/ACTIVATE BUTTON ---
+        // Show restock button only if stock is zero or inactive
+        const needsRestock = !isActiveAndStocked;
+        const restockButton = needsRestock
+            ? `<button onclick="quickRestockAndActivate('${collection._id}', '${collection.name.replace(/'/g, "\\'")}', ${collection.price})" class="text-emerald-600 hover:text-emerald-900 transition duration-150 mr-3 text-xs font-semibold">Restock/Activate</button>`
+            : '';
+        // ---------------------------------------------
+
+        const row = `
+            <tr>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${collection._id.slice(-6)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    ${imagePreview} ${collection.name}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-emerald-600">${formattedPrice}</td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${tagClass}">${collection.tag}</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${collection.variations.length}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${collection.totalStock}</td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}">
+                        ${statusText}
+                    </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    ${restockButton}
+                    <button onclick="editCollection('${collection._id}')" class="text-indigo-600 hover:text-indigo-900 transition duration-150 mr-3">Edit</button>
+                    <button onclick="deleteCollection('${collection._id}')" class="text-red-600 hover:text-red-900 transition duration-150">Delete</button>
+                </td>
+            </tr>
+        `;
+        collectionsTableBody.insertAdjacentHTML('beforeend', row);
+    });
+}
+
+/**
+ * Determines the appropriate Tailwind class for a given tag.
+ */
+function getTagClass(tag) {
+    switch (tag) {
+        case 'Top Deal': return 'bg-emerald-100 text-emerald-800';
+        case 'Hot Deal': return 'bg-red-100 text-red-800';
+        case 'New': return 'bg-blue-100 text-blue-800';
+        case 'Seasonal': return 'bg-yellow-100 text-yellow-800';
+        case 'Clearance': return 'bg-pink-100 text-pink-800';
+        default: return 'bg-gray-100 text-gray-800';
+    }
+}
+
+/**
+ * Fetches data for a specific collection and populates the form for editing.
+ */
+async function editCollection(collectionId) {
+    const token = getAuthToken();
+    if (!token) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/${collectionId}`, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `HTTP error! Status: ${response.status}`);
+        }
+
+        const collection = await response.json();
+
+        // 1. Set form mode
+        collectionIdToUpdate = collectionId;
+        formTitle.textContent = `✏️ Edit Collection: ${collection.name}`;
+        submitBtn.textContent = 'Update Collection';
+        submitBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-700');
+        submitBtn.classList.add('bg-yellow-600', 'hover:bg-yellow-700');
+        resetFormBtn.classList.remove('hidden');
+
+        // 2. Populate basic details
+        document.getElementById('collection-name').value = collection.name;
+        document.getElementById('collection-description').value = collection.tag;
+        document.getElementById('collection-price').value = collection.price; 
+        document.getElementById('is-active').checked = collection.isActive;
+
+        // **CRITICAL REMOVAL:** document.getElementById('available-sizes').value = collection.sizes.join(', ');
+        // **CRITICAL REMOVAL:** document.getElementById('available-stock').value = collection.totalStock;
+        
+        // 3. Populate variations (MODIFIED FOR NEW NESTED STRUCTURE)
+        productSectionsContainer.innerHTML = '';
+        sectionCount = 0;
+
+        collection.variations.forEach(variation => {
+            // addProductSection now takes the variation object directly
+            addProductSection(variation);
+        });
+
+        // 4. Update the add button state
+        updateAddSectionButtonState();
+
+        // 5. Scroll to the form
+        document.getElementById('content-wearscollection').scrollIntoView({ behavior: 'smooth' });
+
+    } catch (error) {
+        console.error('Error fetching collection for edit:', error);
+        showErrorModal(`Error fetching collection data: <mark>${error.message}</mark>`); 
+    }
+}
+
+/**
+ * Sends a DELETE request to remove a collection.
+ */
+async function deleteCollection(collectionId) {
+    const token = getAuthToken();
+    if (!token) return;
+
+    // --- MODAL UPDATE: Use showConfirmationModal ---
+    const isConfirmed = await showConfirmationModal(`Are you sure you want to permanently delete collection <mark>${collectionId.slice(-6)}</mark>? This action cannot be undone.`);
+    if (!isConfirmed) {
+        return;
+    }
+    // ---------------------------------------------
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/${collectionId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `HTTP error! Status: ${response.status}`);
+        }
+
+        // Collection deleted successfully
+        showSuccessModal(`Collection <mark>${collectionId.slice(-6)}</mark> deleted successfully.`); 
+        fetchCollections(); // Refresh the table
+
+    } catch (error) {
+        console.error('Deletion failed:', error);
+        showErrorModal(`Error deleting collection: <mark>${error.message}</mark>`); 
+    }
+}
+
+
+/**
+ * Prompts admin for new stock and updates totalStock and isActive status.
+ * NOTE: This function's PUT request only updates the top-level totalStock/isActive status, 
+ * it does NOT update the nested variation sizes. This is acceptable for a quick restock action.
+ * @param {string} collectionId - The ID of the collection.
+ * @param {string} collectionName - The name of the collection.
+ * @param {number} currentPrice - The current price of the collection.
+ */
+async function quickRestockAndActivate(collectionId, collectionName, currentPrice) {
+    const token = getAuthToken();
+    if (!token) return;
+    
+    // --- Setup Restock Modal ---
+    const formattedPrice = `₦${(currentPrice || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
+    restockModalName.innerHTML = `**${collectionName}** (Price: <mark>${formattedPrice}</mark>)`;
+    restockInput.value = 100; // Default to 100, assuming a decent restock volume
+    restockModal.classList.remove('hidden');
+    restockModal.classList.add('flex');
+
+    // Return a promise that resolves when confirmed or rejected when cancelled
+    const getStockPromise = new Promise((resolve, reject) => {
+        
+        const handleConfirm = () => {
+            const newStock = parseInt(restockInput.value);
+            if (!isNaN(newStock) && newStock > 0) {
+                resolve(newStock);
+                restockModal.classList.remove('flex');
+                restockModal.classList.add('hidden');
+            } else {
+                showErrorModal("Please enter a valid number greater than 0 for the stock quantity.");
+            }
+        };
+
+        const handleCancel = () => {
+            reject(new Error("Restock cancelled by user."));
+            restockModal.classList.remove('flex');
+            restockModal.classList.add('hidden');
+        };
+
+        // Ensure old listeners are removed before adding new ones
+        restockConfirmBtn.onclick = null;
+        restockCancelBtn.onclick = null;
+
+        restockConfirmBtn.addEventListener('click', handleConfirm, { once: true });
+        restockCancelBtn.addEventListener('click', handleCancel, { once: true });
+    });
+    
+    let newStock;
+    try {
+        newStock = await getStockPromise;
+    } catch (error) {
+        if (error.message !== "Restock cancelled by user.") {
+             showErrorModal(`An error occurred while getting stock input: <mark>${error.message}</mark>`);
+        }
+        return;
+    }
+    // ---------------------------------------------
+
+    try {
+        // Prepare the payload.
+        const updatePayload = {
+            totalStock: newStock,
+            isActive: true, // Explicitly set to true on restock
+            // NOTE: Variations/sizes are NOT updated here. This updates the top-level collection status.
+        };
+
+        const response = await fetch(`${API_BASE_URL}/${collectionId}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(updatePayload)
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            try {
+                const errorData = JSON.parse(errorText);
+                throw new Error(errorData.message || `HTTP error! Status: ${response.status}`);
+            } catch (e) {
+                 throw new Error(errorText || `HTTP error! Status: ${response.status}`);
+            }
+        }
+
+        showSuccessModal(`Collection <mark>**${collectionName}**</mark> successfully restocked to <mark>**${newStock}**</mark> and activated!`);
+        fetchCollections(); // Refresh the table
+
+    } catch (error) {
+        console.error('Restock failed:', error);
+        showErrorModal(`Error restocking collection: <mark>${error.message}</mark>`);
+    }
+}
+
+
+/**
+ * Function to add a product section (variation).
+ * @param {object} [variationData=null] - Optional existing variation data for editing.
+ */
+function addProductSection(variationData = null) {
+    if (sectionCount >= MAX_VARIATIONS) {
+        showErrorModal(`Maximum of ${MAX_VARIATIONS} product variations reached.`);
+        return;
+    }
+    sectionCount++;
+    const index = sectionCount; // Use the current count as the index
+
+    // Data for pre-populating inputs if editing
+    const variationId = variationData ? variationData._id : '';
+    // Use the permanent URLs for display (you'd typically pass a signed URL here)
+    const frontUrl = variationData ? variationData.frontImageUrl : '';
+    const backUrl = variationData ? variationData.backImageUrl : '';
+    const colorHex = variationData ? variationData.colorHex : '';
+
+   const sectionHtml = `
+    <div id="variation-section-${index}" class="p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-inner relative" data-variation-index="${index}">
+        <h4 class="text-md font-bold text-gray-600 mb-3 flex justify-between items-center">
+            Product Variation #${index}
+            ${variationId ? `<input type="hidden" name="variationId" value="${variationId}">` : ''}
+            ${frontUrl ? `<input type="hidden" name="existingFrontImageUrl" value="${frontUrl}">` : ''}
+            ${backUrl ? `<input type="hidden" name="existingBackImageUrl" value="${backUrl}">` : ''}
+
+            ${index > 1 ? `<button type="button" onclick="removeProductSection('variation-section-${index}')" class="text-red-500 hover:text-red-700 transition duration-150 text-sm">Remove</button>` : ''}
+        </h4>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            
+            <div>
+                <label for="color-input-${index}" class="block text-sm font-medium text-gray-700">Color/Hex Code</label>
+                <div class="flex items-center mt-1">
+                    <input type="color" id="color-input-${index}" value="${colorHex}" required
+                        class="p-0 h-10 w-10 block rounded-full border-2 border-gray-300 cursor-pointer"
+                        oninput="updateColorPreview(this.value, 'color-preview-${index}', 'color-hex-text-${index}')">
+                    <div id="color-preview-${index}" class="color-preview ml-3" style="background-color: ${colorHex};"></div>
+                    <input type="text" id="color-hex-text-${index}" name="colorHexText" value="${colorHex}" required 
+                        class="block w-full ml-3 border border-gray-300 rounded-md shadow-sm p-2 text-sm focus:ring-emerald-500 focus:border-emerald-500"
+                        pattern="^#[0-9A-F]{6}$" title="Must be a valid hex code like #RRGGBB">
+                </div>
+            </div>
+
+            <div>
+                <label for="front-view-upload-${index}" class="block text-sm font-medium text-gray-700">Front Image Upload</label>
+                <input type="file" id="front-view-upload-${index}" 
+                    name="front-view-upload-${index}" 
+                    accept="image/*" 
+                    class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+                    ${!frontUrl ? 'required' : ''}>
+                
+                ${frontUrl 
+                    ? `
+                    <p class="mt-1 text-xs text-gray-500">Current image exists. Upload a new file to replace it.</p>
+                    <img src="${frontUrl}" alt="Current Front Preview" class="mt-2 max-w-full h-auto rounded-lg shadow-md max-h-32 object-contain" />
+                    ` 
+                    : '<p class="mt-1 text-xs text-red-500">Required for new variations.</p>'
+                }
+            </div>
+            
+            <div>
+                <label for="back-view-upload-${index}" class="block text-sm font-medium text-gray-700">Back Image Upload</label>
+                <input type="file" id="back-view-upload-${index}" 
+                    name="back-view-upload-${index}" 
+                    accept="image/*" 
+                    class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+                    ${!backUrl ? 'required' : ''}>
+                
+                ${backUrl 
+                    ? `
+                    <p class="mt-1 text-xs text-gray-500">Current image exists. Upload a new file to replace it.</p>
+                    <img src="${backUrl}" alt="Current Back Preview" class="mt-2 max-w-full h-auto rounded-lg shadow-md max-h-32 object-contain" />
+                    ` 
+                    : '<p class="mt-1 text-xs text-red-500">Required for new variations.</p>'
+                }
+            </div>
+        </div>
+        
+        <h6 class="text-md font-semibold text-gray-700 mt-6 mb-3 border-t pt-3">Inventory per Size</h6>
+        <div id="size-stock-container-${index}" class="space-y-3">
+        </div>
+        <button type="button" onclick="addSizeStockInput(${index})" class="mt-3 px-3 py-1 text-xs font-medium rounded-lg text-blue-600 border border-blue-600 hover:bg-blue-50 transition duration-200">
+            + Add Size & Stock
+        </button>
+    </div>
+`;
+productSectionsContainer.insertAdjacentHTML('beforeend', sectionHtml);
+
+    // If editing, populate the sizes (existing logic remains)
+    if (variationData && variationData.sizes && variationData.sizes.length > 0) {
+        variationData.sizes.forEach(sizeData => {
+            addSizeStockInput(index, sizeData.size, sizeData.stock);
+        });
+    } else {
+        // For new creation, start with one size/stock input
+        addSizeStockInput(index);
+    }
+
+    updateAddSectionButtonState();
+}
+
+// --- NEW FUNCTION: To add size/stock inputs ---
+function addSizeStockInput(variationIndex, size = '', stock = 0) {
+    const container = document.getElementById(`size-stock-container-${variationIndex}`);
+    const uniqueId = Date.now() + Math.random(); // Unique ID for inputs
+
+    const inputHtml = `
+        <div id="size-stock-group-${uniqueId}" class="flex space-x-3 items-end">
+            <div class="flex-1">
+                <label for="size-${uniqueId}" class="block text-xs font-medium text-gray-700">Size</label>
+                <input type="text" id="size-${uniqueId}" name="variation-size-${variationIndex}" value="${size}" placeholder="S, M, L, 32, etc." required 
+                        class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div class="flex-1">
+                <label for="stock-${uniqueId}" class="block text-xs font-medium text-gray-700">Stock</label>
+                <input type="number" id="stock-${uniqueId}" name="variation-stock-${variationIndex}" value="${stock}" min="0" required 
+                        class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <button type="button" onclick="removeSizeStockInput(${uniqueId})" class="p-2 text-red-500 hover:text-red-700 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3m4 0h-4"></path></svg>
+            </button>
+        </div>
+    `;
+    container.insertAdjacentHTML('beforeend', inputHtml);
+}
+
+// --- NEW FUNCTION: To remove size/stock inputs ---
+function removeSizeStockInput(uniqueId) {
+    const element = document.getElementById(`size-stock-group-${uniqueId}`);
+    if (element) {
+        element.remove();
+    }
+}
+
+/**
+ * Function to remove a product section
+ */
+function removeProductSection(id) {
+    const sectionToRemove = document.getElementById(id);
+    if (sectionToRemove) {
+        sectionToRemove.remove();
+
+        // Decrement the section count
+        sectionCount--;
+
+        // Re-index all remaining sections to maintain sequential `variationIndex`
+        reindexProductSections();
+
+        updateAddSectionButtonState();
+    }
+}
+
+/**
+ * Re-indexes sections after one is removed to ensure keys are sequential (1, 2, 3, 4).
+ * NOTE: This is complex due to nested inputs. It's safer to rely on the index property of the loop.
+ */
+function reindexProductSections() {
+    Array.from(productSectionsContainer.children).forEach((section, index) => {
+        const newSectionNumber = index + 1; 
+        const oldSectionNumber = parseInt(section.getAttribute('data-variation-index'), 10);
+
+        // 1. Update the section ID and attribute
+        section.id = `variation-section-${newSectionNumber}`;
+        section.setAttribute('data-variation-index', newSectionNumber);
+
+        // 2. Update the heading text
+        const h4 = section.querySelector('h4');
+        if (h4) h4.firstChild.textContent = `Product Variation #${newSectionNumber}`;
+
+        // 3. Update the Remove button onclick handler (if it exists)
+        const removeBtn = section.querySelector('button[onclick*="removeProductSection"]');
+        if (removeBtn) {
+            removeBtn.setAttribute('onclick', `removeProductSection('variation-section-${newSectionNumber}')`);
+        }
+
+        // 4. Update the "Add Size & Stock" button onclick handler
+        const addSizeBtn = section.querySelector('button[onclick*="addSizeStockInput"]');
+        if (addSizeBtn) {
+            addSizeBtn.setAttribute('onclick', `addSizeStockInput(${newSectionNumber})`);
+        }
+
+        // 5. Update all input IDs/names inside the section
+        section.querySelectorAll('input, select, textarea').forEach(input => {
+            // Re-index element IDs
+            input.id = input.id.replace(new RegExp(`-${oldSectionNumber}$`), `-${newSectionNumber}`);
+            
+            // Re-index element names for size/stock inputs
+            if (input.name && input.name.startsWith('variation-')) {
+                 input.name = input.name.replace(new RegExp(`-${oldSectionNumber}$`), `-${newSectionNumber}`);
+            }
+
+            // Re-index color preview input/div IDs
+            if (input.oninput && input.oninput.toString().includes('updateColorPreview')) {
+                input.oninput = new Function('updateColorPreview(this.value, \'color-preview-' + newSectionNumber + '\')');
+            }
+        });
+
+        // 6. Update color preview div ID
+        const colorPreview = section.querySelector('[id^="color-preview-"]');
+        if (colorPreview) {
+            colorPreview.id = `color-preview-${newSectionNumber}`;
+        }
+        
+        // 7. Update size stock container ID
+        const sizeStockContainer = section.querySelector('[id^="size-stock-container-"]');
+        if (sizeStockContainer) {
+            sizeStockContainer.id = `size-stock-container-${newSectionNumber}`;
+        }
+    });
+
+    sectionCount = productSectionsContainer.children.length;
+}
+
+
+/**
+ * Updates the state of the "Add Product Variation" button.
+ */
+function updateAddSectionButtonState() {
+    if (sectionCount >= MAX_VARIATIONS) {
+        addSectionBtn.disabled = true;
+        addSectionBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        addSectionBtn.classList.remove('hover:bg-emerald-50');
+    } else {
+        addSectionBtn.disabled = false;
+        addSectionBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        addSectionBtn.classList.add('hover:bg-emerald-50');
+    }
+}
+
+/** * Function to update the color circle preview
+ * @param {string} colorValue - The hex color value.
+ * @param {string} previewId - The ID of the color preview element (e.g., 'color-preview-1').
+* @param {string} [siblingInputId=null] - Optional ID of the sibling input to sync (color picker or text).
+ */
+function updateColorPreview(colorValue, previewId, siblingInputId = null) {
+    const previewElement = document.getElementById(previewId);
+    
+    // Ensure colorValue is a valid hex before using it
+    const validHex = /^#[0-9A-F]{6}$/i.test(colorValue) ? colorValue.toUpperCase() : '#000000';
+    
+    if (previewElement) {
+        previewElement.style.backgroundColor = validHex;
+    }
+    
+    // Sync the sibling input (the one that didn't trigger the event)
+    if (siblingInputId) {
+        const siblingInput = document.getElementById(siblingInputId);
+        if (siblingInput && siblingInput.value !== validHex) {
+            siblingInput.value = validHex;
+        }
+    }
+
+    // Special case: If the text input triggered the event, update the color picker input too
+    // The color picker ID is 'color-input-X' and the text input ID is 'color-hex-text-X'
+    const index = previewId.split('-').pop();
+    if (siblingInputId?.startsWith('color-input-')) {
+        // Event came from text, update the color picker input
+        const colorPickerInput = document.getElementById(`color-input-${index}`);
+        if (colorPickerInput) colorPickerInput.value = validHex;
+    }
+    
+    // Final sync: If the color picker triggered it, update the text input
+    if (siblingInputId?.startsWith('color-hex-text-')) {
+        // Event came from color picker, update the text input
+        const textInput = document.getElementById(`color-hex-text-${index}`);
+        if (textInput) textInput.value = validHex;
+    }
+}
+
+// Helper to safely get size/stock inputs from a variation section
+function getVariationSizes(section, variationIndex) {
+    const sizeInputs = Array.from(section.querySelectorAll(`[name="variation-size-${variationIndex}"]`));
+    const stockInputs = Array.from(section.querySelectorAll(`[name="variation-stock-${variationIndex}"]`));
+    
+    const sizes = [];
+    let variationStock = 0;
+    
+    for (let i = 0; i < sizeInputs.length; i++) {
+        const size = sizeInputs[i].value.trim().toUpperCase(); // Normalize size
+        const stock = parseInt(stockInputs[i].value, 10);
+        
+        if (!size || isNaN(stock) || stock < 0) {
+            return { error: `Invalid size or stock value: Size: ${size}, Stock: ${stock}` };
+        }
+        
+        sizes.push({ size, stock });
+        variationStock += stock;
+    }
+    
+    if (sizes.length === 0) {
+        return { error: `Must have at least one size and stock specified.` };
+    }
+
+    return { sizes, variationStock };
+}
+/**
+ * Handles the form submission (CREATE or UPDATE) for the full form (including file uploads).
+ */
+async function handleCollectionSubmit(event) {
+    event.preventDefault();
+
+    // Determine if this is a POST (Create) or PUT (Update) operation
+    const isUpdate = collectionIdToUpdate !== null;
+    
+    // --- ANTI-DOUBLE SUBMISSION: STEP 1 (Disable Button) ---
+    submitBtn.disabled = true;
+    submitBtn.textContent = isUpdate ? 'Uploading & Updating...' : 'Uploading & Submitting...';
+    submitBtn.classList.remove('hover:bg-emerald-700', 'hover:bg-yellow-700', 'bg-emerald-600', 'bg-yellow-600');
+    submitBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
+
+    const token = getAuthToken();
+    if (!token) {
+        showErrorModal("Authentication token missing.");
+        resetFormSubmitButtonState(isUpdate);
+        return;
+    }
+
+    // --- FIX 1: Generate a unique ID for request idempotency ---
+    // This ID uniquely identifies this specific submission attempt.
+    const clientId = crypto.randomUUID(); 
+
+    const formData = new FormData();
+    let calculatedTotalStock = 0;
+    const variations = [];
+    const sizesAndStockMap = new Map();
+
+    const variationSections = Array.from(productSectionsContainer.children).filter(el => el.id.startsWith('variation-section-'));
+
+    if (variationSections.length === 0) {
+        showErrorModal("Please add at least one product variation.");
+        resetFormSubmitButtonState(isUpdate);
+        return;
+    }
+
+    for (const [index, section] of variationSections.entries()) {
+        const variationIndex = index + 1; // 1-based index
+        
+        // --- 1a. Collect image files and existing URLs (Validation Omitted for Brevity) ---
+        const frontFileInput = section.querySelector(`[name="front-view-upload-${variationIndex}"]`);
+        const backFileInput = section.querySelector(`[name="back-view-upload-${variationIndex}"]`);
+        const existingFrontUrlInput = section.querySelector(`[name="existingFrontImageUrl"]`);
+        const existingBackUrlInput = section.querySelector(`[name="existingBackImageUrl"]`);
+
+        // Check for required files/existing URLs
+        if ((!frontFileInput || frontFileInput.files.length === 0) && !existingFrontUrlInput?.value) {
+            showErrorModal(`Missing Front Image in Variation #${variationIndex}.`);
+            resetFormSubmitButtonState(isUpdate);
+            return;
+        }
+        if ((!backFileInput || backFileInput.files.length === 0) && !existingBackUrlInput?.value) {
+            showErrorModal(`Missing Back Image in Variation #${variationIndex}.`);
+            resetFormSubmitButtonState(isUpdate);
+            return;
+        }
+        
+        // --- 1b. Collect variation data fields (color, sizes) (Processing Omitted for Brevity) ---
+        const colorHex = section.querySelector(`[name="colorHexText"]`).value;
+        const variationId = section.querySelector(`[name="variationId"]`)?.value || null;
+
+        const sizeResult = getVariationSizes(section, variationIndex);
+        
+        if (sizeResult.error) {
+            showErrorModal(`Variation #${variationIndex} error: ${sizeResult.error}`);
+            resetFormSubmitButtonState(isUpdate);
+            return;
+        }
+        
+        const { sizes, variationStock } = sizeResult; 
+        
+        calculatedTotalStock += variationStock; 
+
+        // Aggregate stock data for the top-level 'sizesAndStock' array
+        for (const item of sizes) {
+            const sizesAndStockKey = `${item.size}-${variationIndex}`; 
+
+            if (!sizesAndStockMap.has(sizesAndStockKey)) {
+                sizesAndStockMap.set(sizesAndStockKey, {
+                    size: item.size,
+                    stock: item.stock,
+                    variationIndex: variationIndex,
+                });
+            } else {
+                showErrorModal(`Internal error: Duplicate size '${item.size}' detected within variation processing.`);
+                resetFormSubmitButtonState(isUpdate);
+                return;
+            }
+        }
+
+        // Include the 'sizes' array in the 'variations' object
+        variations.push({
+            variationIndex,
+            colorHex,
+            existingFrontImageUrl: existingFrontUrlInput?.value || null,
+            existingBackImageUrl: existingBackUrlInput?.value || null,
+            sizes: sizes, 
+            ...(variationId && { _id: variationId })
+        });
+
+        // --- 1c. Append files to FormData ---
+        if (frontFileInput.files.length > 0) {
+            formData.append(`front-view-upload-${variationIndex}`, frontFileInput.files[0]);
+        }
+        if (backFileInput.files.length > 0) {
+            formData.append(`back-view-upload-${variationIndex}`, backFileInput.files[0]);
+        }
+    }
+
+    // Convert the map values into the final array structure
+    const sizesAndStock = Array.from(sizesAndStockMap.values());
+    
+    // --- Validation for main fields (Omitted for Brevity) ---
+    const collectionName = document.getElementById('collection-name').value.trim();
+    const priceValue = parseFloat(document.getElementById('collection-price').value);
+    const collectionTag = document.getElementById('collection-description').value; 
+    const isActive = document.getElementById('is-active').checked;
+
+    if (!collectionName) {
+        showErrorModal("Collection Name is required.");
+        resetFormSubmitButtonState(isUpdate);
+        return;
+    }
+    if (isNaN(priceValue) || priceValue <= 0) {
+        showErrorModal("A valid Price is required (must be greater than 0).");
+        resetFormSubmitButtonState(isUpdate);
+        return;
+    }
+
+
+    // 2. Add main payload data to FormData (JSON stringified)
+    const mainPayload = {
+        name: collectionName,
+        tag: collectionTag,
+        price: priceValue,
+        isActive: isActive, 
+        totalStock: isActive ? calculatedTotalStock : 0, 
+        sizesAndStock: sizesAndStock,
+        variations: variations, 
+        // --- FIX 2: Include the unique client ID for idempotency ---
+        clientId: clientId, 
+    };
+    
+    console.log('Sending Collection Payload:', JSON.stringify(mainPayload, null, 2));
+    
+    // Append the JSON payload as a single string field
+    formData.append('collectionData', JSON.stringify(mainPayload));
+
+    // 3. Send API Request using FormData
+    const method = collectionIdToUpdate ? 'PUT' : 'POST';
+    const url = collectionIdToUpdate ? `${API_BASE_URL}/${collectionIdToUpdate}` : API_BASE_URL;
+    
+    try {
+        const response = await fetch(url, {
+            method: method,
+            headers: { 
+                'Authorization': `Bearer ${token}` 
+            },
+            body: formData 
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text(); 
+            let errorMessage = `Server returned status ${response.status}.`;
+            try {
+                const errorData = JSON.parse(errorText);
+                errorMessage = errorData.message || errorData.details || 'Operation failed due to a server error.';
+            } catch (e) {
+                errorMessage += ` Raw response: ${errorText.substring(0, 100)}...`;
+            }
+
+            throw new Error(errorMessage);
+        }
+
+        const data = await response.json();
+        const successMessage = isUpdate 
+            ? `Collection <mark>**${data.name}**</mark> updated successfully!` 
+            : `Collection <mark>**${data.name}**</mark> created successfully! ID: <mark>${data.collectionId ? data.collectionId.slice(-6) : 'N/A'}</mark>`;
+
+        showSuccessModal(successMessage);
+        
+        resetForm();
+        fetchCollections();
+
+    } catch (error) {
+        console.error('Submission failed:', error);
+        showErrorModal(`Error submitting collection: <mark>${error.message}</mark>`);
+    } finally {
+        // --- ANTI-DOUBLE SUBMISSION: STEP 2 (Re-enable Button) ---
+        // This runs whether the try block succeeded or the catch block failed.
+        resetFormSubmitButtonState(isUpdate);
+    }
+}
+
+/**
+ * FIX for Error: Missing 'sizesAndStock' or 'isActive' in simple update payload.
+ * This function handles simple restock/activation/deactivation from a list.
+ * * @param {string} collectionId The ID of the collection to update.
+ * @param {Array<{size: string, stock: number, variationIndex: number}>} sizesAndStockUpdates The array of size/stock objects.
+ * @param {boolean} isActive The new activation status.
+ */
+async function quickRestockAndActivate(collectionId, sizesAndStockUpdates, isActive) {
+    const token = getAuthToken();
+    if (!token) {
+        showErrorModal("Authentication token missing.");
+        return;
+    }
+
+    const calculatedTotalStock = sizesAndStockUpdates.reduce((sum, item) => sum + item.stock, 0);
+
+    // CRITICAL: Construct the JSON payload with the two fields the server requires.
+    const payload = {
+        sizesAndStock: sizesAndStockUpdates,
+        isActive: isActive,
+        // Calculate totalStock based on active status, matching handleCollectionSubmit logic.
+        totalStock: isActive ? calculatedTotalStock : 0 
+    };
+
+    try {
+        const url = `${API_BASE_URL}/${collectionId}`;
+        const response = await fetch(url, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json', // IMPORTANT: Use JSON header for this PUT request
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text(); 
+            let errorMessage = `Server returned status ${response.status}.`;
+
+            try {
+                const errorData = JSON.parse(errorText);
+                errorMessage = errorData.message || errorData.details || 'Operation failed due to a server error.';
+            } catch (e) {
+                errorMessage += ` Raw response: ${errorText.substring(0, 100)}...`;
+            }
+            throw new Error(errorMessage);
+        }
+
+        const data = await response.json();
+        showSuccessModal(`Collection <mark>**${data.name}**</mark> updated successfully via quick action!`);
+        fetchCollections(); // Refresh the list
+    } catch (error) {
+        console.error('Restock failed:', error);
+        showErrorModal(`Error restocking collection: <mark>${error.message}</mark>`);
+    }
+}
+
+/**
+ * Helper to reset the submit button state.
+ * @param {boolean} isUpdate - True if the form was in update mode.
+ */
+function resetFormSubmitButtonState(isUpdate) {
+    submitBtn.disabled = false;
+    submitBtn.textContent = isUpdate ? 'Update Collection' : 'Submit Collection';
+    submitBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+    if (isUpdate) {
+        submitBtn.classList.add('bg-yellow-600', 'hover:bg-yellow-700');
+    } else {
+        submitBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+    }
+}
+
+// Global state to track if the main form submit handler has been attached
+let isFormListenerAttached = false;
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Add the initial product section for the creation form
+    if (productSectionsContainer.children.length === 0) {
+        addProductSection();
+    }
+
+    // --- CRITICAL FIX: Ensure form listener is only attached once ---
+    const form = document.getElementById('wears-collection-form');
+    if (form && !isFormListenerAttached) {
+        // 1. Remove any previous listeners just in case (for robustness)
+        form.removeEventListener('submit', handleCollectionSubmit); 
+        
+        // 2. Attach the handler 
+        form.addEventListener('submit', handleCollectionSubmit);
+        
+        // 3. Set the flag to prevent future attachments
+        isFormListenerAttached = true; 
+        console.log("Wears Collection Form Listener attached successfully (1 instance).");
+    }
+
+    // Toggle sidebar visibility on mobile
+    sidebarToggle.addEventListener('click', () => {
+        sidebar.classList.toggle('-translate-x-full');
+    });
+
+    // Add new section button listener
+    addSectionBtn.addEventListener('click', () => {
+        if (sectionCount < MAX_VARIATIONS) {
+            // Call without data for a new empty section
+            addProductSection(); 
+        } else {
+            showErrorModal(`You can only add a maximum of <mark>${MAX_VARIATIONS}</mark> product variations per collection.`);
+        }
+    });
+
+    // Load existing collections on page load
+    fetchCollections();
+});
+</script>
+</body>
+</html>

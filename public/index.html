@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>Outflickz Limited | Official Streetwear Store</title>
+    <meta name="description" content="Welcome to Outflickz Limited. Redirecting you to our official online store for exclusive streetwear, caps, and limited edition drops. Outflickz"/>
+    <meta name="google-site-verification" content="Z6ROK89ZCUVN1i5qEFeLCyaaeJHYp5-33t4Mi4pxzJs" />
+    <link rel="canonical" href="https://www.outflickz.com/outflickzstore/homepage.html"/>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
+</head>
+<body class="bg-white min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="flex flex-col items-center justify-center">
+        
+        <img 
+            src="https://i.imgur.com/1Rxhi9q.jpeg" 
+            alt="Outflickz Logo" 
+            class="w-64 h-auto animate-pulse"
+        >
+
+        <h1 class="text-black text-3xl sm:text-5xl font-extrabold mt-6 tracking-widest text-center">
+            OUTFLICKZ LIMITED
+        </h1>
+
+        <p id="timer" class="text-gray-400 mt-4 text-sm">
+            Redirecting in 4 seconds...
+        </p>
+    </div>
+
+    <script>
+        const REDIRECT_DELAY_SECONDS = 4;
+        const timerElement = document.getElementById('timer');
+        let countdown = REDIRECT_DELAY_SECONDS;
+
+        /**
+         * Counts down and updates the timer text.
+         */
+        function updateTimer() {
+            if (countdown > 0) {
+                timerElement.textContent = `Redirecting in ${countdown} seconds...`;
+                countdown--;
+            } else {
+                clearInterval(intervalId);
+                // Redirect to the store homepage after the delay
+                window.location.href = '/outflickzstore/homepage.html';
+            }
+        }
+
+        // Run the updateTimer function every 1000 milliseconds (1 second)
+        const intervalId = setInterval(updateTimer, 1000);
+
+        // Call it immediately to display "Redirecting in 10 seconds..." right away
+        updateTimer();
+    </script>
+</body>
+</html>

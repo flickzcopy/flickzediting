@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shipping & Returns | Outflickz</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
+
+    <style>
+        /* Define a primary brand color for ash-red to ensure consistency and modern look */
+        .text-ash-red { color: #D63031; }
+        .bg-ash-red { background-color: #D63031; }
+        .hover\:bg-ash-red-dark:hover { background-color: #A32324; }
+        .border-ash-red { border-color: #D63031; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-900 antialiased">
+    
+    <script>
+        // Function to toggle the mobile menu
+        function toggleMenu() {
+            const mobileMenu = document.getElementById('mobile-menu');
+            mobileMenu.classList.toggle('hidden');
+        }
+        
+        // Placeholder function for potential use (e.g., status messages if needed)
+        function showStatusMessage(message, isSuccess = true) {
+            // Implementation similar to userprofile.html if status messages are needed
+        }
+    </script>
+
+    <header class="bg-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <a href="homepage.html" class="flex items-center" aria-label="Outflickz Home">
+                <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-10">
+            </a>
+
+            <nav class="hidden md:flex flex-grow justify-center space-x-6 lg:space-x-10 text-sm" aria-label="Main Navigation">
+                <a href="homepage.html" class="font-medium text-color-black hover:text-gray-600 transition">Homepage</a>
+                <a href="wearscollection.html" class="font-medium text-color-black hover:text-gray-600 transition">Wears Collections</a>
+                <a href="newarrivals.html" class="font-medium text-color-black hover:text-gray-600 transition">New Arrivals</a>
+                <a href="capcollection.html" class="font-medium text-color-black hover:text-gray-600 transition">Cap Collections</a>
+                <a href="preorder.html" class="font-medium text-color-black hover:text-gray-600 transition">Pre Order</a>
+            </nav>
+
+
+            <div class="flex items-center space-x-3 sm:space-x-4">
+                <a href="cart.html" class="relative p-2 text-gray-600 hover:text-ash-red transition rounded-full" aria-label="Shopping Bag">
+                    <i class="fas fa-shopping-bag w-5 h-5"></i>
+                    <span id="cart-badge" class="absolute top-0 right-0 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-ash-red border border-white rounded-full transform translate-x-1/3 -translate-y-1/3 hidden">
+                        0
+                    </span>
+                </a>
+                <a href="userprofile.html" class="p-2 text-gray-600 hover:text-ash-red transition rounded-full" aria-label="User Account">
+                    <i class="fas fa-user-circle w-5 h-5"></i>
+                </a>
+                <button class="md:hidden p-2 text-gray-600 hover:text-ash-red transition rounded-full focus:outline-none" onclick="toggleMenu()" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open main menu">
+                    <i class="fas fa-bars w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+    
+    <div id="mobile-menu" class="hidden md:hidden bg-white border-b border-gray-100 absolute w-full z-40 shadow-lg">
+        <div class="px-4 pt-2 pb-3 space-y-1 text-base">
+            <a href="homepage.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Homepage</a>
+            <a href="preorder.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Pre Order</a>
+            <a href="newarrivals.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">New Arrivals</a>
+            <a href="wearscollection.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Wears Collection</a>
+            <a href="capcollection.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Cap Collection</a>
+            <a href="userprofile.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Account</a>
+            <a href="shipping_returns.html" class="block px-3 py-2 font-bold text-white bg-ash-red rounded-lg mt-2">Shipping & Returns</a>
+        </div>
+    </div>
+    
+    <main class="container mx-auto p-4 sm:p-8 mt-4 sm:mt-8 lg:mt-12 max-w-6xl">
+        <div class="bg-white shadow-2xl rounded-xl p-6 sm:p-10 border border-gray-100">
+            <h1 class="text-4xl sm:text-5xl font-extrabold text-ash-red mb-2 flex items-center">
+                📦 Shipping & Returns Policy
+            </h1>
+            <p class="text-gray-600 text-lg mb-8 border-b border-gray-100 pb-6">
+                Everything you need to know about delivery times, costs, and our hassle-free return process.
+            </p>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                
+                <section class="lg:col-span-2 space-y-8" id="shipping-details">
+                    <h2 class="text-3xl font-bold text-gray-800 border-b-2 border-ash-red pb-3 mb-6">
+                        🚚 Shipping & Delivery
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <h3 class="text-xl font-semibold text-ash-red">Processing Time</h3>
+                        <p class="text-gray-600">
+                            All orders are processed and prepared for shipping within 2 to 3 business days (excluding weekends and holidays) after receiving your order confirmation email. You will receive another notification when your order has shipped.
+                        </p>
+                    </div>
+
+                    <div class="space-y-4">
+                        <h3 class="text-xl font-semibold text-ash-red">Estimated Delivery Times</h3>
+                        <ul class="space-y-3 text-gray-600 list-disc pl-5">
+                            <li>
+                                **Local (Lagos):** 2 - 3 business days after shipping.
+                            </li>
+                            <li>
+                                **National (Outside Lagos, Nigeria):** 3 - 7 business days after shipping.
+                            </li>
+                            <li>
+                                **International:** Shipping times vary greatly based on destination. Please expect 7 - 21 business days. Customs duties and taxes are the responsibility of the customer.
+                            </li>
+                        </ul>
+                        <p class="p-3 bg-blue-50 border-l-4 border-blue-400 text-blue-800 text-sm italic">
+                            **Note:** Pre-Order items will ship on or around the date specified on the product page.
+                        </p>
+                    </div>
+
+                    <div class="space-y-4">
+                        <h3 class="text-xl font-semibold text-ash-red">Shipping Costs</h3>
+                        <p class="text-gray-600">
+                            Shipping costs are calculated by customer service based on  your delivery location. We occasionally offer free shipping promotions, which will be advertised on the homepage banner.
+                        </p>
+                    </div>
+                </section>
+
+                <section class="lg:col-span-1 space-y-8 border-t lg:border-t-0 lg:border-l border-gray-200 lg:pl-10 lg:pt-0 pt-8" id="returns-details">
+                    <h2 class="text-3xl font-bold text-gray-800 border-b-2 border-ash-red pb-3 mb-6">
+                        ↩️ Returns & Exchanges
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <h3 class="text-xl font-semibold text-ash-red">Our Return Window</h3>
+                        <p class="text-gray-600">
+                            You have 7 calendar days from the date you received your order to initiate a return for a refund or exchange.
+                        </p>
+                    </div>
+
+                    <div class="space-y-4">
+                        <h3 class="text-xl font-semibold text-ash-red">Conditions for Returns</h3>
+                        <p class="text-gray-600">
+                            Items must be returned in their original condition:
+                        </p>
+                        <ul class="space-y-2 text-gray-600 list-disc pl-5">
+                            <li>Unworn and unwashed.</li>
+                            <li>In original packaging with all tags attached.</li>
+                            <li>Free of any stains, marks, or odors.</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <h3 class="text-xl font-semibold text-ash-red">How to Initiate a Return</h3>
+                        <p class="text-gray-600">
+                            Please contact our Customer Care team with your order number and the reason for the return.
+                        </p>
+                        <a href="contact.html" class="inline-flex items-center px-4 py-2 bg-ash-red text-white rounded-lg hover:bg-ash-red-dark transition font-medium">
+                            <i class="fas fa-headset mr-2"></i> Contact Customer Care
+                        </a>
+                        <p class="text-sm text-gray-500 pt-2">
+                            The customer is responsible for return shipping costs unless the item is defective or incorrect.
+                        </p>
+                    </div>
+
+                </section>
+                
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-black text-gray-300 py-6 sm:py-14 border-t border-gray-800 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-8">
+                
+                <div class="col-span-2 lg:col-span-1">
+                    <a href="homepage.html" class="flex items-center mb-3 sm:mb-4"> 
+                        <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-8 filter grayscale invert">
+                    </a>
+                    <p class="text-xs sm:text-sm text-gray-500"> 
+                        The home of exclusive street wear and limited edition drops. Elevate your style.
+                    </p>
+                    <div class="flex space-x-4 mt-4 text-gray-400">
+                        <a href="https://www.instagram.com/outflickz01?igsh=Yzl3d3BjaGt5djll" aria-label="Instagram" class="hover:text-ash-red transition"><i class="fab fa-instagram"></i></a>
+                        <a href="https://www.tiktok.com/@outflickz?_r=1&_t=ZS-92AInaYzuTt" aria-label="TikTok" class="hover:text-ash-red transition"><i class="fab fa-tiktok"></i></a>
+                        <a href="https://www.facebook.com/profile.php?id=61584421929170" aria-label="Facebook" class="hover:text-ash-red transition"><i class="fab fa-facebook-f"></i></a>
+                    </div>
+                </div>
+
+                <div class="col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Quick Links</h3> 
+                    <ul class="space-y-1.5 sm:space-y-2 text-xs sm:text-sm"> 
+                        <li><a href="wearscollection.html" class="text-gray-400 hover:text-ash-red transition">Wears</a></li>
+                        <li><a href="newarrivals.html" class="text-gray-400 hover:text-ash-red transition">New Arrivals</a></li>
+                        <li><a href="capcollection.html" class="text-gray-400 hover:text-ash-red transition">Caps</a></li>
+                        <li><a href="preorder.html" class="text-gray-400 hover:text-ash-red transition">Pre-Order</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Customer Care</h3> 
+                    <ul class="space-y-1.5 sm:space-y-2 text-xs sm:text-sm"> 
+                        <li><a href="contact.html" class="text-gray-400 hover:text-ash-red transition">Contact Us</a></li>
+                        <li><a href="shipping_returns.html" class="text-gray-400 hover:text-ash-red transition">Shipping & Returns</a></li>
+                        <li><a href="faq.html" class="text-gray-400 hover:text-ash-red transition">FAQ</a></li>
+                        <li><a href="size_guide.html" class="text-gray-400 hover:text-ash-red transition">Size Guide</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-span-2 md:col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Get In Touch</h3> 
+                    <address class="text-xs sm:text-sm not-italic space-y-2"> 
+                        <p class="text-gray-400">
+                            <i class="fas fa-map-marker-alt mr-2 text-ash-red"></i> Lagos , Nigeria
+                        </p>
+                        <p class="text-gray-400">
+                            <i class="fas fa-envelope mr-2 text-ash-red"></i> outflickzlimited@gmail.com 
+                        </p>
+                        <p class="text-gray-400">
+                            <i class="fas fa-phone mr-2 text-ash-red"></i> +234 7042882706
+                        </p>
+                    </address>
+                </div>
+                
+            </div>
+
+            <div class="border-t border-gray-800 mt-6 sm:mt-10 pt-4 sm:pt-6"> 
+                <p class="text-center text-xs text-gray-500">
+                    &copy; 2025 Outflickz. All rights reserved. | <a href="#" class="hover:text-ash-red">Privacy Policy</a> | <a href="#" class="hover:text-ash-red">Terms of Use</a>
+                </p>
+            </div>
+        </div>
+    </footer>
+    
+    <a href="https://t.me/+2347042882706" 
+        target="_blank"
+        class="fixed bottom-6 right-24 z-50 
+               bg-[#24A1DE] text-white 
+               p-3 rounded-full 
+               shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 
+               flex items-center justify-center w-14 h-14" 
+        aria-label="Chat with us on Telegram">
+        
+        <i class="fab fa-telegram-plane fa-2x"></i>
+    </a>
+    
+    <a href="https://wa.me/2347042882706?text=HELLO%20OUTFLICKZ!%20My%20name%20is%20..."
+        target="_blank"
+        class="fixed bottom-6 right-6 z-50 
+               bg-[#25D366] text-white 
+               p-3 rounded-full 
+               shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 
+               flex items-center justify-center w-14 h-14" 
+        aria-label="Chat with us on WhatsApp">
+        
+        <i class="fab fa-whatsapp fa-2x"></i>
+    </a>
+</body>
+</html>

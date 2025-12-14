@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-commerce Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
+    <style>
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #05744b; /* emerald-700 */
+            border-radius: 4px;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.95rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex">
+
+    <aside id="sidebar" class="fixed top-0 left-0 h-full w-64 bg-emerald-900 text-white transform transition-transform duration-300 z-30 lg:translate-x-0 -translate-x-full shadow-2xl flex flex-col">
+        <div class="p-6 flex-shrink-0">
+            <img src="https://i.imgur.com/Fz9w1BA.png" alt="E-commerce Logo" class="h-10 w-auto mb-6 rounded-lg shadow-md border border-emerald-700">
+            <h1 class="text-xl font-extrabold text-emerald-400 border-t border-emerald-800 pt-4">Commerce Hub</h1>
+        </div>
+        
+        <nav class="space-y-2 px-4 flex-grow overflow-y-auto">
+            <button id="btn-dashboard" onclick="setActiveContent('dashboard')" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out bg-emerald-600 hover:bg-emerald-700 active-link">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l-7-7-7 7m10 0v10a1 1 0 01-1 1h-3m-3 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-9 0h10"></path></svg>
+                Dashboard
+            </button>
+            
+            <button id="btn-userorders" onclick="navigateToUserOrders()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                User Orders
+            </button>
+
+            <button id="btn-wearscollection" onclick="navigateToWearsCollection()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+                Wears Collection
+            </button>
+
+            <button id="btn-capscollection" onclick="navigateToCapsCollection()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 13h10M4 19v-6a3 3 0 013-3h10a3 3 0 013 3v6a3 3 0 01-3 3H7a3 3 0 01-3-3z"></path></svg>
+                Caps Collection
+            </button>
+            
+            <button id="btn-newarrivals" onclick="navigateToNewArrivals()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                New Arrivals
+            </button>
+            
+            <button id="btn-preorders" onclick="navigateToPreOrders()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                Pre-Order 
+            </button>
+            
+            <button id="btn-membership" onclick="navigateToMembership()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3v-5a2 2 0 00-2-2H5a2 2 0 00-2 2v5a3 3 0 003 3z"></path></svg>
+                Membership
+            </button>
+
+               <button id="btn-emailnews" onclick="navigateToEmailNews()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3v-5a2 2 0 00-2-2H5a2 2 0 00-2 2v5a3 3 0 003 3z"></path></svg>
+                Email News
+            </button>
+
+            <button id="btn-settings" onclick="navigateToSettings()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.526.34.813.486 1.066-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                Settings
+            </button>
+        </nav>
+        
+        <div class="p-4 flex-shrink-0 border-t border-emerald-800">
+            <button id="btn-logout" onclick="logoutAdmin()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out bg-red-600 hover:bg-red-700 text-white shadow-lg">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                Log Out
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 lg:ml-64 p-4 transition-all duration-300 overflow-x-hidden">
+        <button id="sidebar-toggle" class="lg:hidden fixed top-4 left-4 z-40 p-2 bg-emerald-600 text-white rounded-lg shadow-lg hover:bg-emerald-700 transition">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+        </button>
+
+        <section id="content-dashboard" class="content-section p-6 pt-16 lg:pt-6">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6">Real-time E-commerce Overview 📈</h2>
+
+            <div id="loading-indicator" class="text-center p-10">
+                <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 inline-block"></div>
+                <p class="mt-4 text-gray-600 text-sm">Fetching metrics...</p>
+            </div>
+
+           <div id="metric-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 hidden">
+    
+    <div class="bg-white p-5 rounded-xl shadow-md border-b-4 border-emerald-500 hover:shadow-xl transition duration-300">
+        <div class="flex items-center">
+            <div class="p-3 rounded-full bg-emerald-100 text-emerald-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 2v8m0 0v1m-3 0h6m-1-5a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+            <div class="ml-4">
+                <p class="text-xs font-medium text-gray-500 uppercase">Total Sales (LTD)</p>
+                <a href="./saleslog.html" class="flex items-center text-2xl font-extrabold text-gray-900 mt-1 hover:text-emerald-600 transition">
+                    <span id="total-sales">₦0</span>
+                    <svg class="w-4 h-4 ml-2 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                </a>
+            </div>
+        </div>
+    </div>
+<a href="./productdeduction.html" class="text-left bg-white p-5 rounded-xl shadow-md border-b-4 border-cyan-500 hover:shadow-xl transition duration-300 transform hover:scale-[1.02] block">
+    <div class="flex items-center">
+        <div class="p-3 rounded-full bg-cyan-100 text-cyan-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+        </div>
+        <div class="ml-4">
+            <p class="text-xs font-medium text-gray-500 uppercase">Wears Active Stock</p>
+            <p id="wears-stock" class="text-2xl font-extrabold text-gray-900 mt-1">0</p>
+        </div>
+    </div>
+</a>
+
+<a href="./productdeduction.html" class="text-left bg-white p-5 rounded-xl shadow-md border-b-4 border-blue-500 hover:shadow-xl transition duration-300 transform hover:scale-[1.02] block">
+    <div class="flex items-center">
+        <div class="p-3 rounded-full bg-blue-100 text-blue-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 13h10M4 19v-6a3 3 0 013-3h10a3 3 0 013 3v6a3 3 0 01-3 3H7a3 3 0 01-3-3z"></path></svg>
+        </div>
+        <div class="ml-4">
+            <p class="text-xs font-medium text-gray-500 uppercase">Caps Active Stock</p>
+            <p id="caps-stock" class="text-2xl font-extrabold text-gray-900 mt-1">0</p>
+        </div>
+    </div>
+</a>
+
+<a href="./productdeduction.html" class="text-left bg-white p-5 rounded-xl shadow-md border-b-4 border-fuchsia-500 hover:shadow-xl transition duration-300 transform hover:scale-[1.02] block">
+    <div class="flex items-center">
+        <div class="p-3 rounded-full bg-fuchsia-100 text-fuchsia-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        </div>
+        <div class="ml-4">
+            <p class="text-xs font-medium text-gray-500 uppercase">New Arrivals Stock</p>
+            <p id="new-arrivals-stock" class="text-2xl font-extrabold text-gray-900 mt-1">0</p>
+        </div>
+    </div>
+</a>
+
+<a href="./productdeduction.html" class="text-left bg-white p-5 rounded-xl shadow-md border-b-4 border-amber-500 hover:shadow-xl transition duration-300 transform hover:scale-[1.02] block">
+    <div class="flex items-center">
+        <div class="p-3 rounded-full bg-amber-100 text-amber-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+        </div>
+        <div class="ml-4">
+            <p class="text-xs font-medium text-gray-500 uppercase">Pre-Order Active Stock</p>
+            <p id="pre-order-stock" class="text-2xl font-extrabold text-gray-900 mt-1">0</p>
+        </div>
+    </div>
+</a>
+
+    <div class="bg-white p-5 rounded-xl shadow-md border-b-4 border-purple-500 hover:shadow-xl transition duration-300">
+        <div class="flex items-center">
+            <div class="p-3 rounded-full bg-purple-100 text-purple-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+            </div>
+            <div class="ml-4">
+                <p class="text-xs font-medium text-gray-500 uppercase">Registered Users</p>
+                <p id="registered-users" class="text-2xl font-extrabold text-gray-900 mt-1">0</p>
+            </div>
+        </div>
+    </div>
+</div>
+            
+            <div class="mt-8 bg-white p-6 rounded-xl shadow-lg border-t-2 border-gray-200 lg:col-span-4">
+                <h3 class="text-xl font-semibold mb-4 text-gray-700">Recent Activity Log 🔔</h3>
+                <p class="text-gray-500 text-sm mb-4">Latest actions requiring attention or simply for tracking.</p>
+                <div class="overflow-x-auto"> 
+                    <ul class="mt-4 space-y-2 text-sm text-gray-600 min-w-full">
+                        </ul>
+                </div>
+            </div>
+
+        </section>
+
+        <section id="content-settings" class="content-section p-6 pt-16 lg:pt-6 hidden">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6">Application Settings ⚙️</h2>
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <p class="text-gray-700 text-sm">Manage core configurations and system parameters for the e-commerce platform.</p>
+                <div class="mt-6 space-y-4">
+                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <label for="maintenance-mode" class="text-gray-600 text-sm">Enable Maintenance Mode</label>
+                        <input type="checkbox" id="maintenance-mode" class="h-4 w-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500">
+                    </div>
+                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <label for="max-users" class="text-gray-600 text-sm">Max Registered Users Limit</label>
+                        <input type="number" id="max-users" value="1000" class="w-24 border border-gray-300 rounded-md p-1 text-center text-sm focus:border-emerald-500 focus:ring-emerald-500">
+                    </div>
+                </div>
+                <button class="mt-6 w-full py-2 px-4 bg-emerald-600 text-white font-medium rounded-lg shadow-md hover:bg-emerald-700 transition duration-200">
+                    Save Settings
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+    // --- JAVASCRIPT LOGIC ---
+
+    const totalSalesElement = document.getElementById('total-sales');
+    const wearsStockElement = document.getElementById('wears-stock');
+    const capsStockElement = document.getElementById('caps-stock');
+    const newArrivalsStockElement = document.getElementById('new-arrivals-stock');
+    const preOrderStockElement = document.getElementById('pre-order-stock');
+    const registeredUsersElement = document.getElementById('registered-users');
+    const activeSubscriptionsElement = document.getElementById('active-subscriptions'); 
+    const loadingIndicator = document.getElementById('loading-indicator');
+    const metricCards = document.getElementById('metric-cards');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    const contentSections = document.querySelectorAll('.content-section');
+    const navButtons = document.querySelectorAll('nav button'); 
+
+    // --- NAVIGATION FUNCTIONS (for redirection) ---
+
+    function navigateToUserOrders() {
+        // Close sidebar on mobile before redirecting
+        if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full');
+        window.location.href = './userorders.html';
+    }
+    
+    function navigateToWearsCollection() {
+        // Close sidebar on mobile before redirecting
+        if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full');
+        window.location.href = './wearscollection.html';
+    }
+
+    function navigateToCapsCollection() {
+        // Close sidebar on mobile before redirecting
+        if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full');
+        window.location.href = './capscollection.html';
+    }
+    
+    function navigateToNewArrivals() {
+        // Close sidebar on mobile before redirecting
+        if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full');
+        window.location.href = './newarrivals.html';
+    }
+
+    function navigateToPreOrders() {
+        // Close sidebar on mobile before redirecting
+        if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full');
+        window.location.href = './preorders.html';
+    }
+
+    function navigateToMembership() {
+        // Close sidebar on mobile before redirecting
+        if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full');
+        window.location.href = './membership.html'; 
+    }
+
+      function navigateToEmailNews() {
+        // Close sidebar on mobile before redirecting
+        if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full');
+        window.location.href = './emailnews.html'; 
+    }
+    
+         function navigateToSettings() {
+        // Close sidebar on mobile before redirecting
+        if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full');
+        window.location.href = './settings.html'; 
+    }
+
+    /**
+      * Handles the admin logout process.
+      */
+    function logoutAdmin() {
+        console.log("Logging out... Clearing admin token.");
+        localStorage.removeItem('adminToken');
+        window.location.href = './admin-login.html'; 
+    }
+
+    // --- INITIALIZATION AND UI LOGIC ---
+
+    // Initial setup to show the Dashboard
+    document.addEventListener('DOMContentLoaded', () => {
+        setActiveContent('dashboard');
+        loadDashboardData();
+        
+        // **CRITICAL MOBILE FIX:** Toggle sidebar visibility on mobile
+        sidebarToggle.addEventListener('click', (event) => {
+            event.stopPropagation(); // Prevent the main content click from immediately closing it
+            // Toggle the -translate-x-full class to slide the sidebar in/out
+            sidebar.classList.toggle('-translate-x-full');
+        });
+
+        // Close sidebar on content click/outside click on small screens
+        document.querySelector('main').addEventListener('click', (event) => {
+             // Only close if the main content is clicked AND the sidebar is open AND it's a small screen
+             if (!sidebar.classList.contains('-translate-x-full') && window.innerWidth < 1024) {
+                 sidebar.classList.add('-translate-x-full');
+             }
+        });
+        
+        // Prevent click inside sidebar from closing it (on mobile)
+        sidebar.addEventListener('click', (event) => {
+            event.stopPropagation();
+        });
+    });
+
+    // Function to switch between Dashboard, and Settings content (Internal Pages)
+    function setActiveContent(contentId) {
+        contentSections.forEach(section => {
+            section.classList.add('hidden');
+        });
+
+        // Check if the requested content ID exists before trying to display it
+        const contentElement = document.getElementById(`content-${contentId}`);
+        if (contentElement) {
+            contentElement.classList.remove('hidden');
+        } else if (['userorders', 'newarrivals', 'capscollection', 'wearscollection', 'preorders', 'membership'].includes(contentId)) { 
+            // Handle clicks on redirect buttons that also use setActiveContent (e.g., if they were internal initially)
+            console.log(`Content section 'content-${contentId}' is a redirect. Reverting to dashboard view for internal state.`);
+            document.getElementById('content-dashboard').classList.remove('hidden');
+            contentId = `dashboard`; // Force the active state back to dashboard for internal buttons
+        }
+
+
+        navButtons.forEach(button => {
+            const buttonContentId = button.id.replace('btn-', '');
+            // List all buttons that are *not* internal sections (and are redirects or logout)
+            if (['userorders', 'wearscollection', 'capscollection', 'newarrivals', 'preorders', 'membership', 'logout'].includes(buttonContentId)) { 
+                // Remove active styles for redirect/logout buttons
+                button.classList.remove('bg-emerald-600', 'hover:bg-emerald-700', 'active-link', 'text-white');
+                button.classList.add('hover:bg-emerald-800', 'text-emerald-200', 'hover:text-white');
+                return; 
+            }
+
+            // Reset inactive styles for internal pages
+            button.classList.remove('bg-emerald-600', 'hover:bg-emerald-700', 'active-link', 'text-white');
+            button.classList.add('hover:bg-emerald-800', 'text-emerald-200', 'hover:text-white');
+        });
+
+        const activeBtnId = `btn-${contentId}`;
+        const activeBtn = document.getElementById(activeBtnId);
+        
+        if (activeBtn) {
+            // Set active styles
+            activeBtn.classList.remove('hover:bg-emerald-800', 'text-emerald-200', 'hover:text-white');
+            activeBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700', 'active-link', 'text-white');
+        } 
+        
+        // Hide sidebar on small screens after selection
+        if (window.innerWidth < 1024) {
+            sidebar.classList.add('-translate-x-full');
+        }
+    }
+
+    // --- DATA FETCHING AND RENDERING LOGIC ---
+
+    /**
+      * Fetches real-time dashboard statistics from the Node.js/MongoDB API.
+      */
+    async function fetchDashboardData() {
+        const token = localStorage.getItem('adminToken'); // Get the actual token
+        
+        if (!token) {
+            console.error("[FRONTEND] No adminToken found. Redirecting to login for authentication.");
+            window.location.href = './admin-login.html'; 
+            return null;
+        }
+
+        try {
+            console.log('[FRONTEND] Attempting to fetch dashboard stats from API...');
+            // IMPORTANT: Replace this with your actual backend endpoint if deploying
+            const response = await fetch('/api/admin/dashboard/stats', { 
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}` 
+                }
+            });
+
+            if (!response.ok) {
+                if (response.status === 401 || response.status === 403) {
+                    console.error('[FRONTEND] Unauthorized access. Token expired or invalid. Logging out.');
+                    logoutAdmin(); // Log out and redirect on Auth failure
+                    return null;
+                }
+                console.error(`[FRONTEND] API call failed with status: ${response.status}`);
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+          const data = await response.json();
+            
+            console.log('[FRONTEND] Data received from API:', data); 
+            console.log(`[FRONTEND] Received totalSales: ${data.totalSales}, Type: ${typeof data.totalSales}`);
+
+            return {
+                totalSales: data.totalSales || 0,
+                wearsStock: data.wearsStock || 0, 
+                capsStock: data.capsStock || 0, 
+                newArrivalsStock: data.newArrivalsStock || 0, 
+                preOrderStock: data.preOrderStock || 0, 
+                registeredUsers: data.userCount || 0,
+                activeSubscriptions: data.activeSubscriptions || 0, // NEW: Added this field
+                recentActivity: data.recentActivity || [] 
+            };
+
+        } catch (error) {
+            console.error('[FRONTEND] Error fetching dashboard data:', error);
+            return null;
+        }
+    }
+
+    // Function to load and display data
+    async function loadDashboardData() {
+        loadingIndicator.classList.remove('hidden');
+        metricCards.classList.add('hidden');
+
+        const data = await fetchDashboardData();
+
+        loadingIndicator.classList.add('hidden');
+
+        if (data) {
+            // Format Sales as Nigerian Naira (NGN)
+            const salesFormatted = new Intl.NumberFormat('en-NG', {
+                style: 'currency',
+                currency: 'NGN',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2,
+            }).format(data.totalSales);
+
+            totalSalesElement.textContent = salesFormatted;
+            
+            // Display individual stock counts
+            wearsStockElement.textContent = data.wearsStock.toLocaleString();
+            capsStockElement.textContent = data.capsStock.toLocaleString();
+            newArrivalsStockElement.textContent = data.newArrivalsStock.toLocaleString();
+            preOrderStockElement.textContent = data.preOrderStock.toLocaleString();
+            
+            
+            registeredUsersElement.textContent = data.registeredUsers.toLocaleString();
+            metricCards.classList.remove('hidden');
+            renderActivityLog(data.recentActivity);
+        } else {
+            // Display error state if data fetching fails
+            metricCards.innerHTML = '<div class="md:col-span-3 lg:col-span-4 text-center p-8 bg-red-100 text-red-700 rounded-xl shadow-lg">Failed to load dashboard data. Please check the API connection.</div>';
+            metricCards.classList.remove('hidden');
+        }
+    /**
+      * Function to calculate "time ago" string
+      * Defined once for efficiency.
+      */
+    function formatTimeAgo(date) {
+        const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+        let interval = seconds / 31536000;
+        if (interval > 1) return Math.floor(interval) + " years ago";
+        interval = seconds / 2592000;
+        if (interval > 1) return Math.floor(interval) + " months ago";
+        interval = seconds / 86400;
+        if (interval > 1) return Math.floor(interval) + " days ago";
+        interval = seconds / 3600;
+        if (interval > 1) return Math.floor(interval) + " hours ago";
+        interval = seconds / 60;
+        if (interval > 1) return Math.floor(interval) + " minutes ago";
+        return Math.floor(seconds) + " seconds ago";
+    }
+
+   /**
+      * Dynamically renders the recent activity log on the dashboard.
+      * @param {Array<Object>} activities - Array of recent activity objects.
+      */
+    function renderActivityLog(activities) {
+        const logList = document.querySelector('#content-dashboard .mt-8 ul');
+        if (!logList) return; 
+
+        logList.innerHTML = '';
+        
+        if (activities.length === 0) {
+            logList.innerHTML = '<li class="p-3 text-center text-gray-400">No recent activity recorded.</li>';
+            return;
+        }
+        
+        activities.forEach(activity => {
+            const li = document.createElement('li');
+            
+            // ⭐️ NEW LOGIC: Determine the user's name for display 
+            const user = activity.userId; // This is the populated object now
+            const displayUser = user 
+                ? (user.username || user.email || 'Customer')
+                : 'System User';
+
+            // Determine colors and icon based on event type
+            let borderColor = 'border-gray-200';
+            let bgColor = 'bg-white';
+            let icon = '➡️';
+            let eventText = activity.description;
+
+            switch (activity.eventType) {
+                case 'ORDER_PLACED':
+                    borderColor = 'border-emerald-400';
+                    bgColor = 'bg-emerald-50';
+                    icon = '💰';
+                    // Rephrase description to highlight the user
+                    eventText = `placed new order (Order #${activity.context.orderId || 'N/A'})`; 
+                    break;
+                case 'REGISTERED':
+                    borderColor = 'border-cyan-400';
+                    bgColor = 'bg-cyan-50';
+                    icon = '✨';
+                    eventText = 'just created a new account.';
+                    break;
+                case 'LOGIN': 
+                    borderColor = 'border-purple-400';
+                    bgColor = 'bg-purple-50';
+                    icon = '🔑';
+                    eventText = 'logged in successfully.';
+                    break;
+                case 'MEMBERSHIP_SUBSCRIBED': 
+                    borderColor = 'border-red-400';
+                    bgColor = 'bg-red-50';
+                    icon = '💳';
+                    eventText = 'subscribed to a membership.';
+                    break;
+                // Add cases for FORGOT_PASSWORD and others as needed
+            }
+
+            li.classList.add(borderColor, bgColor, 'hover:shadow-sm', 
+                                 'p-3', 'border-l-4', 'rounded-md', 'flex', 
+                                 'justify-between', 'items-center', 'space-y-2');
+
+            const timeAgo = formatTimeAgo(activity.timestamp);
+            
+            li.innerHTML = `
+                <div class="flex items-center space-x-3 w-4/5">
+                    <span class="text-lg">${icon}</span>
+                    <p class="truncate">
+                        <span class="font-semibold text-gray-800">${displayUser}</span>
+                        ${eventText}
+                    </p>
+                </div>
+                <span class="text-xs text-gray-400 whitespace-nowrap">${timeAgo}</span>
+            `;
+            
+            logList.appendChild(li);
+        });
+    }
+    }
+    </script>
+</body>
+</html>

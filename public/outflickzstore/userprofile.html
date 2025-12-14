@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Profile | Outflickz</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
+
+
+    <style>
+        /* Define a primary brand color for ash-red to ensure consistency and modern look */
+        .text-ash-red { color: #D63031; }
+        .bg-ash-red { background-color: #D63031; }
+        .hover\:bg-ash-red-dark:hover { background-color: #A32324; }
+        .border-ash-red { border-color: #D63031; }
+        /* Modal backdrop styling */
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+        /* Custom scroll-margin for smooth link jumps */
+        .scroll-mt-24 { scroll-margin-top: 6rem; } 
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-900 antialiased">
+    
+    <script>
+    const API_BASE_URL = 'https://outflickz.com';
+
+    let currentProfileData = {
+        profile: {},
+        address: {},
+        status: {},
+        membership: {},
+        orders: []
+    };
+
+    function redirectToProfileOrLogin() {
+        window.location.href = 'useraccount.html';
+    }
+    function toggleMenu() {
+        const mobileMenu = document.getElementById('mobile-menu');
+        mobileMenu.classList.toggle('hidden');
+    }
+
+    // ⭐ CRITICAL SECURITY UPDATE: Needs server endpoint to clear HTTP-only cookie
+    async function logoutUser() {
+        // 1. Attempt to call server endpoint to clear the HTTP-only cookie
+        try {
+            await fetch(`${API_BASE_URL}/api/users/logout`, {
+                method: 'POST',
+                credentials: 'include' 
+            });
+        } catch (error) {
+            console.warn('Server logout call failed or was unreachable, proceeding with client-side redirect.', error);
+        }
+        
+        // 2. Client-side cleanup and redirect
+        localStorage.removeItem('outflickzToken'); 
+        window.location.replace('useraccount.html');
+    }
+
+    // --- Modal Functions ---
+    function closeModal(modalId) {
+        document.getElementById(modalId).classList.add('hidden');
+    }
+
+    function openChangePasswordModal() {
+    const modal = document.getElementById('change-password-modal');
+    modal.classList.remove('hidden');
+    // Optional: Clear form on open
+    document.getElementById('change-password-form').reset();
+}
+
+    function openEditProfileModal() {
+        const modal = document.getElementById('edit-profile-modal');
+        modal.classList.remove('hidden');
+
+        // Pre-fill form fields with current data
+        document.getElementById('edit-profile-firstName').value = currentProfileData.profile.firstName || '';
+        document.getElementById('edit-profile-lastName').value = currentProfileData.profile.lastName || '';
+        document.getElementById('edit-profile-phone').value = currentProfileData.profile.phone || '';
+        // 🎉 NEW: Pre-fill whatsapp
+        document.getElementById('edit-profile-whatsapp').value = currentProfileData.profile.whatsapp || '';
+    }
+
+    function openEditAddressModal() {
+        const modal = document.getElementById('edit-address-modal');
+        modal.classList.remove('hidden');
+
+        const address = currentProfileData.address || {}; 
+        
+        // Pre-fill form fields with current data
+        document.getElementById('edit-address-street').value = address.street || '';
+        document.getElementById('edit-address-city').value = address.city || '';
+        document.getElementById('edit-address-state').value = address.state || '';
+        document.getElementById('edit-address-zip').value = address.zip || '';
+        document.getElementById('edit-address-country').value = address.country || '';
+    }
+
+    function showStatusMessage(message, isSuccess = true) {
+        const container = document.getElementById('status-message-container');
+        const messageBox = document.getElementById('status-message');
+        
+        messageBox.textContent = message;
+        container.classList.remove('hidden', 'bg-green-100', 'bg-red-100', 'text-green-800', 'text-red-800');
+
+        if (isSuccess) {
+            container.classList.add('bg-green-100', 'text-green-800');
+        } else {
+            container.classList.add('bg-red-100', 'text-red-800');
+        }
+
+        setTimeout(() => {
+            container.classList.add('hidden');
+        }, 5000);
+    }
+
+    // --- New Function for Password Visibility ---
+function togglePasswordVisibility(inputId, iconId) {
+    const input = document.getElementById(inputId);
+    const icon = document.getElementById(iconId);
+
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+    }
+}
+
+    // --- Submission Handlers (Personal Information) ---
+    async function submitEditProfile(event) {
+        event.preventDefault();
+        const button = document.getElementById('submit-profile-btn');
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = 'Updating...';
+
+        const profileData = {
+            firstName: document.getElementById('edit-profile-firstName').value.trim(),
+            lastName: document.getElementById('edit-profile-lastName').value.trim(),
+            phone: document.getElementById('edit-profile-phone').value.trim(),
+            // 🎉 NEW: Get WhatsApp value
+            whatsapp: document.getElementById('edit-profile-whatsapp').value.trim() 
+        };
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/users/profile`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(profileData),
+                credentials: 'include'
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                showStatusMessage(data.message || 'Failed to update personal details.', false);
+                throw new Error(data.message || 'Update failed');
+            }
+
+            // SUCCESS: Update current data and re-render DOM
+            currentProfileData.profile = data.profile;
+            updateDOM(currentProfileData);
+            closeModal('edit-profile-modal');
+            showStatusMessage('Personal details updated successfully!', true);
+
+        } catch (error) {
+            console.error('Profile Update Error:', error);
+            if (!document.getElementById('status-message-container').classList.contains('bg-red-100')) {
+                showStatusMessage('An unexpected error occurred during profile update.', false);
+            }
+        } finally {
+            button.disabled = false;
+            button.textContent = originalText;
+        }
+    }
+
+    // --- Submission Handlers (Contact Address) ---
+    async function submitEditAddress(event) {
+        event.preventDefault();
+        const button = document.getElementById('submit-address-btn');
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = 'Updating...';
+
+        const addressData = {
+            street: document.getElementById('edit-address-street').value.trim(),
+            city: document.getElementById('edit-address-city').value.trim(),
+            state: document.getElementById('edit-address-state').value.trim(),
+            zip: document.getElementById('edit-address-zip').value.trim(),
+            country: document.getElementById('edit-address-country').value.trim()
+        };
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/users/address`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(addressData),
+                credentials: 'include'
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                showStatusMessage(data.message || 'Failed to update contact address.', false);
+                throw new Error(data.message || 'Update failed');
+            }
+
+            // SUCCESS: Update current data and re-render DOM
+            currentProfileData.address = data.address;
+            updateDOM(currentProfileData);
+            closeModal('edit-address-modal');
+            showStatusMessage('Contact address updated successfully!', true);
+
+        } catch (error) {
+            console.error('Address Update Error:', error);
+            if (!document.getElementById('status-message-container').classList.contains('bg-red-100')) {
+                showStatusMessage('An unexpected error occurred during address update.', false);
+            }
+        } finally {
+            button.disabled = false;
+            button.textContent = originalText;
+        }
+    }
+
+    // --- Fetch and Render Order History (Mock Data Removed) ---
+    async function fetchOrderHistory() {
+        const orderList = document.getElementById('order-history-list');
+        orderList.innerHTML = `
+            <div class="flex justify-center items-center py-10">
+                <i class="fas fa-spinner fa-spin text-3xl text-ash-red"></i>
+                <p class="ml-3 text-gray-600">Loading orders...</p>
+            </div>
+        `;
+        
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/orders/history`, { credentials: 'include' });
+            
+            if (!response.ok) {
+                // If the user isn't authorized or the API fails, show an error and return
+                const errorText = await response.text();
+                console.error(`Failed to fetch order history (Status: ${response.status}):`, errorText);
+                document.getElementById('order-history-list').innerHTML = '<p class="text-red-500 italic">Failed to load order history. Please ensure you are logged in.</p>';
+                return;
+            }
+
+            const data = await response.json();
+            currentProfileData.orders = data.orders || [];
+            
+            renderOrderHistory(currentProfileData.orders);
+
+        } catch (error) {
+            console.error('Error fetching order history:', error);
+            document.getElementById('order-history-list').innerHTML = '<p class="text-red-500 italic">Network error fetching order history.</p>';
+        }
+    }
+
+   function renderOrderHistory(orders) {
+        const orderList = document.getElementById('order-history-list');
+        orderList.innerHTML = ''; // Clear existing content
+
+        if (orders.length === 0) {
+            orderList.innerHTML = '<p class="text-gray-500 italic">You have no previous orders.</p>';
+            return;
+        }
+
+        const tableBody = orders.map(order => {
+            let statusClass = '';
+            let statusIcon = '';
+            switch(order.status) {
+                case 'Delivered':
+                    statusClass = 'bg-green-100 text-green-800';
+                    statusIcon = 'check-circle';
+                    break;
+                case 'Shipped':
+                    statusClass = 'bg-blue-100 text-blue-800';
+                    statusIcon = 'truck';
+                    break;
+                case 'Processing':
+                    statusClass = 'bg-yellow-100 text-yellow-800';
+                    statusIcon = 'sync-alt fa-spin';
+                    break;
+                case 'Cancelled':
+                    statusClass = 'bg-red-100 text-red-800';
+                    statusIcon = 'times-circle';
+                    break;
+                default:
+                    statusClass = 'bg-gray-100 text-gray-700';
+                    statusIcon = 'info-circle';
+            }
+            const formattedDate = new Date(order.date).toLocaleDateString('en-US');
+            // ⭐ CURRENCY CORRECTION: Changed '$' to '₦'
+            const formattedTotal = order.total.toFixed(2);
+
+            return `
+                <tr class="border-b hover:bg-gray-50 transition">
+                    <td class="px-6 py-4 font-medium text-gray-900">${order.id}</td>
+                    <td class="px-6 py-4">${formattedDate}</td>
+                    <td class="px-6 py-4">₦${formattedTotal}</td> 
+                    <td class="px-6 py-4">
+                        <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium ${statusClass}">
+                            <i class="fas fa-${statusIcon} mr-2"></i>
+                            ${order.status}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <a href="order-details.html?id=${order.id}" class="text-ash-red hover:text-ash-red-dark font-medium">
+                            View Details
+                        </a>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        orderList.innerHTML = `
+            <div class="overflow-x-auto shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th scope="col" class="relative px-6 py-3"><span class="sr-only">Details</span></th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        ${tableBody}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    /**
+     * Populates the DOM with the latest user data object.
+     */
+    function updateDOM(data) {
+        const profile = data.profile || {};
+        const status = data.status || {};
+        const membership = data.membership || {};
+        const address = data.address || {}; 
+        
+        const fullName = `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 'Guest User';
+        const emailAddress = data.email || 'Email Not Available'; 
+        const userRole = status.role || 'user';
+        const isVerified = status.isVerified;
+        // Use the existing memberSince data if available, otherwise process the new one
+        const memberSince = membership.memberSince ? new Date(membership.memberSince).toLocaleDateString() : 'N/A';
+
+        document.getElementById('user-name').textContent = fullName;
+        document.getElementById('user-email').textContent = emailAddress;
+        document.getElementById('user-role').textContent = userRole.toUpperCase();
+        document.getElementById('user-verification').innerHTML = isVerified 
+            ? '<span class="text-green-600 font-bold"><i class="fas fa-check-circle mr-1"></i> Verified</span>'
+            : '<span class="text-red-600 font-bold"><i class="fas fa-times-circle mr-1"></i> Unverified</span>';
+        document.getElementById('member-since').textContent = memberSince;
+        document.getElementById('user-phone').textContent = profile.phone || 'Not Set';
+        // 🎉 NEW: Update WhatsApp display
+        document.getElementById('user-whatsapp').textContent = profile.whatsapp || 'Not Set';
+
+
+        document.getElementById('street-address').textContent = address.street || 'Not Set';
+        document.getElementById('city-state-zip').textContent = `${address.city || 'Not Set'}, ${address.state || 'Not Set'} ${address.zip || ''}`;
+        document.getElementById('country').textContent = address.country || 'Not Set';
+        
+        // --- Dynamic Address Button Text ---
+        const isAddressSet = address.street && address.city && address.country;
+        const editAddressButton = document.getElementById('edit-address-button');
+
+        if (editAddressButton) {
+            if (isAddressSet) {
+                editAddressButton.innerHTML = '<i class="fas fa-edit mr-1"></i> Edit';
+                editAddressButton.setAttribute('aria-label', 'Edit Contact Address');
+            } else {
+                editAddressButton.innerHTML = '<i class="fas fa-plus-circle mr-1"></i> Set Address';
+                editAddressButton.setAttribute('aria-label', 'Set Contact Address');
+            }
+        }
+    }
+
+    // --- Submission Handlers (Change Password) ---
+async function submitChangePassword(event) {
+    event.preventDefault();
+    const button = document.getElementById('submit-password-btn');
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Updating...';
+
+    const oldPassword = document.getElementById('change-password-old').value;
+    const newPassword = document.getElementById('change-password-new').value;
+    const confirmPassword = document.getElementById('change-password-confirm').value;
+
+    if (newPassword !== confirmPassword) {
+        showStatusMessage('New password and confirmation do not match.', false);
+        button.disabled = false;
+        button.textContent = originalText;
+        return;
+    }
+
+    const passwordData = {
+        currentPassword: oldPassword, // Changed key name to match server expectation
+        newPassword: newPassword
+    };
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/users/change-password`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(passwordData),
+            credentials: 'include'
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            showStatusMessage(data.message || 'Failed to change password.', false);
+            throw new Error(data.message || 'Password change failed');
+        }
+
+        // SUCCESS
+        closeModal('change-password-modal');
+        showStatusMessage('Password updated successfully! Please log in again using your new password.', true);
+        
+        // Optional: Force user to log out after successful password change
+        setTimeout(logoutUser, 3000); 
+
+    } catch (error) {
+        console.error('Password Change Error:', error);
+        if (!document.getElementById('status-message-container').classList.contains('bg-red-100')) {
+            showStatusMessage('An unexpected error occurred during password change.', false);
+        }
+    } finally {
+        button.disabled = false;
+        button.textContent = originalText;
+    }
+}
+    
+    /**
+     * Attempts to fetch user data and redirects to login on failure (401/403).
+     * MOCK DATA REMOVED.
+     */
+    async function fetchUserData() {
+        const mainContent = document.getElementById('main-profile-content');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/users/account`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include' 
+            });
+            
+            console.log(`Fetch Status: ${response.status}`); 
+
+            if (!response.ok) {
+                // Real failure path: Redirect to login/account page
+                console.error(`Authentication failed (Status: ${response.status}). Redirecting.`);
+                
+                // Hide everything
+                if (loadingIndicator) loadingIndicator.classList.add('hidden');
+                if (mainContent) mainContent.classList.add('hidden');
+
+                // Redirect after a brief delay
+                setTimeout(() => {
+                    window.location.replace('useraccount.html');
+                }, 100); 
+                return; // Stop execution here
+            } 
+            
+            // Real success path
+            const data = await response.json();
+            console.log('User Data fetched successfully:', data);
+            currentProfileData = data;
+            updateDOM(data); 
+
+            // Fetch and render order history after profile data is loaded
+            await fetchOrderHistory(); 
+
+            // Show content
+            if (loadingIndicator) loadingIndicator.classList.add('hidden');
+            if (mainContent) mainContent.classList.remove('hidden');
+
+        } catch (error) {
+            console.error("Fetch user data error:", error);
+            // Hide everything and redirect on fatal network failure
+            if (loadingIndicator) loadingIndicator.classList.add('hidden');
+            if (mainContent) mainContent.classList.add('hidden');
+            
+            setTimeout(() => {
+                window.location.replace('useraccount.html');
+            }, 100); 
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', fetchUserData);
+    </script>
+
+    <header class="bg-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <a href="homepage.html" class="flex items-center" aria-label="Outflickz Home">
+                <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-10">
+            </a>
+
+            <nav class="hidden md:flex flex-grow justify-center space-x-6 lg:space-x-10 text-sm" aria-label="Main Navigation">
+                <a href="homepage.html" class="font-medium text-color-black hover:text-gray-600 transition">Homepage</a>
+                <a href="wearscollection.html" class="font-bold text-ash-red transition flex items-center border-b-2 border-ash-red">Wears Collections</a>
+                <a href="newarrivals.html" class="font-medium text-color-black hover:text-gray-600 transition">New Arrivals</a>
+                <a href="capcollection.html" class="font-medium text-color-black hover:text-gray-600 transition flex items-center">Cap Collections</a>
+                <a href="preorder.html" class="font-medium text-color-black hover:text-gray-600 transition">Pre Order</a>
+            </nav>
+
+
+            <div class="flex items-center space-x-3 sm:space-x-4">
+                <a href="cart.html" class="relative p-2 text-gray-600 hover:text-ash-red transition rounded-full" aria-label="Shopping Bag">
+                    <i class="fas fa-shopping-bag w-5 h-5"></i>
+                    <span id="cart-badge" class="absolute top-0 right-0 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-ash-red border border-white rounded-full transform translate-x-1/3 -translate-y-1/3 hidden">
+                        0
+                    </span>
+                </a>
+                <button class="md:hidden p-2 text-gray-600 hover:text-ash-red transition rounded-full focus:outline-none" onclick="toggleMenu()" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open main menu">
+                    <i class="fas fa-bars w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div id="mobile-menu" class="hidden md:hidden bg-white border-b border-gray-100 absolute w-full z-40 shadow-lg">
+        <div class="px-4 pt-2 pb-3 space-y-1 text-base">
+            <a href="homepage.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Homepage</a>
+            <a href="preorder.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Pre Order</a>
+            <a href="newarrivals.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">New Arrivals</a>
+            <a href="wearscollection.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Wears Collection</a>
+            <a href="capcollection.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Cap Collection</a>
+            <a href="userprofile.html" class="block px-3 py-2 font-bold text-white bg-ash-red rounded-lg mt-2">Account</a>
+        </div>
+    </div>
+    
+    <div id="loading-indicator" class="flex flex-col justify-center items-center h-48 mt-20 text-gray-600">
+        <i class="fas fa-spinner fa-spin text-4xl mb-3 text-ash-red"></i> 
+        <p class="text-lg">Verifying session...</p>
+    </div>
+
+    <main id="main-profile-content" class="hidden container mx-auto p-4 sm:p-8 mt-4 sm:mt-8 lg:mt-12 max-w-6xl">
+        
+        <div id="status-message-container" class="hidden p-4 mb-4 rounded-lg transition-opacity duration-300">
+            <p id="status-message" class="font-medium"></p>
+        </div>
+
+        <div class="bg-white shadow-2xl rounded-xl p-6 sm:p-10 border border-gray-100">
+            
+            <div class="mb-8 border-b border-gray-100 pb-6">
+                <h2 class="text-4xl sm:text-5xl font-extrabold text-gray-900 mb-2 flex items-center">
+                    👋 User Dashboard 
+                </h2>
+                <p class="text-gray-500 text-lg">
+                    Manage your personal information, address, and order history.
+                </p>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                <aside class="lg:col-span-1">
+                    <nav class="space-y-2 p-2 bg-gray-50 rounded-lg border border-gray-100 sticky top-24">
+                        <a href="#profile-details" class="flex items-center p-3 rounded-lg bg-ash-red text-white font-bold transition duration-150 shadow-md">
+                            <i class="fas fa-user-circle mr-3"></i> Profile Details
+                        </a>
+                        <a href="#order-history" class="flex items-center p-3 rounded-lg text-gray-700 hover:bg-gray-100 font-medium transition duration-150">
+                            <i class="fas fa-history mr-3"></i> Order History
+                        </a>
+                        <a href="#settings" class="flex items-center p-3 rounded-lg text-gray-700 hover:bg-gray-100 font-medium transition duration-150">
+                            <i class="fas fa-cog mr-3"></i> Settings
+                        </a>
+                        <button onclick="logoutUser()" class="flex items-center w-full text-left p-3 rounded-lg text-red-600 hover:bg-red-50 font-medium transition duration-150 mt-4 border-t border-gray-100 pt-3">
+                            <i class="fas fa-sign-out-alt mr-3"></i> Log Out
+                        </button>
+                    </nav>
+                </aside> 
+                
+                <section class="lg:col-span-3 space-y-10">
+                    
+                    <div id="profile-details" class="scroll-mt-24 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                        <h3 class="font-extrabold text-2xl text-ash-red border-b-2 border-ash-red pb-3 mb-6 flex justify-between items-center">
+                            Personal Information
+                            <button onclick="openEditProfileModal()" class="text-sm text-blue-600 hover:text-blue-800 font-medium p-1 rounded-md transition duration-150" aria-label="Edit Profile Details">
+                                <i class="fas fa-edit mr-1"></i> Edit
+                            </button>
+                        </h3>
+                        
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 text-gray-700">
+                            <div>
+                                <p class="text-sm text-gray-500 font-medium uppercase">Name</p>
+                                <p class="text-lg font-semibold" id="user-name">Loading...</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500 font-medium uppercase">Email</p>
+                                <p class="text-lg font-semibold" id="user-email">Loading...</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500 font-medium uppercase">Account Role</p>
+                                <p class="text-lg font-semibold" id="user-role">Loading...</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500 font-medium uppercase">Verification Status</p>
+                                <p class="text-lg font-semibold" id="user-verification">Loading...</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500 font-medium uppercase">Member Since</p>
+                                <p class="text-lg font-semibold" id="member-since">Loading...</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500 font-medium uppercase">Phone</p>
+                                <p class="text-lg font-semibold" id="user-phone">Not Set</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500 font-medium uppercase">WhatsApp</p>
+                                <p class="text-lg font-semibold" id="user-whatsapp">Not Set</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="contact-address" class="scroll-mt-24 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                        <h3 class="font-extrabold text-2xl text-ash-red border-b-2 border-ash-red pb-3 mb-6 flex justify-between items-center">
+                            Contact Address
+                            <button id="edit-address-button" onclick="openEditAddressModal()" class="text-sm text-blue-600 hover:text-blue-800 font-medium p-1 rounded-md transition duration-150" aria-label="Edit Contact Address">
+                                <i class="fas fa-edit mr-1"></i> Edit
+                            </button>
+                        </h3>
+                        
+                        <div class="space-y-4 text-gray-700">
+                            <div>
+                                <p class="text-sm text-gray-500 font-medium uppercase">Street Address</p>
+                                <p class="text-lg font-semibold" id="street-address">Not Set</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500 font-medium uppercase">City / State / Zip</p>
+                                <p class="text-lg font-semibold" id="city-state-zip">Not Set</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500 font-medium uppercase">Country</p>
+                                <p class="text-lg font-semibold" id="country">Not Set</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="order-history" class="scroll-mt-24 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                        <h3 class="font-extrabold text-2xl text-ash-red border-b-2 border-ash-red pb-3 mb-6 flex justify-between items-center">
+                            Order History 🛒
+                        </h3>
+                        
+                        <div id="order-history-list">
+                            <div class="flex justify-center items-center py-10">
+                                <i class="fas fa-spinner fa-spin text-3xl text-ash-red"></i>
+                                <p class="ml-3 text-gray-600">Loading orders...</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                   <div id="settings" class="scroll-mt-24 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+    <h3 class="font-extrabold text-2xl text-ash-red border-b-2 border-ash-red pb-3 mb-6 flex justify-between items-center">
+        Settings <i class="fas fa-cog"></i>
+    </h3>
+    
+    <div class="space-y-4">
+        <div class="p-4 border rounded-lg flex items-center justify-between bg-gray-50">
+            <p class="text-gray-700 font-medium">Change Account Password</p>
+            <button onclick="openChangePasswordModal()" class="px-4 py-2 bg-ash-red text-white rounded-lg hover:bg-ash-red-dark transition font-medium" aria-label="Open change password form">
+                <i class="fas fa-key mr-1"></i> Change Password
+            </button>
+        </div>
+        
+        <div class="p-4 border rounded-lg flex items-center justify-between bg-gray-50 opacity-50 cursor-not-allowed">
+            <p class="text-gray-700 font-medium">Notification Preferences (Future feature)</p>
+            <button disabled class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg transition font-medium">
+                Manage
+            </button>
+        </div>
+    </div>
+</div>
+
+    </main>
+    
+    <div id="edit-profile-modal" class="hidden fixed inset-0 z-[60] overflow-y-auto modal-backdrop flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-auto transform transition-all">
+            <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+                <h3 class="text-xl font-bold text-ash-red">Edit Personal Details</h3>
+                <button onclick="closeModal('edit-profile-modal')" class="text-gray-400 hover:text-gray-600 transition" aria-label="Close modal">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <form id="edit-profile-form" onsubmit="submitEditProfile(event)" class="p-6 space-y-4">
+                
+                <div>
+                    <label for="edit-profile-firstName" class="block text-sm font-medium text-gray-700">First Name</label>
+                    <input type="text" id="edit-profile-firstName" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-ash-red focus:border-ash-red">
+                </div>
+
+                <div>
+                    <label for="edit-profile-lastName" class="block text-sm font-medium text-gray-700">Last Name</label>
+                    <input type="text" id="edit-profile-lastName" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-ash-red focus:border-ash-red">
+                </div>
+
+                <div>
+                    <label for="edit-profile-phone" class="block text-sm font-medium text-gray-700">Phone Number (Optional)</label>
+                    <input type="tel" id="edit-profile-phone" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-ash-red focus:border-ash-red">
+                </div>
+                
+                <div>
+                    <label for="edit-profile-whatsapp" class="block text-sm font-medium text-gray-700">WhatsApp Number (Optional)</label>
+                    <input type="tel" id="edit-profile-whatsapp" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-ash-red focus:border-ash-red" placeholder="e.g., +15551234567">
+                </div>
+                <div class="flex justify-end pt-4 space-x-3 border-t border-gray-100 mt-6">
+                    <button type="button" onclick="closeModal('edit-profile-modal')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition duration-150">Cancel</button>
+                    <button type="submit" id="submit-profile-btn" class="px-4 py-2 bg-ash-red text-white rounded-lg hover:bg-ash-red-dark font-medium transition duration-150">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="edit-address-modal" class="hidden fixed inset-0 z-[60] overflow-y-auto modal-backdrop flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-auto transform transition-all">
+            <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+                <h3 class="text-xl font-bold text-ash-red">Edit Contact Address</h3>
+                <button onclick="closeModal('edit-address-modal')" class="text-gray-400 hover:text-gray-600 transition" aria-label="Close modal">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <form id="edit-address-form" onsubmit="submitEditAddress(event)" class="p-6 space-y-4">
+                
+                <div>
+                    <label for="edit-address-street" class="block text-sm font-medium text-gray-700">Street Address</label>
+                    <input type="text" id="edit-address-street" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-ash-red focus:border-ash-red">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="edit-address-city" class="block text-sm font-medium text-gray-700">City</label>
+                        <input type="text" id="edit-address-city" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-ash-red focus:border-ash-red">
+                    </div>
+                    <div>
+                        <label for="edit-address-state" class="block text-sm font-medium text-gray-700">State / Region (Optional)</label>
+                        <input type="text" id="edit-address-state" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-ash-red focus:border-ash-red">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="edit-address-zip" class="block text-sm font-medium text-gray-700">Zip / Postal Code (Optional)</label>
+                        <input type="text" id="edit-address-zip" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-ash-red focus:border-ash-red">
+                    </div>
+                    <div>
+                        <label for="edit-address-country" class="block text-sm font-medium text-gray-700">Country</label>
+                        <input type="text" id="edit-address-country" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-ash-red focus:border-ash-red">
+                    </div>
+                </div>
+                
+                <div class="flex justify-end pt-4 space-x-3 border-t border-gray-100 mt-6">
+                    <button type="button" onclick="closeModal('edit-address-modal')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition duration-150">Cancel</button>
+                    <button type="submit" id="submit-address-btn" class="px-4 py-2 bg-ash-red text-white rounded-lg hover:bg-ash-red-dark font-medium transition duration-150">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+<div id="change-password-modal" class="hidden fixed inset-0 z-[60] overflow-y-auto modal-backdrop flex items-center justify-center p-4 sm:p-6" aria-labelledby="modal-title-password" role="dialog" aria-modal="true">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg sm:max-w-md mx-auto transform transition-all">
+        <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+            <h3 class="text-xl font-bold text-ash-red" id="modal-title-password">Change Password</h3>
+            <button onclick="closeModal('change-password-modal')" class="text-gray-400 hover:text-gray-600 transition" aria-label="Close modal">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        <form id="change-password-form" onsubmit="submitChangePassword(event)" class="p-6 space-y-4">
+            
+            <div>
+                <label for="change-password-old" class="block text-sm font-medium text-gray-700">Current Password</label>
+                <input type="password" id="change-password-old" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-ash-red focus:border-ash-red">
+            </div>
+
+            <div>
+                <label for="change-password-new" class="block text-sm font-medium text-gray-700">New Password</label>
+                <div class="relative mt-1">
+                    <input type="password" id="change-password-new" required class="block w-full border border-gray-300 rounded-md shadow-sm p-3 pr-12 focus:ring-ash-red focus:border-ash-red">
+                    <button type="button" 
+                            onclick="togglePasswordVisibility('change-password-new', 'toggle-new-password')" 
+                            class="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-ash-red transition" 
+                            aria-label="Toggle new password visibility">
+                        <i class="fas fa-eye" id="toggle-new-password"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <label for="change-password-confirm" class="block text-sm font-medium text-gray-700">Confirm New Password</label>
+                <div class="relative mt-1">
+                    <input type="password" id="change-password-confirm" required class="block w-full border border-gray-300 rounded-md shadow-sm p-3 pr-12 focus:ring-ash-red focus:border-ash-red">
+                    <button type="button" 
+                            onclick="togglePasswordVisibility('change-password-confirm', 'toggle-confirm-password')" 
+                            class="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-ash-red transition" 
+                            aria-label="Toggle confirm password visibility">
+                        <i class="fas fa-eye" id="toggle-confirm-password"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="flex justify-end pt-4 space-x-3 border-t border-gray-100 mt-6">
+                <button type="button" onclick="closeModal('change-password-modal')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition duration-150">Cancel</button>
+                <button type="submit" id="submit-password-btn" class="px-4 py-2 bg-ash-red text-white rounded-lg hover:bg-ash-red-dark font-medium transition duration-150">Save New Password</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+    <footer class="bg-black text-gray-300 py-6 sm:py-14 border-t border-gray-800 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-8">
+                
+                <div class="col-span-2 lg:col-span-1">
+                    <a href="homepage.html" class="flex items-center mb-3 sm:mb-4"> 
+                        <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-8 filter grayscale invert">
+                    </a>
+                    <p class="text-xs sm:text-sm text-gray-500"> 
+                        The home of exclusive street wear and limited edition drops. Elevate your style.
+                    </p>
+                    <div class="flex space-x-4 mt-4 text-gray-400">
+                        <a href="https://www.instagram.com/outflickz01?igsh=Yzl3d3BjaGt5djll" aria-label="Instagram" class="hover:text-ash-red transition"><i class="fab fa-instagram"></i></a>
+                        <a href="https://www.tiktok.com/@outflickz?_r=1&_t=ZS-92AInaYzuTt" aria-label="TikTok" class="hover:text-ash-red transition"><i class="fab fa-tiktok"></i></a>
+                        <a href="https://www.facebook.com/profile.php?id=61584421929170" aria-label="Facebook" class="hover:text-ash-red transition"><i class="fab fa-facebook-f"></i></a>
+                    </div>
+                </div>
+
+                <div class="col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Quick Links</h3> 
+                    <ul class="space-y-1.5 sm:space-y-2 text-xs sm:text-sm"> 
+                        <li><a href="wearscollection.html" class="text-gray-400 hover:text-ash-red transition">Wears</a></li>
+                        <li><a href="newarrivals.html" class="text-gray-400 hover:text-ash-red transition">New Arrivals</a></li>
+                        <li><a href="capcollection.html" class="text-gray-400 hover:text-ash-red transition">Caps</a></li>
+                        <li><a href="preorder.html" class="text-gray-400 hover:text-ash-red transition">Pre-Order</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Customer Care</h3> 
+                    <ul class="space-y-1.5 sm:space-y-2 text-xs sm:text-sm"> 
+                        <li><a href="contact.html" class="text-gray-400 hover:text-ash-red transition">Contact Us</a></li>
+                        <li><a href="shipping_returns.html" class="text-gray-400 hover:text-ash-red transition">Shipping & Returns</a></li>
+                        <li><a href="faq.html" class="text-gray-400 hover:text-ash-red transition">FAQ</a></li>
+                        <li><a href="size_guide.html" class="text-gray-400 hover:text-ash-red transition">Size Guide</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-span-2 md:col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Get In Touch</h3> 
+                    <address class="text-xs sm:text-sm not-italic space-y-2"> 
+                        <p class="text-gray-400">
+                            <i class="fas fa-map-marker-alt mr-2 text-ash-red"></i> Lagos , Nigeria
+                        </p>
+                        <p class="text-gray-400">
+                            <i class="fas fa-envelope mr-2 text-ash-red"></i> outflickzlimited@gmail.com 
+                        </p>
+                        <p class="text-gray-400">
+                            <i class="fas fa-phone mr-2 text-ash-red"></i> +234 7042882706
+                        </p>
+                    </address>
+                </div>
+                
+            </div>
+
+            <div class="border-t border-gray-800 mt-6 sm:mt-10 pt-4 sm:pt-6"> 
+                <p class="text-center text-xs text-gray-500">
+                    &copy; 2025 Outflickz. All rights reserved. | <a href="#" class="hover:text-ash-red">Privacy Policy</a> | <a href="#" class="hover:text-ash-red">Terms of Use</a>
+                </p>
+            </div>
+        </div>
+    </footer>
+    
+    <a href="https://t.me/+2347042882706" 
+        target="_blank"
+        class="fixed bottom-6 right-24 z-50 
+               bg-[#24A1DE] text-white 
+               p-3 rounded-full 
+               shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 
+               flex items-center justify-center w-14 h-14" 
+        aria-label="Chat with us on Telegram">
+        
+        <i class="fab fa-telegram-plane fa-2x"></i>
+    </a>
+    
+    <a href="https://wa.me/2347042882706?text=HELLO%20OUTFLICKZ!%20My%20name%20is%20..."
+        target="_blank"
+        class="fixed bottom-6 right-6 z-50 
+               bg-[#25D366] text-white 
+               p-3 rounded-full 
+               shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 
+               flex items-center justify-center w-14 h-14" 
+        aria-label="Chat with us on WhatsApp">
+        
+        <i class="fab fa-whatsapp fa-2x"></i>
+    </a>
+</body>
+</html>

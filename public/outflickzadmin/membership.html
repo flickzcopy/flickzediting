@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Membership Management | Commerce Hub Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
+    <style>
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #05744b; /* emerald-400 */
+            border-radius: 4px;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.95rem;
+        }
+        .active-link {
+            /* Styles for the active sidebar button */
+            background-color: #047857; /* A deeper emerald for active state */
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex">
+
+    <aside id="sidebar" class="fixed top-0 left-0 h-full w-64 bg-emerald-900 text-white transform transition-transform duration-300 z-30 lg:translate-x-0 -translate-x-full shadow-2xl flex flex-col">
+        <div class="p-6 flex-shrink-0">
+            <img src="https://i.imgur.com/Fz9w1BA.png" alt="E-commerce Logo" class="h-10 w-auto mb-6 rounded-lg shadow-md border border-emerald-700">
+            <h1 class="text-xl font-extrabold text-emerald-400 border-t border-emerald-800 pt-4">Commerce Hub</h1>
+        </div>
+        
+        <nav class="space-y-2 px-4 flex-grow overflow-y-auto">
+            <button id="btn-dashboard" onclick="navigateToDashboard()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l-7-7-7 7m10 0v10a1 1 0 01-1 1h-3m-3 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-9 0h10"></path></svg>
+                Dashboard
+            </button>
+            
+            <button id="btn-userorders" onclick="navigateToUserOrders()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                User Orders
+            </button>
+            
+            <button id="btn-wearscollection" onclick="navigateToWearsCollection()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+                Wears Collection
+            </button>
+
+            <button id="btn-capscollection" onclick="navigateToCapsCollection()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 13h10M4 19v-6a3 3 0 013-3h10a3 3 0 013 3v6a3 3 0 01-3 3H7a3 3 0 01-3-3z"></path></svg>
+                Caps Collection
+            </button>
+            
+            <button id="btn-newarrivals" onclick="navigateToNewArrivals()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                New Arrivals
+            </button>
+            
+            <button id="btn-preorders" onclick="navigateToPreOrders()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                Pre-Order 
+            </button>
+            
+            <button id="btn-membership" onclick="navigateToMembership()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out bg-emerald-600 hover:bg-emerald-700 active-link">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3v-5a2 2 0 00-2-2H5a2 2 0 00-2 2v5a3 3 0 003 3z"></path></svg>
+                Membership
+            </button>
+               <button id="btn-emailnews" onclick="navigateToEmailNews()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3v-5a2 2 0 00-2-2H5a2 2 0 00-2 2v5a3 3 0 003 3z"></path></svg>
+                Email News
+            </button>
+
+            <button id="btn-settings" onclick="navigateToSettings()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.526.34.813.486 1.066-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                Settings
+            </button>
+        </nav>
+        
+        <div class="p-4 flex-shrink-0 border-t border-emerald-800">
+            <button id="btn-logout" onclick="logoutAdmin()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out bg-red-600 hover:bg-red-700 text-white shadow-lg">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                Log Out
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 lg:ml-64 p-4 transition-all duration-300">
+        <button id="sidebar-toggle" class="lg:hidden fixed top-4 left-4 z-40 p-2 bg-emerald-600 text-white rounded-lg shadow-lg hover:bg-emerald-700 transition">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+        </button>
+
+        <section id="content-membership" class="content-section p-6 pt-16 lg:pt-6">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6 flex items-center space-x-2">
+                <span>Membership Management 💳</span>
+                <span id="user-count" class="text-sm font-normal bg-blue-100 text-blue-800 px-3 py-1 rounded-full">Total Users: 0</span>
+            </h2>
+
+            <div class="bg-white p-4 rounded-xl shadow-lg overflow-x-auto">
+                
+                <div id="loading-indicator" class="text-center p-10">
+                    <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 inline-block"></div>
+                    <p class="mt-4 text-gray-600 text-sm">Fetching user data...</p>
+                </div>
+
+                <div id="user-table-container" class="hidden">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    User ID
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Name
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Email
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Status
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Joined
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Actions
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-table-body" class="bg-white divide-y divide-gray-200">
+                            </tbody>
+                    </table>
+                </div>
+
+                <div id="error-message" class="hidden text-center p-8 bg-red-100 text-red-700 rounded-xl shadow-lg">
+                    Failed to load user data. Please check the network connection and API status.
+                </div>
+            </div>
+        </section>
+
+        <section id="content-user-details" class="content-section p-6 pt-16 lg:pt-6 hidden">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6 flex items-center justify-between">
+                <span class="flex items-center space-x-2">
+                    <span>User Profile:</span>
+                    <span id="details-header-name" class="text-emerald-700 text-xl font-bold"></span>
+                </span>
+                <button onclick="showMembershipList()" class="bg-gray-200 text-gray-700 px-4 py-2 text-sm rounded-lg hover:bg-gray-300 transition flex items-center space-x-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                    <span>Back to List</span>
+                </button>
+            </h2>
+
+            <div id="details-loading-indicator" class="text-center p-10 bg-white rounded-xl shadow-lg">
+                <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 inline-block"></div>
+                <p class="mt-4 text-gray-600 text-sm">Loading user profile...</p>
+            </div>
+            
+            <div id="user-profile-data" class="bg-white p-6 rounded-xl shadow-lg space-y-8 hidden">
+                
+                <h3 class="text-xl font-semibold text-gray-800 border-b pb-2">Basic Information</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                        <p class="text-xs font-medium text-gray-500">Email Address</p>
+                        <p class="text-lg font-medium text-gray-900" id="detail-email"></p>
+                    </div>
+                    <div>
+                        <p class="text-xs font-medium text-gray-500">Joined On</p>
+                        <p class="text-lg text-gray-700" id="detail-joined"></p>
+                    </div>
+                    <div>
+                        <p class="text-xs font-medium text-gray-500">Membership Status</p>
+                        <p class="text-xl font-bold" id="detail-status"></p>
+                    </div>
+                </div>
+
+                <h3 class="text-xl font-semibold text-gray-800 border-b pb-2">Contact & Shipping</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                        <p class="text-xs font-medium text-gray-500">Contact Phone 📞</p>
+                        <p class="text-lg text-gray-700" id="detail-phone"></p>
+                    </div>
+                    <div>
+                        <p class="text-xs font-medium text-gray-500">WhatsApp Contact 💬</p>
+                        <p class="text-lg text-green-700 font-semibold" id="detail-whatsapp"></p>
+                    </div>
+                    <div class="md:col-span-1">
+                        <p class="text-xs font-medium text-gray-500">Shipping Address 🏠</p>
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <p class="text-base text-gray-700" id="detail-address">No Address Provided</p>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="text-xl font-semibold text-gray-800 border-b pb-2 flex items-center space-x-2">
+                    <span>Order History 📦</span>
+                    <span id="order-count" class="text-sm font-normal bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">Total Orders: 0</span>
+                </h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Placed</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th> 
+                            </tr>
+                        </thead>
+                        <tbody id="order-history-body" class="bg-white divide-y divide-gray-200">
+                        <tr>
+                        <td colspan="5" class="px-4 py-4 text-center text-sm text-gray-500">Loading orders...</td>
+                        </tr>
+                    </tbody>
+                    </table>
+                </div>
+                </div>
+            
+            <div id="details-error-message" class="hidden text-center p-8 bg-red-100 text-red-700 rounded-xl shadow-lg mt-6">
+                Could not load user data. Check network connection or API status.
+            </div>
+        </section>
+        
+        <section id="content-order-details" class="content-section p-6 pt-16 lg:pt-6 hidden">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6 flex items-center justify-between">
+                <span class="flex items-center space-x-2">
+                    <span>Order Update:</span>
+                    <span id="order-details-header-id" class="text-emerald-700 text-xl font-bold"></span>
+                </span>
+                <button onclick="backToUserDetails()" class="bg-gray-200 text-gray-700 px-4 py-2 text-sm rounded-lg hover:bg-gray-300 transition flex items-center space-x-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                    <span>Back to User Profile</span>
+                </button>
+            </h2>
+
+            <div id="order-details-loading-indicator" class="text-center p-10 bg-white rounded-xl shadow-lg">
+                <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 inline-block"></div>
+                <p class="mt-4 text-gray-600 text-sm">Loading order details...</p>
+            </div>
+            
+            <div id="order-update-form" class="bg-white p-6 rounded-xl shadow-lg space-y-6 hidden">
+                <div id="order-update-message" class="hidden p-3 rounded-lg text-white font-medium"></div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 space-y-6">
+                        <h3 class="text-xl font-semibold text-gray-800 border-b pb-2">Shipping Information</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <p class="text-xs font-medium text-gray-500">Customer Name</p>
+                                <p class="text-base text-gray-800" id="order-detail-customer-name">N/A</p>
+                            </div>
+                             <div>
+                                <p class="text-xs font-medium text-gray-500">Date Placed</p>
+                                <p class="text-base text-gray-800" id="order-detail-date">N/A</p>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <p class="text-xs font-medium text-gray-500 mb-1">Shipping Address 🏠</p>
+                            <p class="text-base text-gray-700" id="order-detail-address">No Address Provided</p>
+                        </div>
+                        
+                        <h3 class="text-xl font-semibold text-gray-800 border-b pb-2 mt-8">Order Items</h3>
+                        <div id="order-items-list" class="space-y-3">
+                            </div>
+                    </div>
+                    
+                    <div class="lg:col-span-1 bg-emerald-50 p-4 rounded-xl space-y-6 shadow-inner">
+                        <h3 class="text-xl font-bold text-emerald-800">Order Status Update</h3>
+                        
+                        <div>
+                            <p class="text-sm font-medium text-gray-700 mb-1">Current Status</p>
+                            <p id="order-detail-current-status" class="text-2xl font-extrabold text-emerald-900"></p>
+                        </div>
+                       <div class="space-y-2">
+    <select id="new-order-status" name="new-order-status" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-md">
+    </select>
+</div>
+
+<button 
+    id="updateStatusButton" 
+    type="button" 
+    onclick="handleStatusUpdate()" 
+    class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition duration-150"
+    disabled>
+    Update Order Status
+</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="content-dashboard" class="content-section hidden"></section>
+        <section id="content-settings" class="content-section hidden"></section>
+
+    </main>
+    
+    <div id="order-details-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-50 hidden flex items-center justify-center p-4 transition-opacity duration-300">
+        <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-full overflow-y-auto transform transition-transform duration-300 scale-95 md:scale-100">
+            <div class="p-6 border-b flex justify-between items-center sticky top-0 bg-white z-10">
+                <h3 class="text-xl font-bold text-emerald-700">Order Items: <span id="modal-order-id" class="text-base font-normal text-gray-500 ml-2"></span></h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <div class="p-6 space-y-4" id="modal-items-container">
+                </div>
+
+            <div class="p-4 border-t text-right">
+                <button onclick="closeModal()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition">Close</button>
+            </div>
+        </div>
+    </div>
+   <script>
+    // --- JAVASCRIPT LOGIC ---
+    
+    const sidebar = document.getElementById('sidebar');
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    const navButtons = document.querySelectorAll('nav button');
+    const userTableBody = document.getElementById('user-table-body');
+    const loadingIndicator = document.getElementById('loading-indicator');
+    const userTableContainer = document.getElementById('user-table-container');
+    const errorMessage = document.getElementById('error-message');
+    const userCountDisplay = document.getElementById('user-count');
+
+    // --- DETAILS SECTION VARIABLES ---
+    const contentMembership = document.getElementById('content-membership');
+    const contentUserDetails = document.getElementById('content-user-details');
+    const contentOrderDetails = document.getElementById('content-order-details'); // NEW
+
+    const detailsLoadingIndicator = document.getElementById('details-loading-indicator');
+    const userProfileData = document.getElementById('user-profile-data');
+    const detailsErrorMessage = document.getElementById('details-error-message');
+    
+    const detailsHeaderName = document.getElementById('details-header-name');
+    const detailEmail = document.getElementById('detail-email');
+    const detailStatus = document.getElementById('detail-status');
+    const detailJoined = document.getElementById('detail-joined');
+    const detailPhone = document.getElementById('detail-phone');
+    const detailAddress = document.getElementById('detail-address');
+    const detailWhatsapp = document.getElementById('detail-whatsapp'); 
+    
+    // Order History Elements
+    const orderHistoryBody = document.getElementById('order-history-body');
+    const orderCountDisplay = document.getElementById('order-count');
+    
+    // Modal Elements (ORIGINAL, now unused for Order Details)
+    const orderDetailsModal = document.getElementById('order-details-modal');
+    const modalOrderId = document.getElementById('modal-order-id');
+    const modalItemsContainer = document.getElementById('modal-items-container');
+    
+    // ORDER UPDATE SECTION VARIABLES (NEW)
+    const orderDetailsHeaderId = document.getElementById('order-details-header-id');
+    const orderDetailsLoadingIndicator = document.getElementById('order-details-loading-indicator');
+    const orderUpdateForm = document.getElementById('order-update-form');
+    const orderDetailCustomerName = document.getElementById('order-detail-customer-name');
+    const orderDetailDate = document.getElementById('order-detail-date');
+    const orderDetailAddress = document.getElementById('order-detail-address');
+    const orderDetailCurrentStatus = document.getElementById('order-detail-current-status');
+    const newOrderStatusSelect = document.getElementById('new-order-status');
+    const orderItemsList = document.getElementById('order-items-list');
+    const orderUpdateMessage = document.getElementById('order-update-message');
+    const updateStatusButton = document.getElementById('updateStatusButton'); // ⭐ FIX: Get button reference here
+
+    let currentViewingUserId = null; // To store the User ID when viewing details
+    let currentViewingOrderId = null; // To store the Order ID when viewing order details
+    // --- END DETAILS SECTION VARIABLES ---
+
+    // --- Navigation Functions (unchanged) ---
+
+    function navigateToDashboard() { window.location.href = './admin-dashboard.html'; }
+    function navigateToSettings() { window.location.href = './admin-dashboard.html?view=settings'; }
+    function navigateToWearsCollection() { window.location.href = './wearscollection.html'; }
+    function navigateToCapsCollection() { window.location.href = './capscollection.html'; }
+    function navigateToNewArrivals() { window.location.href = './newarrivals.html'; }
+    function navigateToPreOrders() { window.location.href = './preorders.html'; }
+    function navigateToMembership() { window.location.href = './membership.html'; } // Self-link
+    function navigateToUserOrders() { window.location.href = './userorders.html'; } 
+    function navigateToEmailNews() { window.location.href = './emailnews.html'; }
+    
+
+    function logoutAdmin() {
+        console.log("Logging out... Clearing admin token.");
+        localStorage.removeItem('adminToken');
+        window.location.href = './admin-login.html'; 
+    }
+
+    // Helper function for date formatting
+    function formatDate(dateString) {
+        if (!dateString) return 'N/A';
+        try {
+            const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+            return new Date(dateString).toLocaleDateString(undefined, options);
+        } catch (e) {
+            return 'Invalid Date';
+        }
+    }
+    
+    // Helper function for currency formatting
+    function formatCurrency(amount) {
+        if (typeof amount !== 'number') return 'N/A';
+        // Assumes NGN currency for formatting
+        return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(amount);
+    }
+
+    // Helper function to determine status badge classes for Orders
+    function getStatusBadge(status) {
+        let className = '';
+        let text = status || 'N/A';
+        
+        switch (status) {
+            case 'Delivered':
+                className = 'bg-green-100 text-green-800';
+                break;
+            case 'Shipped':
+                className = 'bg-blue-100 text-blue-800';
+                break;
+            case 'Processing':
+            case 'Confirmed': // Added Confirmed for UI consistency
+                className = 'bg-yellow-100 text-yellow-800';
+                break;
+            case 'Cancelled':
+            case 'Inventory Failure (Manual Review)':
+                className = 'bg-red-100 text-red-800';
+                break;
+            default:
+                className = 'bg-gray-100 text-gray-800';
+                break;
+        }
+        
+        return `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${className}">${text}</span>`;
+    }
+    
+    // --- View Switching Functions ---
+    
+    /** Shows the main user list table and hides the details views. */
+    function showMembershipList() {
+        contentUserDetails.classList.add('hidden');
+        contentOrderDetails.classList.add('hidden'); // Hide order details
+        contentMembership.classList.remove('hidden');
+    }
+
+    /** Shows the single user details view and hides the list/order views. */
+    function showUserDetailsView() {
+        contentMembership.classList.add('hidden');
+        contentOrderDetails.classList.add('hidden'); // Hide order details
+        contentUserDetails.classList.remove('hidden');
+    }
+    
+    /** Shows the order details view and hides the list/user details views. (NEW) */
+    function showOrderDetailsUpdateView() {
+        contentMembership.classList.add('hidden');
+        contentUserDetails.classList.add('hidden');
+        contentOrderDetails.classList.remove('hidden');
+    }
+    
+    // --- API Fetch Functions (Original, plus new Order Details fetch) ---
+
+    /**
+     * Fetches all registered user data from the API (used for the main table).
+     */
+    async function fetchUserData() {
+        const token = localStorage.getItem('adminToken');
+        if (!token) {
+            console.error("No adminToken found. Redirecting to login.");
+            logoutAdmin();
+            return null;
+        }
+
+        try {
+            // ASSUMPTION: Backend route for fetching ALL users
+            const response = await fetch('/api/admin/users/all', { 
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}` 
+                }
+            });
+
+            if (!response.ok) {
+                if (response.status === 401 || response.status === 403) {
+                    console.error(`Authentication error (${response.status}). Token expired or invalid.`);
+                    logoutAdmin();
+                    return null;
+                }
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return data.users || []; // ASSUMPTION: Backend returns { users: [...], count: 50 }
+
+        } catch (error) {
+            console.error('Error fetching user data:', error);
+            return null;
+        }
+    }
+    
+    /**
+     * Fetches the full profile details for a specific user ID.
+     */
+    async function fetchUserDetails(userId) {
+        const token = localStorage.getItem('adminToken');
+        if (!token) {
+            logoutAdmin();
+            return null;
+        }
+        
+        try {
+            const response = await fetch(`/api/admin/users/${userId}`, { 
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}` 
+                }
+            });
+
+            if (!response.ok) {
+                if (response.status === 401 || response.status === 403) {
+                    logoutAdmin();
+                }
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return data.user; // ASSUMPTION: Backend returns { user: {...} }
+
+        } catch (error) {
+            console.error(`Error fetching user details for ID ${userId}:`, error);
+            return null;
+        }
+    }
+    
+    /**
+     * Fetches the order history for a specific user ID.
+     */
+    async function fetchUserOrders(userId) {
+        const token = localStorage.getItem('adminToken');
+        if (!token) return null; // Auth handled by parent function
+
+        try {
+            // Backend route for orders for a user
+            const response = await fetch(`/api/admin/users/${userId}/orders`, { 
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}` 
+                }
+            });
+
+            if (!response.ok) {
+                console.error(`Order fetch failed for ${userId}: status ${response.status}`);
+                return null;
+            }
+
+            const data = await response.json();
+            // ASSUMPTION: Backend returns { orders: [...] }
+            return data.orders || []; 
+
+        } catch (error) {
+            console.error(`Error fetching user orders for ID ${userId}:`, error);
+            return null;
+        }
+    }
+    
+    /**
+     * Fetches a single order's details (Used for the update form). (NEW)
+     */
+    async function fetchOrderDetails(orderId) {
+        const token = localStorage.getItem('adminToken');
+        if (!token) {
+            logoutAdmin();
+            return null;
+        }
+        
+        try {
+            // ASSUMPTION: Backend route for fetching a single order detail
+            const response = await fetch(`/api/admin/orders/${orderId}`, { 
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}` 
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return data.order; // ASSUMPTION: Backend returns { order: {...} }
+
+        } catch (error) {
+            console.error(`Error fetching order details for ID ${orderId}:`, error);
+            return null;
+        }
+    }
+    
+    /**
+     * Sends an API request to update the status of an order. (NEW - FIXED PAYLOAD)
+     */
+    async function updateOrderStatus(orderId, newStatus) {
+        const token = localStorage.getItem('adminToken');
+        if (!token) {
+            logoutAdmin();
+            return { success: false, message: 'Authentication required.' };
+        }
+        
+        try {
+            // ASSUMPTION: Backend route for updating order status
+            const response = await fetch(`/api/admin/orders/${orderId}/status`, { 
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}` 
+                },
+                // ⭐ CRITICAL FIX: Changed 'status' to 'newStatus' to match backend destructuring
+                body: JSON.stringify({ newStatus: newStatus }) 
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || `Failed to update status. Server error: ${response.status}`);
+            }
+
+            return { success: true, message: `Order ${orderId} status successfully updated to ${newStatus}.`, order: data.order };
+        } catch (error) {
+            console.error(`Error updating order status for ID ${orderId}:`, error.message);
+            return { success: false, message: error.message };
+        }
+    }
+
+
+    // --- Rendering Functions ---
+    
+    /**
+     * Renders the user data into the main membership table.
+     * @param {Array<Object>} users - Array of user objects.
+     */
+    function renderUserTable(users) {
+        userTableBody.innerHTML = ''; 
+        userCountDisplay.textContent = `Total Users: ${users.length.toLocaleString()}`;
+
+        if (users.length === 0) {
+            userTableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">No registered users found.</td></tr>';
+            return;
+        }
+
+        users.forEach(user => {
+            const isMember = user.isMember; 
+            const statusText = isMember ? 'VIP Member' : 'Basic User';
+            const statusColor = isMember ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800';
+            
+            const row = document.createElement('tr');
+            row.className = 'hover:bg-gray-50';
+            
+            row.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 truncate max-w-xs" title="${user._id}">${user._id}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${user.name || 'N/A'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${user.email}</td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}">
+                        ${statusText}
+                    </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    ${formatDate(user.createdAt)}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button onclick="viewUserDetails('${user._id}')" class="text-blue-600 hover:text-blue-900 transition duration-150">View Details</button>
+                </td>
+            `;
+            userTableBody.appendChild(row);
+        });
+    }
+    
+    /**
+     * Renders the order history into the table.
+     * The 'Actions' button is changed to call viewOrderDetails().
+     * @param {Array<Object>} orders - Array of order objects.
+     */
+    function renderOrderHistory(orders) {
+        orderHistoryBody.innerHTML = ''; // Clear previous data
+        orderCountDisplay.textContent = `Total Orders: ${orders.length.toLocaleString()}`;
+
+        if (!orders || orders.length === 0) {
+            orderHistoryBody.innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-center text-sm text-gray-500">No orders found for this user.</td></tr>';
+            return;
+        }
+
+        orders.forEach(order => {
+            const statusBadge = getStatusBadge(order.status);
+            // We pass the userId along with the orderId to simplify the backToUserDetails flow
+            const itemsJson = encodeURIComponent(JSON.stringify(order.items || [])); 
+            
+            const row = document.createElement('tr');
+            row.className = 'hover:bg-gray-50';
+
+            // --- UPDATED TABLE ROW HTML: BUTTON CALLS viewOrderDetails ---
+            row.innerHTML = `
+                <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 truncate max-w-xs" title="${order._id}">${order._id}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-700">${formatDate(order.createdAt)}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-700 font-semibold">${formatCurrency(order.totalAmount)}</td>
+                <td class="px-4 py-4 whitespace-nowrap">${statusBadge}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button onclick="viewOrderDetails('${order._id}', '${order.userId || currentViewingUserId}')" 
+                        class="text-indigo-600 hover:text-indigo-900 transition duration-150">Update Status</button>
+                </td>
+            `;
+            orderHistoryBody.appendChild(row);
+        });
+    }
+    
+    /**
+     * Renders the items list within the Order Update form. (NEW)
+     */
+    function renderOrderItems(items) {
+        orderItemsList.innerHTML = '';
+            if (!items || items.length === 0) {
+                orderItemsList.innerHTML = '<p class="text-center text-gray-500 py-4">No items listed for this order.</p>';
+                return;
+            }
+            
+            items.forEach((item) => {
+                const name = item.name || 'Unknown Product';
+                const quantity = item.quantity || 1;
+                const size = item.size || 'N/A';
+                const unitPrice = item.price || 0;
+                const subtotal = quantity * unitPrice;
+
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'flex items-start space-x-4 p-3 border rounded-lg bg-white shadow-sm';
+                itemDiv.innerHTML = `
+                    ${item.imageUrl ? `<img src="${item.imageUrl}" alt="${name}" class="w-12 h-12 object-cover rounded-md flex-shrink-0">` : `<div class="w-12 h-12 bg-gray-200 rounded-md flex-shrink-0 flex items-center justify-center text-gray-500 text-xs">No Img</div>`}
+                    <div class="flex-grow">
+                        <p class="text-sm font-semibold text-gray-900">${name}</p>
+                        <p class="text-xs text-gray-500">Qty: ${quantity} / Size: ${size}</p>
+                    </div>
+                    <div class="text-right flex-shrink-0">
+                        <p class="text-base font-bold text-gray-800">${formatCurrency(subtotal)}</p>
+                    </div>
+                `;
+                orderItemsList.appendChild(itemDiv);
+            });
+    }
+
+    // --- Details and Modal Functions ---
+    
+    /**
+     * Handles the click of the 'View Details' button and loads the data into the details section.
+     * @param {string} userId - The ID of the user whose details to view.
+     */
+    async function viewUserDetails(userId) {
+        currentViewingUserId = userId; // Store the current user ID
+        showUserDetailsView();
+        detailsLoadingIndicator.classList.remove('hidden');
+        userProfileData.classList.add('hidden');
+        detailsErrorMessage.classList.add('hidden');
+        
+        // Clear previous order history body
+        orderHistoryBody.innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-center text-sm text-gray-500">Loading orders...</td></tr>';
+        orderCountDisplay.textContent = 'Total Orders: 0';
+
+
+        const userPromise = fetchUserDetails(userId);
+        const ordersPromise = fetchUserOrders(userId); 
+
+        const [user, orders] = await Promise.all([userPromise, ordersPromise]);
+        
+        detailsLoadingIndicator.classList.add('hidden'); // Hide loading indicator for details view
+
+        if (user) {
+            // Render basic info
+            detailsHeaderName.textContent = user.name || 'N/A';
+            detailEmail.textContent = user.email;
+            
+            const statusText = user.isMember ? 'VIP Member 🌟' : 'Basic User';
+            const statusColor = user.isMember ? 'text-emerald-700' : 'text-gray-700';
+            
+            detailStatus.className = `text-xl font-bold ${statusColor}`;
+            detailStatus.textContent = statusText;
+            
+            detailJoined.textContent = formatDate(user.createdAt);
+            
+            // Render contact info and address
+            detailPhone.textContent = user.phone || 'N/A';
+            detailWhatsapp.textContent = user.whatsappNumber || user.phone || 'N/A'; 
+            
+            if (user.shippingAddress && user.shippingAddress.street) {
+                const address = user.shippingAddress;
+                detailAddress.innerHTML = `
+                    ${address.street}<br>
+                    ${address.city}, ${address.state}<br>
+                    ${address.zipCode || ''} ${address.country || ''}
+                `;
+            } else {
+                detailAddress.textContent = user.contactAddress || 'No Address Provided';
+            }
+
+            // Render Order History (even if orders is null, renderOrderHistory handles it)
+            if (orders !== null) {
+                renderOrderHistory(orders);
+            } else {
+                orderHistoryBody.innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-center text-sm text-red-500">Failed to load order history. Check API.</td></tr>';
+                orderCountDisplay.textContent = `Total Orders: N/A`;
+            }
+
+            userProfileData.classList.remove('hidden');
+        } else {
+            detailsErrorMessage.classList.remove('hidden');
+        }
+    }
+    
+    /**
+     * Switches view and loads the full order details for status update. (NEW - FIXED DROPDOWN)
+     * @param {string} orderId - The ID of the order to view.
+     */
+    async function viewOrderDetails(orderId, userId) {
+        currentViewingOrderId = orderId; // Store for update function
+        currentViewingUserId = userId; // Ensure we retain the user ID for the back button
+        showOrderDetailsUpdateView();
+        
+        orderDetailsLoadingIndicator.classList.remove('hidden');
+        orderUpdateForm.classList.add('hidden');
+        orderUpdateMessage.classList.add('hidden');
+        
+        orderDetailsHeaderId.textContent = orderId;
+        
+        const order = await fetchOrderDetails(orderId);
+        
+        orderDetailsLoadingIndicator.classList.add('hidden');
+
+        if (order) {
+            // Set initial form values and details
+            orderDetailCustomerName.textContent = order.customerName || 'N/A';
+            orderDetailDate.textContent = formatDate(order.createdAt);
+            
+            const currentStatus = order.status || 'Pending'; // Default to Pending if status is missing
+            orderDetailCurrentStatus.textContent = currentStatus;
+            
+            // ⭐ CRITICAL FIX: The next status transition must follow the server's logic:
+            // Confirmed -> Shipped -> Delivered
+            newOrderStatusSelect.innerHTML = ''; // Clear existing options
+            
+            let nextStatus = null;
+            if (currentStatus === 'Confirmed') { // Check for 'Confirmed' status
+                nextStatus = 'Shipped';
+            } else if (currentStatus === 'Shipped') {
+                nextStatus = 'Delivered';
+            }
+            
+            // Add current status as default, disabled option
+            const currentOption = new Option(`Current: ${currentStatus}`, currentStatus, true, true);
+            currentOption.disabled = true;
+            newOrderStatusSelect.add(currentOption);
+            
+            if (nextStatus) {
+                // Add the single, valid next transition status
+                const nextOption = new Option(`Change to: ${nextStatus}`, nextStatus);
+                newOrderStatusSelect.add(nextOption);
+                newOrderStatusSelect.disabled = false;
+                updateStatusButton.disabled = false; // Use the globally defined button variable
+            } else {
+                // Order is Delivered, Cancelled, Pending, Processing, or Manual Review - no update possible via this form
+                newOrderStatusSelect.disabled = true;
+                updateStatusButton.disabled = true;
+            }
+            // End LOGIC FIX
+            
+            // Render Shipping Address
+            if (order.shippingAddress && order.shippingAddress.street) {
+                const address = order.shippingAddress;
+                orderDetailAddress.innerHTML = `
+                    ${address.street}<br>
+                    ${address.city}, ${address.state}<br>
+                    ${address.zipCode || ''} ${address.country || ''}
+                `;
+            } else {
+                orderDetailAddress.textContent = 'No Shipping Address Available';
+            }
+
+            // Render Order Items
+            renderOrderItems(order.items);
+            
+            orderUpdateForm.classList.remove('hidden');
+        } else {
+             orderUpdateForm.classList.add('hidden');
+             orderUpdateMessage.classList.remove('hidden');
+             orderUpdateMessage.className = 'p-3 rounded-lg text-white bg-red-500 font-medium';
+             orderUpdateMessage.textContent = 'Failed to load order details for updating.';
+        }
+    }
+    
+    /**
+     * Handles the order status update process. (NEW)
+     */
+    async function handleStatusUpdate() {
+        const newStatus = newOrderStatusSelect.value;
+        
+        if (!currentViewingOrderId) {
+            alert("Error: No order selected for update.");
+            return;
+        }
+        
+        // Prevent submission if the user hasn't selected a valid transition 
+        // (i.e., only current status is selected, which is disabled/defaulted)
+        if (newStatus === orderDetailCurrentStatus.textContent || updateStatusButton.disabled) {
+             orderUpdateMessage.classList.remove('hidden');
+             orderUpdateMessage.className = 'p-3 rounded-lg text-white bg-yellow-500 font-medium';
+             orderUpdateMessage.textContent = 'Status is already at this stage or cannot be updated further.';
+             return;
+        }
+
+
+        if (confirm(`Are you sure you want to change the status of Order ${currentViewingOrderId} to ${newStatus}?`)) {
+            // Show a brief loading state on the button/message area
+            updateStatusButton.disabled = true;
+            const originalButtonText = updateStatusButton.textContent;
+            updateStatusButton.textContent = 'Updating...';
+
+            orderUpdateMessage.classList.remove('hidden');
+            orderUpdateMessage.className = 'p-3 rounded-lg text-white bg-blue-500 font-medium';
+            orderUpdateMessage.textContent = 'Updating status...';
+            
+            const result = await updateOrderStatus(currentViewingOrderId, newStatus);
+            
+            updateStatusButton.textContent = originalButtonText; // Reset button text
+
+            if (result.success) {
+                // Re-fetch the entire order details to fully refresh the form, including the dropdown options
+                await viewOrderDetails(currentViewingOrderId, currentViewingUserId); 
+
+                orderUpdateMessage.className = 'p-3 rounded-lg text-white bg-green-500 font-medium';
+                orderUpdateMessage.textContent = result.message;
+                
+            } else {
+                updateStatusButton.disabled = false; // Re-enable button on failure
+                orderUpdateMessage.className = 'p-3 rounded-lg text-white bg-red-500 font-medium';
+                orderUpdateMessage.textContent = result.message;
+            }
+        }
+    }
+    
+    /**
+     * Handles the 'Back to User Profile' button click from the Order Details view. (NEW)
+     */
+    function backToUserDetails() {
+         // Re-render the user details view, which will automatically re-fetch the order history
+         // to show the updated status.
+        if (currentViewingUserId) {
+            viewUserDetails(currentViewingUserId);
+        } else {
+            showMembershipList(); // Fallback to main list
+        }
+    }
+
+    // --- Main Load Function ---
+
+    /**
+     * Main function to load and display data, including auth check.
+     */
+    async function loadMembershipData() {
+        loadingIndicator.classList.remove('hidden');
+        userTableContainer.classList.add('hidden');
+        errorMessage.classList.add('hidden');
+        contentUserDetails.classList.add('hidden'); // Ensure details view is hidden initially
+        contentOrderDetails.classList.add('hidden'); // Ensure order update view is hidden initially
+
+        const users = await fetchUserData();
+
+        loadingIndicator.classList.add('hidden');
+
+        if (users === null) {
+            // fetchUserData already called logoutAdmin() if the token was bad
+            errorMessage.classList.remove('hidden');
+            errorMessage.innerHTML = 'Authentication failed or token expired. Please log in again.';
+        } else if (Array.isArray(users)) {
+            renderUserTable(users);
+            userTableContainer.classList.remove('hidden');
+        } else {
+            errorMessage.classList.remove('hidden');
+            errorMessage.innerHTML = 'Failed to load user data. Please check the network connection and API status.';
+        }
+    }
+
+
+    // --- Initialization and Event Listeners ---
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Expose global functions required by inline HTML handlers
+        window.viewUserDetails = viewUserDetails;
+        window.showMembershipList = showMembershipList;
+        window.viewOrderDetails = viewOrderDetails; // Expose the new view function
+        window.handleStatusUpdate = handleStatusUpdate; // Expose the update logic
+        window.backToUserDetails = backToUserDetails; // Expose the back button function
+        
+        // Original modal functions (kept, but unused for order history)
+        // window.showOrderDetailsModal = showOrderDetailsModal; 
+        // window.closeModal = closeModal; 
+
+
+        loadMembershipData();
+
+        // Toggle sidebar visibility on mobile
+        sidebarToggle.addEventListener('click', () => {
+            sidebar.classList.toggle('-translate-x-full');
+        });
+        
+        // Close sidebar on mobile after clicking a link
+        navButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                if (window.innerWidth < 1024 && !sidebar.classList.contains('-translate-x-full')) {
+                    sidebar.classList.add('-translate-x-full');
+                }
+            });
+        });
+
+        // Original modal handlers (kept but now only for the abandoned modal)
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !orderDetailsModal.classList.contains('hidden')) {
+                closeModal();
+            }
+        });
+        
+        orderDetailsModal.addEventListener('click', (e) => {
+            if (e.target === orderDetailsModal) {
+                closeModal();
+            }
+        });
+
+        // Add Event Listener for the Order Update Form Submission
+        if (orderUpdateForm) {
+            orderUpdateForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                handleStatusUpdate();
+            });
+        }
+    });
+</script>
+</body>
+</html>

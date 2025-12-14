@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Outflickz Admin Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
+    <style>
+        /* Define a custom dark green color for consistency */
+        .bg-custom-green { background-color: #065f46; } /* green-700 */
+        .hover\:bg-custom-green-dark:hover { background-color: #059669; } /* green-600 */
+        .text-custom-green { color: #065f46; }
+        .border-custom-green { border-color: #065f46; }
+
+        /* Set the default font to Inter for a modern look */
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center bg-gray-900 p-4">
+
+    <!-- Main Card Container -->
+    <!-- Responsive layout: Stacked on mobile, side-by-side on desktop (md:) -->
+    <div class="relative bg-white shadow-2xl rounded-xl w-full max-w-lg overflow-hidden md:flex md:max-w-4xl z-10">
+
+        <!-- 1. Image/Branding Side (Dark Green/Black Theme) -->
+        <div class="hidden md:block md:w-1/2 bg-custom-green p-10 flex items-center justify-center">
+            <div class="text-white text-center">
+                <svg xmlns="https://i.imgur.com/1Rxhi9q.jpeg" class="h-20 w-20 mx-auto mb-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path fill-rule="evenodd" d="M3 3a1 1 0 011-1h16a1 1 0 011 1v16a1 1 0 01-1 1H4a1 1 0 01-1-1V3zm15.707 6.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L13 13.586l3.293-3.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                </svg>
+                <h3 class="text-2xl font-bold mb-2">Outflickz Admin Dashboard</h3>
+                <p class="text-sm opacity-90">Your central hub for E-commerce management, inventory, and order tracking.</p>
+            </div>
+        </div>
+        
+        <!-- 2. Form Content Side (White/Black Theme) -->
+        <div class="w-full md:w-1/2 p-6 sm:p-10">
+            
+            <!-- Header -->
+            <div class="flex flex-col items-center mb-6">
+                <!-- Using a placeholder logo for consistency -->
+                <img src="https://i.imgur.com/1Rxhi9q.jpeg" alt="Outflickz Logo" class="h-16 w-auto mb-4 rounded-full border border-gray-200">
+                <h2 class="text-3xl font-extrabold text-gray-900">
+                    Portal Access
+                </h2>
+            </div>
+
+            <!-- Tab/Toggle for Login/Register -->
+            <div class="flex mb-6 border-b border-gray-200">
+                <button id="showLoginBtn" class="flex-1 py-3 text-sm font-semibold border-b-2 text-custom-green border-custom-green transition duration-300 rounded-t-lg">
+                    Sign In
+                </button>
+                <button id="showRegisterBtn" class="flex-1 py-3 text-sm font-semibold text-gray-500 border-b-2 border-transparent hover:text-custom-green transition duration-300 rounded-t-lg">
+                    Create Account
+                </button>
+            </div>
+
+            <!-- Forms Container -->
+            <div id="formsContainer" class="min-h-[300px]">
+
+                <!-- 1. LOGIN FORM -->
+                <form id="adminLoginForm" class="space-y-6">
+                    <div>
+                        <label for="loginEmail" class="block text-sm font-medium text-gray-700">Email address</label>
+                        <div class="mt-1">
+                            <input 
+                                id="loginEmail" 
+                                type="email" 
+                                autocomplete="email" 
+                                required 
+                                class="appearance-none block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-custom-green focus:border-custom-green sm:text-sm"
+                                placeholder="admin@outflickz.com"
+                            >
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <label for="loginPassword" class="block text-sm font-medium text-gray-700">Password</label>
+                            <a href="admin-forgot-password.html" class="text-sm font-medium text-custom-green hover:text-green-800 transition duration-150">
+                                Forgot password?
+                            </a>
+                        </div>
+                        <div class="mt-1 relative">
+                            <input 
+                                id="loginPassword" 
+                                type="password" 
+                                autocomplete="current-password" 
+                                required 
+                                class="password-input appearance-none block w-full pr-10 px-4 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-custom-green focus:border-custom-green sm:text-sm"
+                                placeholder="Enter your password"
+                            >
+                            <button type="button" class="toggle-password absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-gray-700" title="Toggle password visibility">
+                                <!-- Eye Closed Icon -->
+                                <svg class="h-5 w-5 eye-closed" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l16 16a1 1 0 001.414-1.414l-16-16zm.786 8.94c.3-.96 1.094-1.996 2.378-2.673a8 8 0 018.63 0c1.284.677 2.078 1.713 2.378 2.673.284.9.414 1.76.425 2.585.013.916-.145 1.76-.412 2.505-.26.716-.684 1.341-1.238 1.78-.553.438-1.25.684-2.008.73-1.047.062-2.316-.27-3.923-.972-1.607-.702-3.41-1.35-5.32-1.35-.912 0-1.745.242-2.457.653-.712.41-1.246 1.01-1.62 1.758a1 1 0 001.76.883c.27-.533.684-.94 1.157-1.218.473-.278 1.034-.417 1.666-.417 1.696 0 3.393.593 4.904 1.25.757.33 1.54.5 2.348.5 1.72 0 3.197-.84 4.06-2.046.027-.037.054-.075.08-.113.004-.007.008-.013.012-.02 1.107-1.554 1.61-3.437 1.446-5.46-.108-1.32-.477-2.49-1.09-3.41a8.435 8.435 0 00-1.284-1.573 8.002 8.002 0 00-2.408-1.385c-1.387-.58-2.903-.88-4.526-.88-1.754 0-3.328.375-4.66.975zM10 12a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+                                </svg>
+                                <!-- Eye Open Icon -->
+                                <svg class="h-5 w-5 eye-open hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                    <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <button 
+                            type="submit" 
+                            id="loginButton"
+                            class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-lg text-sm font-medium text-white bg-custom-green hover:bg-custom-green-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-custom-green transition duration-150 ease-in-out disabled:opacity-50"
+                        >
+                            Sign in
+                        </button>
+                    </div>
+                </form>
+
+                <!-- 2. REGISTER FORM -->
+                <form id="adminRegisterForm" class="space-y-6 hidden">
+                    <div>
+                        <label for="registerEmail" class="block text-sm font-medium text-gray-700">Email address</label>
+                        <div class="mt-1">
+                            <input 
+                                id="registerEmail" 
+                                type="email" 
+                                autocomplete="email" 
+                                required 
+                                class="appearance-none block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-custom-green focus:border-custom-green sm:text-sm"
+                                placeholder="new-admin@outflickz.com"
+                            >
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="registerPassword" class="block text-sm font-medium text-gray-700">New Password</label>
+                        <div class="mt-1 relative">
+                            <input 
+                                id="registerPassword" 
+                                type="password" 
+                                required 
+                                class="password-input appearance-none block w-full pr-10 px-4 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-custom-green focus:border-custom-green sm:text-sm"
+                                placeholder="Must be at least 6 characters"
+                            >
+                            <button type="button" class="toggle-password absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-gray-700" title="Toggle password visibility">
+                                <!-- Eye Closed Icon -->
+                                <svg class="h-5 w-5 eye-closed" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l16 16a1 1 0 001.414-1.414l-16-16zm.786 8.94c.3-.96 1.094-1.996 2.378-2.673a8 8 0 018.63 0c1.284.677 2.078 1.713 2.378 2.673.284.9.414 1.76.425 2.585.013.916-.145 1.76-.412 2.505-.26.716-.684 1.341-1.238 1.78-.553.438-1.25.684-2.008.73-1.047.062-2.316-.27-3.923-.972-1.607-.702-3.41-1.35-5.32-1.35-.912 0-1.745.242-2.457.653-.712.41-1.246 1.01-1.62 1.758a1 1 0 001.76.883c.27-.533.684-.94 1.157-1.218.473-.278 1.034-.417 1.666-.417 1.696 0 3.393.593 4.904 1.25.757.33 1.54.5 2.348.5 1.72 0 3.197-.84 4.06-2.046.027-.037.054-.075.08-.113.004-.007.008-.013.012-.02 1.107-1.554 1.61-3.437 1.446-5.46-.108-1.32-.477-2.49-1.09-3.41a8.435 8.435 0 00-1.284-1.573 8.002 8.002 0 00-2.408-1.385c-1.387-.58-2.903-.88-4.526-.88-1.754 0-3.328.375-4.66.975zM10 12a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+                                </svg>
+                                <!-- Eye Open Icon -->
+                                <svg class="h-5 w-5 eye-open hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                    <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <button 
+                            type="submit" 
+                            id="registerButton"
+                            class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-lg text-sm font-medium text-white bg-gray-900 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 transition duration-150 ease-in-out disabled:opacity-50"
+                        >
+                            Create Admin Account
+                        </button>
+                    </div>
+                </form>
+
+            </div>
+            
+            <!-- Error/Success Message Modal (instead of alert) -->
+            <div id="messageBox" class="mt-4 p-3 border rounded-lg text-sm font-medium hidden transition duration-300"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const loginForm = document.getElementById('adminLoginForm');
+        const registerForm = document.getElementById('adminRegisterForm');
+        const showLoginBtn = document.getElementById('showLoginBtn');
+        const showRegisterBtn = document.getElementById('showRegisterBtn');
+        const messageBox = document.getElementById('messageBox');
+        
+        // --- Form Toggling Logic ---
+
+        function showForm(formId) {
+            loginForm.classList.add('hidden');
+            registerForm.classList.add('hidden');
+            showLoginBtn.classList.remove('text-custom-green', 'border-custom-green');
+            showLoginBtn.classList.add('text-gray-500', 'border-transparent');
+            showRegisterBtn.classList.remove('text-custom-green', 'border-custom-green');
+            showRegisterBtn.classList.add('text-gray-500', 'border-transparent');
+
+            if (formId === 'login') {
+                loginForm.classList.remove('hidden');
+                showLoginBtn.classList.add('text-custom-green', 'border-custom-green');
+            } else {
+                registerForm.classList.remove('hidden');
+                showRegisterBtn.classList.add('text-custom-green', 'border-custom-green');
+            }
+        }
+
+        showLoginBtn.addEventListener('click', () => showForm('login'));
+        showRegisterBtn.addEventListener('click', () => showForm('register'));
+
+        // --- Utility Functions ---
+
+        function showMessage(message, isError = false) {
+            messageBox.textContent = message;
+            messageBox.classList.remove('hidden', 'bg-red-100', 'border-red-400', 'text-red-700', 'bg-green-100', 'border-green-400', 'text-green-700');
+            
+            if (isError) {
+                messageBox.classList.add('bg-red-100', 'border-red-400', 'text-red-700');
+            } else {
+                messageBox.classList.add('bg-green-100', 'border-green-400', 'text-green-700');
+            }
+        }
+
+        function hideMessage() {
+            messageBox.classList.add('hidden');
+        }
+
+        // --- Password Visibility Toggle Logic ---
+        document.querySelectorAll('.toggle-password').forEach(button => {
+            button.addEventListener('click', function () {
+                // Find the associated password input
+                const passwordInput = this.parentElement.querySelector('.password-input');
+                const eyeOpenIcon = this.querySelector('.eye-open');
+                const eyeClosedIcon = this.querySelector('.eye-closed');
+                
+                // Toggle the type attribute
+                const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+                passwordInput.setAttribute('type', type);
+                
+                // Toggle the eye icon visibility
+                eyeOpenIcon.classList.toggle('hidden');
+                eyeClosedIcon.classList.toggle('hidden');
+            });
+        });
+
+        // --- 1. LOGIN Submission Handler ---
+        loginForm.addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            const loginButton = document.getElementById('loginButton');
+
+            hideMessage();
+            loginButton.disabled = true;
+            loginButton.textContent = 'Signing in...';
+            
+            const payload = { email, password };
+
+            try {
+                const response = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    const token = data.token;
+                    // Token is stored in localStorage for subsequent API requests
+                    localStorage.setItem('adminToken', token); 
+                    // Redirect to the dashboard page
+                    window.location.href = 'admin-dashboard.html'; 
+                } else {
+                    throw new Error(data.message || 'Login failed. Please check your credentials.');
+                }
+            } catch (error) {
+                console.error('Login error:', error.message);
+                showMessage(error.message, true);
+            } finally {
+                loginButton.disabled = false;
+                loginButton.textContent = 'Sign in';
+            }
+        });
+
+        // --- 2. REGISTER Submission Handler ---
+        registerForm.addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const email = document.getElementById('registerEmail').value;
+            const password = document.getElementById('registerPassword').value;
+            const registerButton = document.getElementById('registerButton');
+
+            hideMessage();
+            registerButton.disabled = true;
+            registerButton.textContent = 'Creating account...';
+            
+            if (password.length < 6) {
+                showMessage('Password must be at least 6 characters long.', true);
+                registerButton.disabled = false;
+                registerButton.textContent = 'Create Admin Account';
+                return;
+            }
+
+            const payload = { email, password };
+
+            try {
+                const response = await fetch('/api/admin/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage(data.message || 'Registration successful! Please sign in.', false);
+                    // Automatically switch to the login form after successful registration
+                    showForm('login');
+                } else {
+                    throw new Error(data.message || 'Registration failed. Please try again.');
+                }
+            } catch (error) {
+                console.error('Registration error:', error.message);
+                showMessage(error.message, true);
+            } finally {
+                registerButton.disabled = false;
+                registerButton.textContent = 'Create Admin Account';
+            }
+        });
+
+
+        // --- Initial Load Check ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // If a token exists, redirect immediately to the dashboard
+            if (localStorage.getItem('adminToken')) {
+                window.location.href = 'admin-dashboard.html';
+            }
+            // Ensure the login form is shown by default
+            showForm('login');
+        });
+    </script>
+</body>
+</html>

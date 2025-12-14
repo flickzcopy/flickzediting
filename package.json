@@ -1,0 +1,28 @@
+{
+  "name": "outflickz-backend",
+  "version": "1.0.0",
+  "description": "Outflickz E-commerce Admin Backend",
+  "main": "netlify/functions/api.js",
+  "scripts": {
+    "start": "node netlify/functions/api.js",
+    "dev": "nodemon netlify/functions/api.js",
+    "build": "npm install"
+  },
+  "dependencies": {
+    "@aws-sdk/s3-request-presigner": "^3.932.0",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.19.2",
+    "express-session": "^1.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.4.4",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^7.0.10",
+    "serverless-http": "^3.2.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
+}

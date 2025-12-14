@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Manage New Arrivals</title>
+    <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom style for the color preview circle */
+        .color-preview {
+            width: 1.5rem;
+            height: 1.5rem;
+            border-radius: 50%;
+            border: 2px solid #ccc;
+        }
+        /* Active link style for the current page */
+        .active-link-page {
+            background-color: #065F46; /* emerald-700 */
+            color: white;
+        }
+        /* Scrollbar styling for stock table - for better UX on desktop */
+        .stock-table-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .stock-table-container::-webkit-scrollbar-thumb {
+            background-color: #d1d5db; /* gray-300 */
+            border-radius: 4px;
+        }
+        .stock-table-container::-webkit-scrollbar-track {
+            background-color: #f3f4f6; /* gray-100 */
+        }
+        /* Fix for input fields in small screens */
+        input:not([type="checkbox"]), select, textarea {
+            padding: 0.5rem;
+            border-width: 1px;
+        }
+        /* Modal Backdrop */
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <aside id="sidebar" class="fixed top-0 left-0 h-full w-64 bg-emerald-900 text-white transform transition-transform duration-300 z-30 lg:translate-x-0 -translate-x-full shadow-2xl flex flex-col">
+        <div class="p-6 flex-shrink-0">
+            <img src="https://placehold.co/100x40/10b981/ffffff?text=Logo" alt="E-commerce Logo" class="h-10 w-auto mb-6 rounded-lg shadow-md border border-emerald-700">
+            <h1 class="text-xl font-extrabold text-emerald-400 border-t border-emerald-800 pt-4">Commerce Hub</h1>
+        </div>
+        
+        <nav class="space-y-2 px-4 flex-grow overflow-y-auto">
+            
+            <a href="admin-dashboard.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l-7-7-7 7m10 0v10a1 1 0 01-1 1h-3m-3 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-9 0h10"></path></svg>
+                Dashboard
+            </a>
+            <a href="userorders.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l-7-7-7 7m10 0v10a1 1 0 01-1 1h-3m-3 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-9 0h10"></path></svg>
+                    User Orders
+                </a>
+            <a href="wearscollection.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+                Wears Collection
+            </a>
+
+            <a href="capscollection.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out bg-emerald-600 hover:bg-emerald-700 active-link">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14v12a2 2 0 01-2 2H7a2 2 0 01-2-2V9z"></path></svg>
+                Caps Collection
+            </a>
+            
+            <a href="newarrivals.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg active-link-page">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                New Arrivals
+            </a>
+            <a href="preorders.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Pre-Order
+            </a>
+            <a href="membership.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l-7-7-7 7m10 0v10a1 1 0 01-1 1h-3m-3 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-9 0h10"></path></svg>
+                    Membership
+                </a>
+            <a href="settings.html" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out hover:bg-emerald-800 text-emerald-200 hover:text-white">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.526.34.813.486 1.066-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                Settings
+            </a>
+        </nav>
+        
+        <div class="p-4 flex-shrink-0 border-t border-emerald-800">
+            <button id="btn-logout" onclick="logoutAdmin()" class="w-full flex items-center p-3 text-base font-medium rounded-lg transition duration-150 ease-in-out bg-red-600 hover:bg-red-700 text-white shadow-lg">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                Log Out
+            </button>
+        </div>
+    </aside>
+
+    <div class="lg:ml-64 p-4 sm:p-8">
+        <button id="sidebar-toggle" class="lg:hidden fixed top-4 left-4 p-2 bg-white rounded-md shadow-md text-gray-700 hover:text-gray-900 z-40">☰ Menu</button>
+        
+        <div id="success-modal" class="hidden fixed inset-0 modal-backdrop overflow-y-auto h-full w-full z-50 justify-center items-center">
+            <div class="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full transform transition-all">
+                <div class="flex items-center space-x-4">
+                    <div class="flex-shrink-0 bg-emerald-100 p-2 rounded-full">
+                        <svg class="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900">Success!</h3>
+                        <p id="successModalMessage" class="text-sm text-gray-600"></p>
+                    </div>
+                </div>
+                <div class="mt-4 flex justify-end">
+                    <button type="button" onclick="document.getElementById('success-modal').classList.add('hidden'); document.getElementById('success-modal').classList.remove('flex');" class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700">Close</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="error-modal" class="hidden fixed inset-0 modal-backdrop overflow-y-auto h-full w-full z-50 justify-center items-center">
+            <div class="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full transform transition-all">
+                <div class="flex items-center space-x-4">
+                    <div class="flex-shrink-0 bg-red-100 p-2 rounded-full">
+                        <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900">Error Occurred</h3>
+                        <p id="errorModalMessage" class="text-sm text-gray-600"></p>
+                    </div>
+                </div>
+                <div class="mt-4 flex justify-end">
+                    <button type="button" onclick="document.getElementById('error-modal').classList.add('hidden'); document.getElementById('error-modal').classList.remove('flex');" class="px-4 py-2 text-gray-600 border rounded-md hover:bg-gray-100">Dismiss</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="confirmation-modal" class="hidden fixed inset-0 modal-backdrop overflow-y-auto h-full w-full z-50 justify-center items-center">
+            <div class="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full transform transition-all">
+                <h3 class="text-lg font-bold mb-4 text-gray-900">Confirm Action</h3>
+                <p id="confirmationModalMessage" class="text-sm text-gray-700 mb-6"></p>
+                <div class="flex justify-end space-x-3">
+                    <button id="confirmationCancelBtn" type="button" class="px-4 py-2 text-gray-600 border rounded-md hover:bg-gray-100">Cancel</button>
+                    <button id="confirmationConfirmBtn" type="button" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Confirm</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="restock-modal" class="hidden fixed inset-0 modal-backdrop overflow-y-auto h-full w-full z-50 justify-center items-center">
+            <div class="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full">
+                <h3 class="text-lg font-bold mb-4">Quick Activate Product</h3>
+                <p class="text-sm text-gray-600 mb-4">Activate **<span id="restockModalName" class="font-semibold"></span>** (Status will change to Available/Inactive). You must update size-specific stock via the Edit button later if required.</p>
+                <div class="flex justify-end space-x-3">
+                    <button id="restockCancelBtn" type="button" class="px-4 py-2 text-gray-600 border rounded-md hover:bg-gray-100">Cancel</button>
+                    <button id="restockConfirmBtn" type="button" class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700">Confirm Activation</button>
+                </div>
+            </div>
+        </div>
+
+        <main class="space-y-8 mt-12 lg:mt-0">
+            
+            <section id="content-newarrival">
+                <div class="bg-white shadow overflow-hidden sm:rounded-lg p-6">
+                    <h2 id="form-title" class="text-2xl font-bold text-gray-900 mb-6">✨ Create New Arrival</h2>
+                    <form id="new-arrival-form" enctype="multipart/form-data">
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                            <div>
+                                <label for="product-name" class="block text-sm font-medium text-gray-700">Product Name</label>
+                                <input type="text" id="product-name" required class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="product-tag" class="block text-sm font-medium text-gray-700">Tag (e.g., Hot Deal, New)</label>
+                                <input type="text" id="product-tag" required class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="product-price" class="block text-sm font-medium text-gray-700">Price (₦)</label>
+                                <input type="number" step="0.01" min="0" id="product-price" required class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                            <div class="md:col-span-3 flex items-center">
+                                <input id="is-active" type="checkbox" checked class="h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500">
+                                <label for="is-active" class="ml-2 block text-sm font-medium text-gray-700">Active / Available Online (Unchecking this sets stock to 0 on the server)</label>
+                            </div>
+                        </div>
+
+                        <hr class="my-6">
+                        
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Product Variations (Colors/Views & Stock)</h3>
+                        <div class="mb-6 border-l-4 border-emerald-500 pl-4 py-2 bg-emerald-50 rounded-md">
+                            <label for="common-sizes" class="block text-sm font-bold text-emerald-800">Define Available Sizes Once (Comma separated: S, M, L)</label>
+                            <p class="text-xs text-emerald-600 mb-2">These sizes will be used to create the stock tables for every variation below.</p>
+                            <input type="text" id="common-sizes" placeholder="S, M, L, XL" value="S, M, L, XL" required class="mt-1 block w-full rounded-md border border-emerald-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm">
+                        </div>
+
+                        <div id="product-sections-container" class="space-y-6 mb-6">
+                        </div>
+
+                        <button type="button" id="add-section-btn" class="mb-6 px-4 py-2 border border-emerald-600 text-emerald-600 rounded-lg flex items-center transition duration-150 hover:bg-emerald-50">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                            Add Product Variation
+                        </button>
+
+                        <div class="flex justify-end space-x-4">
+                            <button type="button" id="reset-form-btn" class="hidden px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition duration-150" onclick="resetForm()">Cancel Edit</button>
+                            <button type="submit" id="submit-btn" class="px-6 py-2 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition duration-150">
+                                Submit New Arrival
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <hr class="my-8">
+
+            <section id="content-newarrival-list">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">📦 New Arrivals List</h2>
+                <div class="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product Name</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tag</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variations</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="products-table-body" class="bg-white divide-y divide-gray-200">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+<script>
+    // --- Configuration and Global Variables ---
+    const API_BASE_URL = '/api/admin/newarrivals'; 
+    const MAX_VARIATIONS = 4;
+    // Define standard sizes if needed, but the form uses common-sizes input
+    const DEFAULT_SIZES = ['S', 'M', 'L', 'XL'];
+
+    let productIdToUpdate = null; 
+    let sectionCount = 0;
+    let confirmationResolver = null; // Used for the custom confirmation modal
+
+    // DOM Elements
+    const productsTableBody = document.getElementById('products-table-body'); 
+    const formTitle = document.getElementById('form-title');
+    const submitBtn = document.getElementById('submit-btn');
+    const resetFormBtn = document.getElementById('reset-form-btn');
+    const productSectionsContainer = document.getElementById('product-sections-container');
+    const addSectionBtn = document.getElementById('add-section-btn');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    const commonSizesInput = document.getElementById('common-sizes');
+    
+    // Custom Modal Elements
+    const successModal = document.getElementById('success-modal');
+    const successModalMessage = document.getElementById('successModalMessage');
+    const errorModal = document.getElementById('error-modal');
+    const errorModalMessage = document.getElementById('errorModalMessage');
+    const confirmationModal = document.getElementById('confirmation-modal');
+    const confirmationModalMessage = document.getElementById('confirmationModalMessage');
+    const confirmationConfirmBtn = document.getElementById('confirmationConfirmBtn');
+    const confirmationCancelBtn = document.getElementById('confirmationCancelBtn');
+
+    // Restock Modal Elements
+    const restockModal = document.getElementById('restock-modal');
+    const restockModalName = document.getElementById('restockModalName');
+    const restockConfirmBtn = document.getElementById('restockConfirmBtn');
+    const restockCancelBtn = document.getElementById('restockCancelBtn');
+
+    // --- Utility & Authentication Functions ---
+
+    function getAuthToken() {
+        const token = localStorage.getItem('adminToken');
+        if (!token) {
+            console.error('Authentication token not found. Redirecting to login.');
+            // window.location.href = '/admin-login.html'; 
+            return null;
+        }
+        return token;
+    }
+    
+    // MODAL IMPLEMENTATION START
+    function showModal(modal, messageElement, message) {
+        // Clean up markdown markers from server messages
+        const cleanMessage = message.replace(/<\/?mark>/g, '');
+        messageElement.innerHTML = cleanMessage;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+
+    function showSuccessModal(message) {
+        showModal(successModal, successModalMessage, message);
+    }
+
+    function showErrorModal(message) {
+        showModal(errorModal, errorModalMessage, message);
+    }
+    
+    function showConfirmationModal(message) {
+        return new Promise(resolve => {
+            confirmationResolver = resolve;
+            showModal(confirmationModal, confirmationModalMessage, message);
+            
+            const handleConfirm = () => {
+                cleanup();
+                resolve(true);
+            };
+            
+            const handleCancel = () => {
+                cleanup();
+                resolve(false);
+            };
+            
+            const cleanup = () => {
+                confirmationConfirmBtn.removeEventListener('click', handleConfirm);
+                confirmationCancelBtn.removeEventListener('click', handleCancel);
+                confirmationModal.classList.add('hidden');
+                confirmationModal.classList.remove('flex');
+                confirmationResolver = null;
+            };
+            
+            // Attach temporary listeners
+            confirmationConfirmBtn.addEventListener('click', handleConfirm);
+            confirmationCancelBtn.addEventListener('click', handleCancel);
+        });
+    }
+    // MODAL IMPLEMENTATION END
+    
+    function logoutAdmin() {
+        console.log("Admin logged out and token removed.");
+        localStorage.removeItem('adminToken');
+        // window.location.href = '/admin-login.html'; // Actual redirect
+    }
+    
+    function updateColorPreview(colorValue, previewId) {
+        const previewElement = document.getElementById(previewId);
+        if (previewElement) {
+            previewElement.style.backgroundColor = colorValue;
+        }
+    }
+    
+    function getCleanedSizes() {
+        return commonSizesInput.value
+            .split(',')
+            .map(s => s.trim().toUpperCase())
+            .filter(s => s);
+    }
+    
+    function renderStockInputs(index, existingSizes = []) {
+        const sizes = getCleanedSizes();
+        if (sizes.length === 0) {
+            return `<p class="text-sm text-red-500 mt-2">Please define available sizes above before adding stock.</p>`;
+        }
+        
+        let stockRows = '';
+        sizes.forEach(size => {
+            // Find existing stock for this size, default to 0
+            const existingStockEntry = existingSizes.find(entry => entry.size.toUpperCase() === size);
+            const initialStock = existingStockEntry ? existingStockEntry.stock : 0;
+            
+            stockRows += `
+                <tr class="hover:bg-gray-100">
+                    <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">${size}</td>
+                    <td class="px-4 py-2 whitespace-nowrap">
+                        <input type="number" 
+                               min="0" 
+                               value="${initialStock}" 
+                               data-size-name="${size}" 
+                               class="stock-input-field w-20 p-1 text-sm border rounded-md focus:border-emerald-500 focus:ring-emerald-500">
+                    </td>
+                </tr>
+            `;
+        });
+
+        return `
+            <h5 class="text-sm font-semibold mt-4 mb-2">Stock per Size:</h5>
+            <div class="max-h-48 overflow-y-auto border rounded-lg stock-table-container">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50 sticky top-0">
+                        <tr>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        ${stockRows}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+
+    // --- Product Variation Section Management ---
+
+    function renderImageInput(viewType, imageUrl, requiredAttr, viewLabel, index) {
+        const viewId = `${viewType}-upload-${index}`;
+        const existingUrlId = `existing-${viewType}-url-${index}`;
+        
+        const imageInfo = imageUrl ?
+            `<p class="mt-2 text-xs text-gray-500">Existing ${viewLabel}: <a href="${imageUrl}" target="_blank" class="text-blue-500 hover:underline">View Image</a>. Uploading a new file will replace it.</p>
+             <input type="hidden" id="${existingUrlId}" name="${existingUrlId}" value="${imageUrl}">` :
+            `<p class="mt-2 text-xs text-gray-500">Upload the ${viewLabel} image for this variation.</p>`;
+        
+        const imagePreviewHtml = imageUrl ?
+            `<div class="mt-3">
+                <p class="text-sm font-medium text-gray-700 mb-2">Current ${viewLabel} Preview:</p>
+                <img src="${imageUrl}" alt="Current ${viewLabel} preview" class="max-w-full h-auto rounded-lg shadow-md max-h-32 object-contain" />
+            </div>` : '';
+
+        return `
+            <div>
+                <label for="${viewId}" class="block text-sm font-medium text-gray-700">${viewLabel} Image</label>
+                <input type="file" name="${viewId}" id="${viewId}" accept="image/*" ${requiredAttr} class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100">
+                ${imageInfo}
+                ${imagePreviewHtml}
+            </div>
+        `;
+    }
+
+    function createProductSection(index, frontImageUrl = null, backImageUrl = null, colorHex = '#10B981', sizesData = []) {
+        const uniqueId = `section-${index}`;
+        const sectionNumber = index + 1; 
+        const isEditing = frontImageUrl !== null || backImageUrl !== null;
+        // Require file if creating new product, OR if editing but this specific image is missing.
+        const fileRequiredAttribute = (productIdToUpdate === null && index === 0) || (productIdToUpdate !== null && !frontImageUrl) ? 'required' : '';
+
+
+        return `
+            <div id="${uniqueId}" data-variation-index="${index}" class="p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-inner relative">
+                <h4 class="text-md font-bold text-gray-600 mb-3 flex justify-between items-center">
+                    Product Variation #${sectionNumber}
+                    ${sectionNumber > 1 || isEditing ? `<button type="button" onclick="removeProductSection('${uniqueId}')" class="text-red-500 hover:text-red-700 transition duration-150 text-sm">Remove</button>` : ''}
+                </h4>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    ${renderImageInput('front-view', frontImageUrl, fileRequiredAttribute, 'Front View', index)}
+                    ${renderImageInput('back-view', backImageUrl, '', 'Back View (Optional)', index)}
+                    
+                    <div>
+                        <label for="color-input-${index}" class="block text-sm font-medium text-gray-700">Color/Hex Code</label>
+                        <div class="flex items-center mt-1">
+                            <input type="color" id="color-input-${index}" value="${colorHex}" required
+                                class="p-0 h-10 w-10 block rounded-full border-2 border-gray-300 cursor-pointer"
+                                oninput="updateColorPreview(this.value, 'color-preview-${index}')">
+                            <div id="color-preview-${index}" class="color-preview ml-3" style="background-color: ${colorHex};"></div>
+                            <span class="ml-3 text-sm text-gray-500">Pick a color</span>
+                        </div>
+                    </div>
+                    
+                    <div>
+                          ${renderStockInputs(index, sizesData)}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function addProductSection() {
+        if (sectionCount < MAX_VARIATIONS) {
+            const newSection = document.createElement('div');
+            newSection.innerHTML = createProductSection(sectionCount).trim(); 
+            productSectionsContainer.appendChild(newSection.firstChild);
+            sectionCount++;
+
+            updateAddSectionButtonState();
+        } else {
+             showErrorModal(`You can only add a maximum of <mark>${MAX_VARIATIONS}</mark> product variations.`);
+        }
+    }
+
+    function removeProductSection(id) {
+        const sectionToRemove = document.getElementById(id);
+        if (sectionToRemove) {
+            if (productIdToUpdate === null && productSectionsContainer.children.length === 1) {
+                showErrorModal("You must have at least one product variation.");
+                return;
+            }
+            sectionToRemove.remove();
+            reindexProductSections(); // Re-index after removal
+            updateAddSectionButtonState();
+        }
+    }
+
+    function reindexProductSections() {
+        const sections = Array.from(productSectionsContainer.children);
+        let currentSectionCount = 0;
+
+        sections.forEach((section, index) => {
+            const newIndex = index; 
+
+            // 1. Extract current data before replacement
+            const existingFrontUrl = section.querySelector(`[id^="existing-front-view-url-"]`)?.value || null;
+            const existingBackUrl = section.querySelector(`[id^="existing-back-view-url-"]`)?.value || null;
+            const existingColor = section.querySelector(`[id^="color-input-"]`)?.value || '#10B981';
+            
+            // 2. Extract current stock data
+            const existingStockData = Array.from(section.querySelectorAll('.stock-input-field')).map(input => ({
+                size: input.dataset.sizeName,
+                stock: parseInt(input.value) || 0
+            }));
+            
+            const tempDiv = document.createElement('div');
+            // 3. Re-render the section with the new index and preserved data
+            tempDiv.innerHTML = createProductSection(newIndex, existingFrontUrl, existingBackUrl, existingColor, existingStockData).trim();
+            const newSectionElement = tempDiv.firstChild;
+            
+            // If the element has a parent, replace it. If not (shouldn't happen here), just ensure the count is right.
+            if(section.parentNode) {
+                section.replaceWith(newSectionElement);
+            }
+
+            currentSectionCount++;
+        });
+
+        sectionCount = currentSectionCount;
+    }
+
+    function updateAddSectionButtonState() {
+        if (sectionCount >= MAX_VARIATIONS) {
+            addSectionBtn.disabled = true;
+            addSectionBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            addSectionBtn.classList.remove('hover:bg-emerald-50');
+        } else {
+            addSectionBtn.disabled = false;
+            addSectionBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            addSectionBtn.classList.add('hover:bg-emerald-50');
+        }
+    }
+
+
+    // --- Core Functions (CRUD & Display) ---
+
+    function resetForm() {
+        document.getElementById('new-arrival-form').reset();
+        productIdToUpdate = null;
+        formTitle.textContent = '✨ Create New Arrival'; 
+        submitBtn.textContent = 'Submit New Arrival'; 
+        submitBtn.classList.remove('bg-yellow-600', 'hover:bg-yellow-700');
+        submitBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+        resetFormBtn.classList.add('hidden');
+        
+        // Re-initialize variations to a single section
+        productSectionsContainer.innerHTML = '';
+        sectionCount = 0;
+        addProductSection(); 
+        updateAddSectionButtonState();
+        // Force re-render of stock inputs if common sizes were changed before reset
+        commonSizesInput.value = DEFAULT_SIZES.join(', ');
+        reindexProductSections();
+    }
+
+    async function fetchProducts() { 
+        const token = getAuthToken();
+        if (!token) return;
+
+        try {
+            const response = await fetch(API_BASE_URL, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || `HTTP error! Status: ${response.status}`);
+            }
+
+            const products = await response.json(); 
+            renderProductsTable(products); 
+
+        } catch (error) {
+            console.error('Error fetching products:', error);
+            showErrorModal(`Failed to load products: <mark>${error.message}</mark>`);
+        }
+    }
+
+    function renderProductsTable(products) { 
+        productsTableBody.innerHTML = '';
+
+        products.forEach(product => { 
+            const tagClass = getTagClass(product.tag);
+            const formattedPrice = `₦${(product.price || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
+            
+            // Status Logic
+            let statusText = 'Inactive';
+            let statusClass = 'bg-gray-100 text-gray-800';
+            let restockButton = '';
+
+            if (product.isActive && product.totalStock > 0) {
+                statusText = 'Available';
+                statusClass = 'bg-emerald-100 text-emerald-800';
+            } else if (product.isActive && product.totalStock === 0) {
+                statusText = 'Out of Stock (Active)';
+                statusClass = 'bg-red-100 text-red-800';
+            } else if (!product.isActive) { // product.isActive is false
+                if (product.totalStock === 0) {
+                    statusText = 'Out of Stock (Inactive)';
+                    statusClass = 'bg-red-100 text-red-800';
+                } else if (product.totalStock > 0) {
+                    statusText = 'Inactive (Hidden)';
+                    statusClass = 'bg-yellow-100 text-yellow-800';
+                }
+                // Only show activate button if it's inactive
+                restockButton = `<button onclick="quickRestockAndActivate('${product._id}', '${product.name}')" class="text-green-600 hover:text-green-900 transition duration-150 mr-3">Activate</button>`;
+            }
+
+            // Image Preview logic - assuming the first variation's front image is used
+            const firstVariation = product.variations && product.variations.length > 0 ? product.variations[0] : null;
+            // Use the cached signed URL if available, otherwise fall back to the key (which might not render without a CDN/Auth)
+            const imageUrl = firstVariation ? (firstVariation.frontCachedSignedUrl || firstVariation.frontImageUrl) : 'https://placehold.co/32x32/ccc/000?text=No';
+            const imagePreview = `<img src="${imageUrl}" alt="Preview" class="w-8 h-8 rounded-md inline-block mr-2 object-cover">`;
+
+            const row = `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${product._id.slice(-6)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${imagePreview} ${product.name}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-emerald-600">${formattedPrice}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${tagClass}">${product.tag}</span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${product.variations.length}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${product.totalStock}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}">
+                            ${statusText}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        ${restockButton}
+                        <button onclick="editProduct('${product._id}')" class="text-indigo-600 hover:text-indigo-900 transition duration-150 mr-3">Edit</button>
+                        <button onclick="deleteProduct('${product._id}')" class="text-red-600 hover:text-red-900 transition duration-150">Delete</button>
+                    </td>
+                </tr>
+            `;
+            productsTableBody.insertAdjacentHTML('beforeend', row);
+        });
+    }
+
+    function getTagClass(tag) { 
+        switch (tag.toLowerCase()) {
+            case 'top deal': return 'bg-emerald-100 text-emerald-800';
+            case 'hot deal': return 'bg-red-100 text-red-800';
+            case 'new': return 'bg-blue-100 text-blue-800';
+            case 'seasonal': return 'bg-yellow-100 text-yellow-800';
+            case 'clearance': return 'bg-pink-100 text-pink-800';
+            default: return 'bg-gray-100 text-gray-800';
+        }
+    }
+
+    async function editProduct(productId) { 
+        const token = getAuthToken();
+        if (!token) return;
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/${productId}`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || `HTTP error! Status: ${response.status}`);
+            }
+
+            const product = await response.json(); 
+
+            // 1. Set form mode
+            productIdToUpdate = productId; 
+            formTitle.textContent = `✏️ Edit New Arrival: ${product.name}`; 
+            submitBtn.textContent = 'Update New Arrival'; 
+            submitBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-700');
+            submitBtn.classList.add('bg-yellow-600', 'hover:bg-yellow-700');
+            resetFormBtn.classList.remove('hidden');
+
+            // 2. Populate basic details
+            document.getElementById('product-name').value = product.name; 
+            document.getElementById('product-tag').value = product.tag; 
+            document.getElementById('product-price').value = product.price; 
+            document.getElementById('is-active').checked = product.isActive;
+
+            // 3. Populate Variations and Stock
+            productSectionsContainer.innerHTML = '';
+            
+            // Infer the common list of sizes from the first variation's size data
+            const sizeList = product.variations[0]?.sizes?.map(s => s.size) || DEFAULT_SIZES;
+            commonSizesInput.value = sizeList.join(', ');
+
+            product.variations.forEach((variation, index) => {
+                // Use cached URL if available for display
+                const frontUrl = variation.frontCachedSignedUrl || variation.frontImageUrl || null;
+                const backUrl = variation.backCachedSignedUrl || variation.backImageUrl || null;
+                const colorHex = variation.colorHex || '#10B981'; 
+                const sizesData = variation.sizes || [];
+
+                const newSection = document.createElement('div');
+                // Pass existing sizesData to createProductSection for stock population
+                newSection.innerHTML = createProductSection(index, frontUrl, backUrl, colorHex, sizesData).trim();
+                productSectionsContainer.appendChild(newSection.firstChild);
+            });
+            
+            sectionCount = product.variations.length; 
+            reindexProductSections(); // Ensure consistent indexing
+
+            // 4. Update the add button state
+            updateAddSectionButtonState();
+
+            // 5. Scroll to the form
+            document.getElementById('content-newarrival').scrollIntoView({ behavior: 'smooth' }); 
+
+        } catch (error) {
+            console.error('Error fetching product for edit:', error);
+            showErrorModal(`Error fetching product data: <mark>${error.message}</mark>`); 
+        }
+    }
+
+    async function deleteProduct(productId) { 
+        const token = getAuthToken();
+        if (!token) return;
+
+        const isConfirmed = await showConfirmationModal(`Are you sure you want to permanently delete new arrival <mark>${productId.slice(-6)}</mark>? This action cannot be undone.`);
+        if (!isConfirmed) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/${productId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || `HTTP error! Status: ${response.status}`);
+            }
+
+            showSuccessModal(`New arrival <mark>${productId.slice(-6)}</mark> deleted successfully.`); 
+            fetchProducts(); 
+
+        } catch (error) {
+            console.error('Deletion failed:', error);
+            showErrorModal(`Error deleting new arrival: <mark>${error.message}</mark>`); 
+        }
+    }
+
+    async function quickRestockAndActivate(productId, productName) { 
+        const token = getAuthToken();
+        if (!token) return;
+        
+        restockModalName.innerHTML = `**${productName}**`;
+        restockModal.classList.remove('hidden');
+        restockModal.classList.add('flex');
+
+        const activationPromise = new Promise((resolve, reject) => {
+            
+            const handleConfirm = () => {
+                restockConfirmBtn.removeEventListener('click', handleConfirm);
+                restockCancelBtn.removeEventListener('click', handleCancel); 
+                resolve(true); // Confirmed activation
+                restockModal.classList.remove('flex');
+                restockModal.classList.add('hidden');
+            };
+
+            const handleCancel = () => {
+                restockConfirmBtn.removeEventListener('click', handleConfirm);
+                restockCancelBtn.removeEventListener('click', handleCancel);
+                reject(new Error("Activation cancelled by user."));
+                restockModal.classList.remove('flex');
+                restockModal.classList.add('hidden');
+            };
+
+            restockConfirmBtn.addEventListener('click', handleConfirm);
+            restockCancelBtn.addEventListener('click', handleCancel);
+        });
+        
+        try {
+            await activationPromise;
+        } catch (error) {
+            if (error.message !== "Activation cancelled by user.") {
+                 showErrorModal(`An error occurred: <mark>${error.message}</mark>`);
+            }
+            return;
+        }
+
+        try {
+            // Only sets isActive to true. totalStock remains calculated server-side based on existing size stock.
+            const updatePayload = {
+                isActive: true, 
+            };
+
+            const response = await fetch(`${API_BASE_URL}/${productId}/status`, { // Assuming a dedicated status update endpoint
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(updatePayload)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                try {
+                    const errorData = JSON.parse(errorText);
+                    throw new Error(errorData.message || `HTTP error! Status: ${response.status}`);
+                } catch (e) {
+                     throw new Error(errorText || `HTTP error! Status: ${response.status}`);
+                }
+            }
+
+            showSuccessModal(`New Arrival <mark>**${productName}**</mark> successfully activated!`); 
+            fetchProducts(); 
+
+        } catch (error) {
+            console.error('Activation failed:', error);
+            showErrorModal(`Error activating new arrival: <mark>${error.message}</mark>`); 
+        }
+    }
+
+    async function handleCollectionSubmit(event) { 
+        event.preventDefault();
+
+        const isUpdate = productIdToUpdate !== null; 
+        const method = isUpdate ? 'PUT' : 'POST';
+        const url = isUpdate ? `${API_BASE_URL}/${productIdToUpdate}` : API_BASE_URL; 
+
+        if (productSectionsContainer.children.length === 0) {
+            showErrorModal("Please add at least one product variation."); 
+            return;
+        }
+        
+        const commonSizes = getCleanedSizes();
+        if (commonSizes.length === 0) {
+            showErrorModal("Please define available sizes in the 'Define Available Sizes Once' field."); 
+            return;
+        }
+
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = isUpdate ? 'Updating...' : 'Submitting...';
+        submitBtn.classList.remove('hover:bg-emerald-700', 'hover:bg-yellow-700', 'bg-emerald-600', 'bg-yellow-600');
+        submitBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
+
+        const token = getAuthToken();
+        if (!token) {
+            resetFormSubmitButtonState(isUpdate);
+            return;
+        }
+
+        const formData = new FormData();
+        let productVariationsMetadata = [];
+        let isValid = true;
+
+        Array.from(productSectionsContainer.children).forEach((section, index) => {
+            if (!isValid) return; 
+            
+            const sectionNumber = index; 
+            const displaySectionNumber = index + 1; 
+            
+            const frontImageInput = section.querySelector(`#front-view-upload-${sectionNumber}`);
+            const backImageInput = section.querySelector(`#back-view-upload-${sectionNumber}`);
+            const colorInput = section.querySelector(`#color-input-${sectionNumber}`);
+            
+            const existingFrontUrlInput = section.querySelector(`#existing-front-view-url-${sectionNumber}`);
+            const existingBackUrlInput = section.querySelector(`#existing-back-view-url-${sectionNumber}`);
+
+            if (frontImageInput && colorInput) {
+                const frontImageFile = frontImageInput.files[0];
+                const backImageFile = backImageInput.files[0];
+                const color = colorInput.value;
+                
+                const existingFrontUrl = existingFrontUrlInput ? existingFrontUrlInput.value : null;
+                const existingBackUrl = existingBackUrlInput ? existingBackUrlInput.value : null;
+
+                let frontUrlForMetadata = existingFrontUrl;
+                let backUrlForMetadata = existingBackUrl;
+
+                if (frontImageFile) {
+                    formData.append(`front-view-upload-${displaySectionNumber}`, frontImageFile); 
+                    frontUrlForMetadata = 'UPLOAD_NEW'; 
+                } else if (!existingFrontUrl && !isUpdate) { // Must have file on creation
+                    showErrorModal(`Front View Image for Variation <mark>#${displaySectionNumber}</mark> is missing and is required.`); 
+                    isValid = false;
+                    return;
+                }
+
+                if (backImageFile) {
+                    formData.append(`back-view-upload-${displaySectionNumber}`, backImageFile); 
+                    backUrlForMetadata = 'UPLOAD_NEW'; 
+                } 
+                
+                // --- CRITICAL STOCK DATA COLLECTION ---
+                const sizeStockInputs = section.querySelectorAll('.stock-input-field');
+                let variationSizes = [];
+                let hasStock = false;
+
+                sizeStockInputs.forEach(input => {
+                    const stockValue = parseInt(input.value) || 0;
+                    if (stockValue < 0) {
+                         showErrorModal(`Stock for size <mark>${input.dataset.sizeName}</mark> in Variation <mark>#${displaySectionNumber}</mark> cannot be negative.`);
+                         isValid = false;
+                         return;
+                    }
+                    if (stockValue > 0) hasStock = true;
+
+                    variationSizes.push({
+                        size: input.dataset.sizeName,
+                        stock: stockValue
+                    });
+                });
+                
+                if (!isValid) return;
+
+
+                productVariationsMetadata.push({
+                    variationIndex: displaySectionNumber,
+                    colorHex: color,
+                    // Send the final keys/URLs/flags to the server
+                    frontImageUrl: frontUrlForMetadata, 
+                    backImageUrl: backUrlForMetadata,
+                    sizes: variationSizes // The full stock array
+                });
+            }
+        });
+
+        if (!isValid) {
+            resetFormSubmitButtonState(isUpdate);
+            return;
+        }
+        
+        // --- Basic Product Validation ---
+        const productName = document.getElementById('product-name').value.trim();
+        const productTag = document.getElementById('product-tag').value.trim();
+        const productPrice = parseFloat(document.getElementById('product-price').value);
+        const isActive = document.getElementById('is-active').checked;
+        
+        if (!productName || !productTag || isNaN(productPrice) || productPrice <= 0) {
+            showErrorModal("Please fill in all required product details (Name, Tag, Price > 0).");
+            resetFormSubmitButtonState(isUpdate);
+            return;
+        }
+
+        const productData = { 
+            name: productName, 
+            tag: productTag, 
+            price: productPrice, 
+            // The server calculates totalStock based on variations[].sizes and isActive status
+            isActive: isActive,
+            variations: productVariationsMetadata
+        };
+
+        // Append non-file data as JSON string for the backend to parse
+        formData.append('productData', JSON.stringify(productData)); 
+
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
+                body: formData 
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                try {
+                    const errorData = JSON.parse(errorText);
+                    throw new Error(errorData.message || `Server error during ${method}.`);
+                } catch (e) {
+                    throw new Error(errorText || `HTTP error! Status: ${response.status}`);
+                }
+            }
+
+            const result = await response.json();
+
+            const successMessage = isUpdate 
+                ? `New Arrival <mark>${productData.name}</mark> updated successfully!` 
+                : `New Arrival <mark>${productData.name}</mark> created successfully! ID: <mark>${result.productId ? result.productId.slice(-6) : 'N/A'}</mark>`;
+            
+            showSuccessModal(successMessage); 
+
+            fetchProducts(); 
+            resetForm();
+
+        } catch (error) {
+            console.error('Submission failed:', error);
+            showErrorModal(`Error submitting new arrival: <mark>${error.message}</mark>`); 
+        } finally {
+            resetFormSubmitButtonState(isUpdate);
+        }
+    }
+
+    function resetFormSubmitButtonState(isUpdate) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = isUpdate ? 'Update New Arrival' : 'Submit New Arrival'; 
+        submitBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+        if (isUpdate) {
+            submitBtn.classList.add('bg-yellow-600', 'hover:bg-yellow-700');
+        } else {
+            submitBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+        }
+    }
+
+
+    // --- Initialization ---
+    document.addEventListener('DOMContentLoaded', () => {
+        // Initial check for sizes input change to re-render stock tables
+        commonSizesInput.addEventListener('input', () => {
+            // Re-render all sections to update size inputs when the common sizes change
+            reindexProductSections();
+        });
+        
+        if (productSectionsContainer.children.length === 0) {
+            addProductSection();
+        }
+
+        document.getElementById('new-arrival-form').addEventListener('submit', handleCollectionSubmit); 
+
+        // Toggle sidebar visibility on mobile
+        sidebarToggle.addEventListener('click', () => {
+            sidebar.classList.toggle('-translate-x-full'); 
+            sidebar.classList.toggle('translate-x-0'); 
+        });
+
+        addSectionBtn.addEventListener('click', () => {
+            addProductSection();
+        });
+
+        fetchProducts(); 
+    });
+</script>
+</body>
+</html>

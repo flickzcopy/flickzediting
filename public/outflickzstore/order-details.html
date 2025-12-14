@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Details | Outflickz</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
+
+
+    <style>
+        .text-ash-red { color: #D63031; }
+        .bg-ash-red { background-color: #D63031; }
+        .border-ash-red { border-color: #D63031; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-900 antialiased">
+    
+<script>
+    const API_BASE_URL = 'https://outflickz.com';
+
+    function toggleMenu() {
+        const mobileMenu = document.getElementById('mobile-menu');
+        mobileMenu.classList.toggle('hidden');
+    }
+
+    function getOrderIdFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        // Assuming the order ID passed in the URL is the Mongoose _id or a custom ID like OFLK-2023-1001
+        return params.get('id');
+    }
+
+    function getStatusClass(status) {
+        // Normalize status to handle different casing from backend
+        const normalizedStatus = status ? status.toLowerCase() : '';
+        switch(normalizedStatus) {
+            case 'delivered': 
+            case 'completed': return 'bg-green-100 text-green-800';
+            case 'shipped': return 'bg-blue-100 text-blue-800';
+            case 'processing': 
+            case 'pending': return 'bg-yellow-100 text-yellow-800';
+            case 'cancelled': 
+            case 'refunded': return 'bg-red-100 text-red-800';
+            default: return 'bg-gray-100 text-gray-700';
+        }
+    }
+    
+    function getStatusIcon(status) {
+        const normalizedStatus = status ? status.toLowerCase() : '';
+        switch(normalizedStatus) {
+            case 'delivered': return 'check-circle';
+            case 'shipped': return 'truck';
+            case 'completed': return 'check-circle'; // Assuming 'completed' is final
+            case 'processing': 
+            case 'pending': return 'sync-alt fa-spin';
+            case 'cancelled': 
+            case 'refunded': return 'times-circle';
+            default: return 'info-circle';
+        }
+    }
+
+    async function fetchOrderDetails(orderId) {
+        const container = document.getElementById('order-details-container');
+        const loadingHtml = `
+            <div class="flex flex-col justify-center items-center h-64 text-gray-600">
+                <i class="fas fa-spinner fa-spin text-4xl mb-3 text-ash-red"></i> 
+                <p class="text-lg">Loading order ${orderId}...</p>
+            </div>
+        `;
+        container.innerHTML = loadingHtml;
+
+        try {
+            // ACTUAL API CALL: /api/orders/:orderId (Protected route, requires 'credentials: include')
+            const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}`, { 
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    // Note: You must ensure your backend handles cookie/JWT for credentials: 'include'
+                },
+                credentials: 'include' 
+            });
+            
+            if (response.status === 404) {
+                // Not Found (e.g., ID is invalid or not in database)
+                throw new Error('Order not found.');
+            }
+            if (response.status === 401 || response.status === 403) {
+                // Unauthorized/Forbidden (e.g., user is not logged in or doesn't own the order)
+                    throw new Error('Access denied. You do not have permission to view this order.');
+            }
+            if (!response.ok) {
+                    // Other server error (e.g., 500)
+                throw new Error(`Failed to load order: ${response.statusText}`);
+            }
+            
+            const order = await response.json();
+
+            // The backend should return the full order object.
+            // We assume the backend returns the order object directly.
+            renderOrderDetails(order);
+
+        } catch (error) {
+            console.error('Error fetching order details:', error);
+            const errorMessage = error.message || 'An unexpected error occurred.';
+
+            container.innerHTML = `
+                <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative max-w-4xl mx-auto mt-10" role="alert">
+                    <strong class="font-bold">Error!</strong>
+                    <span class="block sm:inline">${errorMessage}</span>
+                    <p class="text-sm mt-2">Could not load details for order ${orderId}.</p>
+                    <a href="userprofile.html#order-history" class="text-blue-600 hover:text-blue-800 mt-2 block font-medium"><i class="fas fa-arrow-left mr-1"></i> Back to Order History</a>
+                </div>
+            `;
+        }
+    }
+
+    // *** REMOVED getMockOrderDetails(orderId) ***
+
+    function renderOrderDetails(order) {
+        const container = document.getElementById('order-details-container');
+        // Use 'createdAt' from the Mongoose timestamp field
+        const formattedDate = new Date(order.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        
+        const statusClass = getStatusClass(order.status);
+        const statusIcon = getStatusIcon(order.status);
+
+        // Map the shippingAddress object based on the Mongoose schema (type: Object)
+        // Assuming the object structure is { street, city, state, zip, country }
+        const addressHtml = `
+            <p>${order.shippingAddress.street || 'N/A'}</p>
+            <p>${order.shippingAddress.city || 'N/A'}, ${order.shippingAddress.state || 'N/A'} ${order.shippingAddress.zip || 'N/A'}</p>
+            <p>${order.shippingAddress.country || 'N/A'}</p>
+        `;
+
+        // Map the items array (using the priceAtTimeOfPurchase from your OrderItemSchema)
+        const itemsHtml = order.items.map(item => `
+            <li class="flex py-4">
+                <div class="flex-shrink-0 w-16 h-16 border border-gray-200 rounded-md overflow-hidden">
+                    <img src="${item.imageUrl || item.image || 'https://via.placeholder.com/150/CCCCCC/FFFFFF?text=No+Image'}" alt="${item.name || 'Product'}" class="w-full h-full object-cover object-center">
+                </div>
+                <div class="ml-4 flex-1 flex flex-col">
+                    <div>
+                        <div class="flex justify-between text-base font-medium text-gray-900">
+                            <h3><a href="#">${item.name || 'Product Details'}</a></h3>
+                            <p class="ml-4">₦${(item.priceAtTimeOfPurchase * item.quantity).toFixed(2)}</p> 
+                        </div>
+                        <p class="mt-1 text-sm text-gray-500">Size: ${item.size || 'N/A'} - Type: ${item.productType}</p>
+                    </div>
+                    <div class="flex-1 flex items-end justify-between text-sm">
+                        <p class="text-gray-500">Qty: ${item.quantity}</p>
+                        <p class="text-gray-500">₦${item.priceAtTimeOfPurchase.toFixed(2)}/each</p>
+                    </div>
+                </div>
+            </li>
+        `).join('');
+
+        // NOTE: Your OrderSchema only contains 'totalAmount', not explicit 'subtotal', 'shippingFee', and 'tax' fields.
+        // We will mock the breakdown for rendering consistency. If your backend calculates and includes these, 
+        // replace the 0.00's with the actual fields (e.g., order.subtotal).
+        const subtotal = order.totalAmount; // Assuming totalAmount is the only reliable field
+        const shippingFee = 3000; // Placeholder for real data
+        const tax = 0.00;         // Placeholder for real data
+        const total = order.totalAmount;
+
+        const detailHtml = `
+            <div class="bg-white shadow-2xl rounded-xl p-6 sm:p-10 border border-gray-100">
+                <div class="flex justify-between items-center border-b pb-4 mb-6">
+                    <h2 class="text-3xl font-extrabold text-gray-900">Order #${order._id}</h2>
+                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${statusClass}">
+                        <i class="fas fa-${statusIcon} mr-2"></i>
+                        ${order.status.toUpperCase()}
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-gray-700 mb-8">
+                    <div>
+                        <p class="text-sm font-medium uppercase text-gray-500 mb-1">Order Date</p>
+                        <p class="font-semibold">${formattedDate}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium uppercase text-gray-500 mb-1">Payment Method</p>
+                        <p class="font-semibold">${order.paymentMethod}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium uppercase text-gray-500 mb-1">Total Paid</p>
+                        <p class="text-xl font-bold text-ash-red">₦${total.toFixed(2)}</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div class="lg:col-span-1 bg-gray-50 p-6 rounded-lg border border-gray-200">
+                        <h3 class="text-lg font-bold text-gray-800 mb-3"><i class="fas fa-truck mr-2 text-ash-red"></i> Shipping Address</h3>
+                        <div class="text-gray-700 space-y-1">${addressHtml}</div>
+                    </div>
+
+                    <div class="lg:col-span-2">
+                        <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-box-open mr-2 text-ash-red"></i> Items Ordered</h3>
+                        <ul class="divide-y divide-gray-200">${itemsHtml}</ul>
+                        
+                        <div class="mt-6 pt-4 border-t border-gray-200 space-y-2 text-right">
+                            <div class="flex justify-between text-gray-600">
+                                <p>Subtotal:</p>
+                                <p>₦${subtotal.toFixed(2)}</p>
+                            </div>
+                            <div class="flex justify-between text-gray-600">
+                                <p>Shipping:</p>
+                                <p>₦${shippingFee.toFixed(2)}</p>
+                            </div>
+                            <div class="flex justify-between text-gray-600">
+                                <p>Tax:</p>
+                                <p>₦${tax.toFixed(2)}</p>
+                            </div>
+                            <div class="flex justify-between font-bold text-xl pt-2 text-gray-900 border-t border-gray-300">
+                                <p>Order Total:</p>
+                                <p class="text-ash-red">₦${total.toFixed(2)}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-8 text-center">
+                <a href="userprofile.html#order-history" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-ash-red hover:bg-ash-red-dark transition duration-150 shadow-lg">
+                    <i class="fas fa-arrow-left mr-3"></i> Return to Profile
+                </a>
+            </div>
+        `;
+        container.innerHTML = detailHtml;
+    }
+
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const orderId = getOrderIdFromUrl();
+        if (orderId) {
+            document.title = `Order ${orderId} | Outflickz`;
+            fetchOrderDetails(orderId);
+        } else {
+            document.getElementById('order-details-container').innerHTML = `
+                <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative max-w-4xl mx-auto mt-10" role="alert">
+                    <strong class="font-bold">Invalid Request!</strong>
+                    <span class="block sm:inline">No Order ID specified in the URL.</span>
+                    <a href="userprofile.html#order-history" class="text-blue-600 hover:text-blue-800 mt-2 block font-medium"><i class="fas fa-arrow-left mr-1"></i> Back to Order History</a>
+                </div>
+            `;
+        }
+    });
+</script>
+
+    <header class="bg-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <a href="homepage.html" class="flex items-center" aria-label="Outflickz Home">
+                <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-10">
+            </a>
+            <nav class="hidden md:flex flex-grow justify-center space-x-6 lg:space-x-10 text-sm" aria-label="Main Navigation">
+                <a href="homepage.html" class="font-medium text-color-black hover:text-gray-600 transition">Homepage</a>
+                <a href="wearscollection.html" class="font-bold text-ash-red transition flex items-center border-b-2 border-ash-red">Wears Collections</a>
+                <a href="newarrivals.html" class="font-medium text-color-black hover:text-gray-600 transition">New Arrivals</a>
+                <a href="capcollection.html" class="font-medium text-color-black hover:text-gray-600 transition flex items-center">Cap Collections</a>
+                <a href="preorder.html" class="font-medium text-color-black hover:text-gray-600 transition">Pre Order</a>
+            </nav>
+
+
+            <div class="flex items-center space-x-3 sm:space-x-4">
+                <a href="cart.html" class="relative p-2 text-gray-600 hover:text-ash-red transition rounded-full" aria-label="Shopping Bag">
+                    <i class="fas fa-shopping-bag w-5 h-5"></i>
+                    <span id="cart-badge" class="absolute top-0 right-0 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-ash-red border border-white rounded-full transform translate-x-1/3 -translate-y-1/3 hidden">0</span>
+                </a>
+                <a href="userprofile.html" class="relative p-2 text-ash-red hover:text-ash-red transition rounded-full" aria-label="User Profile">
+                    <i class="fas fa-user-circle w-5 h-5"></i>
+                </a>
+                <button class="md:hidden p-2 text-gray-600 hover:text-ash-red transition rounded-full focus:outline-none" onclick="toggleMenu()" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open main menu">
+                    <i class="fas fa-bars w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+   <div id="mobile-menu" class="hidden md:hidden bg-color-white border-b border-gray-100 absolute w-full z-40 shadow-lg">
+        <div class="px-2 pt-2 pb-3 space-y-1 text-sm">
+            <a href="homepage.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">Homepage</a>
+             <a href="wearscollection.html" class="block px-3 py-2 font-bold text-ash-red bg-gray-100 rounded-md">Wears Collection</a>
+            <a href="newarrivals.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">New Arrivals</a>
+            <a href="capcollection.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">Cap Collection</a>
+            <a href="preorder.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">Pre Order</a>
+
+            <button 
+                id="mobile-profile-login-button" 
+                class="w-full flex items-center px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md text-left"
+                aria-label="User Account or Login"
+                onclick="redirectToProfileOrLogin()">
+                <i class="fas fa-user w-4 h-4 mr-3"></i>
+                Account / Login
+            </button>
+            </div>
+    </div>
+
+    <main class="container mx-auto p-4 sm:p-8 mt-4 sm:mt-8 lg:mt-12 max-w-6xl">
+        <nav class="text-sm font-medium mb-6" aria-label="Breadcrumb">
+            <ol class="list-none p-0 inline-flex">
+                <li class="flex items-center">
+                    <a href="userprofile.html" class="text-gray-500 hover:text-ash-red">Profile</a>
+                    <i class="fas fa-chevron-right mx-2 text-gray-400 text-xs"></i>
+                </li>
+                <li class="flex items-center">
+                    <a href="userprofile.html#order-history" class="text-gray-500 hover:text-ash-red">Orders</a>
+                    <i class="fas fa-chevron-right mx-2 text-gray-400 text-xs"></i>
+                </li>
+                <li class="text-gray-900 font-semibold" aria-current="page">Details</li>
+            </ol>
+        </nav>
+        <div id="order-details-container">
+            </div>
+    </main>
+
+  <footer class="bg-black text-gray-300 py-6 sm:py-14 border-t border-gray-800 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-8">
+                
+                <div class="col-span-2 lg:col-span-1">
+                    <a href="homepage.html" class="flex items-center mb-3 sm:mb-4"> 
+                        <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-8 filter grayscale invert">
+                    </a>
+                    <p class="text-xs sm:text-sm text-gray-500"> 
+                        The home of exclusive street wear and limited edition drops. Elevate your style.
+                    </p>
+                    <div class="flex space-x-4 mt-4 text-gray-400">
+                        <a href="https://www.instagram.com/outflickz01?igsh=Yzl3d3BjaGt5djll" aria-label="Instagram" class="hover:text-ash-red transition"><i class="fab fa-instagram"></i></a>
+                        <a href="https://www.tiktok.com/@outflickz?_r=1&_t=ZS-92AInaYzuTt" aria-label="TikTok" class="hover:text-ash-red transition"><i class="fab fa-tiktok"></i></a>
+                        <a href="https://www.facebook.com/profile.php?id=61584421929170" aria-label="Facebook" class="hover:text-ash-red transition"><i class="fab fa-facebook-f"></i></a>
+                    </div>
+                </div>
+
+                <div class="col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Quick Links</h3> 
+                    <ul class="space-y-1.5 sm:space-y-2 text-xs sm:text-sm"> 
+                        <li><a href="wearscollection.html" class="text-gray-400 hover:text-ash-red transition">Wears</a></li>
+                        <li><a href="newarrivals.html" class="text-gray-400 hover:text-ash-red transition">New Arrivals</a></li>
+                        <li><a href="capcollection.html" class="text-gray-400 hover:text-ash-red transition">Caps</a></li>
+                        <li><a href="preorder.html" class="text-gray-400 hover:text-ash-red transition">Pre-Order</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Customer Care</h3> 
+                    <ul class="space-y-1.5 sm:space-y-2 text-xs sm:text-sm"> 
+                        <li><a href="contact.html" class="text-gray-400 hover:text-ash-red transition">Contact Us</a></li>
+                        <li><a href="shipping_returns.html" class="text-gray-400 hover:text-ash-red transition">Shipping & Returns</a></li>
+                        <li><a href="faq.html" class="text-gray-400 hover:text-ash-red transition">FAQ</a></li>
+                        <li><a href="size_guide.html" class="text-gray-400 hover:text-ash-red transition">Size Guide</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-span-2 md:col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Get In Touch</h3> 
+                    <address class="text-xs sm:text-sm not-italic space-y-2"> 
+                        <p class="text-gray-400">
+                            <i class="fas fa-map-marker-alt mr-2 text-ash-red"></i> Lagos , Nigeria
+                        </p>
+                        <p class="text-gray-400">
+                            <i class="fas fa-envelope mr-2 text-ash-red"></i> outflickzlimited@gmail.com 
+                        </p>
+                        <p class="text-gray-400">
+                            <i class="fas fa-phone mr-2 text-ash-red"></i> +234 7042882706
+                        </p>
+                    </address>
+                </div>
+                
+            </div>
+
+            <div class="border-t border-gray-800 mt-6 sm:mt-10 pt-4 sm:pt-6"> 
+                <p class="text-center text-xs text-gray-500">
+                    &copy; 2025 Outflickz. All rights reserved. | <a href="#" class="hover:text-ash-red">Privacy Policy</a> | <a href="#" class="hover:text-ash-red">Terms of Use</a>
+                </p>
+            </div>
+        </div>
+    </footer>
+    
+    <a href="https://t.me/+2347042882706" 
+        target="_blank"
+        class="fixed bottom-6 right-24 z-50 
+               bg-[#24A1DE] text-white 
+               p-3 rounded-full 
+               shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 
+               flex items-center justify-center w-14 h-14" 
+        aria-label="Chat with us on Telegram">
+        
+        <i class="fab fa-telegram-plane fa-2x"></i>
+    </a>
+    
+    <a href="https://wa.me/2347042882706?text=HELLO%20OUTFLICKZ!%20My%20name%20is%20..."
+        target="_blank"
+        class="fixed bottom-6 right-6 z-50 
+               bg-[#25D366] text-white 
+               p-3 rounded-full 
+               shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 
+               flex items-center justify-center w-14 h-14" 
+        aria-label="Chat with us on WhatsApp">
+        
+        <i class="fab fa-whatsapp fa-2x"></i>
+    </a>
+</body>
+</html>

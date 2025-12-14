@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FAQ | Outflickz Streetwear</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
+
+    <style>
+        /* Define a primary brand color for ash-red to ensure consistency and modern look */
+        .text-ash-red { color: #D63031; }
+        .bg-ash-red { background-color: #D63031; }
+        .hover\:bg-ash-red-dark:hover { background-color: #A32324; }
+        .border-ash-red { border-color: #D63031; }
+        
+        /* Transition for accordion content */
+        .accordion-content {
+            transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+            max-height: 0;
+            overflow: hidden;
+        }
+        .accordion-content.active {
+            max-height: 500px; /* Arbitrarily large value to ensure content fits */
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-900 antialiased">
+    
+    <script>
+        // Function to toggle the mobile menu
+        function toggleMenu() {
+            const mobileMenu = document.getElementById('mobile-menu');
+            mobileMenu.classList.toggle('hidden');
+        }
+
+        // Function to handle the accordion toggle
+        function toggleAccordion(elementId) {
+            const content = document.getElementById(elementId);
+            const button = content.previousElementSibling.querySelector('button');
+            const icon = button.querySelector('i');
+
+            content.classList.toggle('active');
+
+            if (content.classList.contains('active')) {
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-up');
+            } else {
+                icon.classList.remove('fa-chevron-up');
+                icon.classList.add('fa-chevron-down');
+            }
+        }
+    </script>
+
+    <header class="bg-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <a href="homepage.html" class="flex items-center" aria-label="Outflickz Home">
+                <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-10">
+            </a>
+
+            <nav class="hidden md:flex flex-grow justify-center space-x-6 lg:space-x-12 text-sm lg:text-base" aria-label="Main Navigation">
+                <a href="homepage.html" class="font-medium text-color-black hover:text-gray-600 transition">Homepage</a>
+                <a href="wearscollection.html" class="font-medium text-color-black hover:text-gray-600 transition">Wears Collections</a>
+                <a href="newarrivals.html" class="font-medium text-color-black hover:text-gray-600 transition">New Arrivals</a>
+                <a href="capcollection.html" class="font-medium text-color-black hover:text-gray-600 transition">Cap Collections</a>
+                <a href="preorder.html" class="font-medium text-color-black hover:text-gray-600 transition">Pre Order</a>
+            </nav>
+
+
+            <div class="flex items-center space-x-3 sm:space-x-4">
+                <a href="cart.html" class="relative p-2 text-gray-600 hover:text-ash-red transition rounded-full" aria-label="Shopping Bag">
+                    <i class="fas fa-shopping-bag w-5 h-5"></i>
+                    <span id="cart-badge" class="absolute top-0 right-0 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-ash-red border border-white rounded-full transform translate-x-1/3 -translate-y-1/3 hidden">
+                        0
+                    </span>
+                </a>
+                <a href="userprofile.html" class="p-2 text-gray-600 hover:text-ash-red transition rounded-full" aria-label="User Account">
+                    <i class="fas fa-user-circle w-5 h-5"></i>
+                </a>
+                <button class="md:hidden p-2 text-gray-600 hover:text-ash-red transition rounded-full focus:outline-none" onclick="toggleMenu()" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open main menu">
+                    <i class="fas fa-bars w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+    
+    <div id="mobile-menu" class="hidden md:hidden bg-white border-b border-gray-100 absolute w-full z-40 shadow-lg">
+        <div class="px-4 pt-2 pb-3 space-y-0.5 text-sm">
+            <a href="homepage.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Homepage</a>
+            <a href="preorder.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Pre Order</a>
+            <a href="newarrivals.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">New Arrivals</a>
+            <a href="wearscollection.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Wears Collection</a>
+            <a href="capcollection.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Cap Collection</a>
+            <a href="userprofile.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Account</a>
+            <a href="faq.html" class="block px-3 py-2 font-bold text-white bg-ash-red rounded-lg mt-1">FAQ</a>
+        </div>
+    </div>
+    
+    <main class="container mx-auto p-4 sm:p-8 mt-4 sm:mt-8 lg:mt-12 max-w-4xl">
+        <div class="bg-white shadow-2xl rounded-xl p-6 sm:p-10 border border-gray-100">
+            <h1 class="text-4xl sm:text-5xl font-extrabold text-ash-red mb-2 flex items-center">
+                ❓ Frequently Asked Questions
+            </h1>
+            <p class="text-gray-600 text-base sm:text-lg mb-8 border-b border-gray-100 pb-6">
+                Find quick answers about our streetwear collections, ordering, shipping, and more.
+            </p>
+
+            <div class="space-y-6">
+                
+                <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 border-b border-gray-200 pb-2 pt-4">Orders & Payments</h2>
+                
+                <div class="accordion border border-gray-200 rounded-lg">
+                    <div class="p-4 sm:p-5 flex justify-between items-center bg-gray-50 cursor-pointer" onclick="toggleAccordion('faq-order-status')">
+                        <p class="font-semibold text-base sm:text-lg text-gray-700">How can I check my order status?</p>
+                        <button class="text-ash-red focus:outline-none" aria-label="Toggle answer">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                    </div>
+                    <div id="faq-order-status" class="accordion-content p-0">
+                        <p class="px-4 sm:px-5 text-sm sm:text-base text-gray-600 border-t border-gray-100">
+                            Once your order ships, we will email you an order notification. You can also log into your <a href="userprofile.html" class="text-blue-600 hover:underline">User Dashboard</a> and view your **Order History** for real-time updates. Pre-order items will have delayed period to the available dates.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="accordion border border-gray-200 rounded-lg">
+                    <div class="p-4 sm:p-5 flex justify-between items-center bg-gray-50 cursor-pointer" onclick="toggleAccordion('faq-payment-methods')">
+                        <p class="font-semibold text-base sm:text-lg text-gray-700">What payment methods do you accept?</p>
+                        <button class="text-ash-red focus:outline-none" aria-label="Toggle answer">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                    </div>
+                    <div id="faq-payment-methods" class="accordion-content p-0">
+                        <p class="px-4 sm:px-5 text-sm sm:text-base text-gray-600 border-t border-gray-100">
+                            We accept major debit cards, including **Visa, Verve, and Mastercard**, processed securely through **Paystack**. We also accept direct **Bank Transfers**. All transactions are securely processed.
+                        </p>
+                    </div>
+                </div>
+
+                <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 border-b border-gray-200 pb-2 pt-8">Shipping & Delivery</h2>
+
+                <div class="accordion border border-gray-200 rounded-lg">
+                    <div class="p-4 sm:p-5 flex justify-between items-center bg-gray-50 cursor-pointer" onclick="toggleAccordion('faq-shipping-time')">
+                        <p class="font-semibold text-base sm:text-lg text-gray-700">How long does shipping take?</p>
+                        <button class="text-ash-red focus:outline-none" aria-label="Toggle answer">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                    </div>
+                    <div id="faq-shipping-time" class="accordion-content p-0">
+                        <p class="px-4 sm:px-5 text-sm sm:text-base text-gray-600 border-t border-gray-100">
+                            Standard shipping typically takes **3-5 business days** after processing (1-2 days). For limited drops and international orders, times may vary. Check our <a href="shipping_returns.html" class="text-blue-600 hover:underline">Shipping & Returns</a> page for detailed estimates.
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="accordion border border-gray-200 rounded-lg">
+                    <div class="p-4 sm:p-5 flex justify-between items-center bg-gray-50 cursor-pointer" onclick="toggleAccordion('faq-preorder')">
+                        <p class="font-semibold text-base sm:text-lg text-gray-700">What are "Pre-Order" items?</p>
+                        <button class="text-ash-red focus:outline-none" aria-label="Toggle answer">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                    </div>
+                    <div id="faq-preorder" class="accordion-content p-0">
+                        <p class="px-4 sm:px-5 text-sm sm:text-base text-gray-600 border-t border-gray-100">
+                            Pre-Order items are products that are not yet in stock but can be reserved in advance. The estimated delivery date is clearly stated on the product page. Purchasing a pre-order item guarantees you one of the limited edition pieces!
+                        </p>
+                    </div>
+                </div>
+
+                <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 border-b border-gray-200 pb-2 pt-8">Returns & Exchanges</h2>
+
+                <div class="accordion border border-gray-200 rounded-lg">
+                    <div class="p-4 sm:p-5 flex justify-between items-center bg-gray-50 cursor-pointer" onclick="toggleAccordion('faq-return-policy')">
+                        <p class="font-semibold text-base sm:text-lg text-gray-700">What is your return policy?</p>
+                        <button class="text-ash-red focus:outline-none" aria-label="Toggle answer">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                    </div>
+                    <div id="faq-return-policy" class="accordion-content p-0">
+                        <p class="px-4 sm:px-5 text-sm sm:text-base text-gray-600 border-t border-gray-100">
+                            We accept returns within **7 days** of delivery for unworn, unwashed items with original tags attached. Final sale items (e.g., clearance, limited drops) may be excluded. Please visit our <a href="shipping_returns.html" class="text-blue-600 hover:underline">Shipping & Returns</a> page to initiate a return.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="accordion border border-gray-200 rounded-lg">
+                    <div class="p-4 sm:p-5 flex justify-between items-center bg-gray-50 cursor-pointer" onclick="toggleAccordion('faq-size-guide')">
+                        <p class="font-semibold text-base sm:text-lg text-gray-700">Where can I find a size guide?</p>
+                        <button class="text-ash-red focus:outline-none" aria-label="Toggle answer">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                    </div>
+                    <div id="faq-size-guide" class="accordion-content p-0">
+                        <p class="px-4 sm:px-5 text-sm sm:text-base text-gray-600 border-t border-gray-100">
+                            Our unique streetwear pieces often feature an oversized fit. We recommend consulting the specific **Size Guide** on our <a href="size_guide.html" class="text-blue-600 hover:underline">Size Guide page</a> for accurate measurements.
+                        </p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-black text-gray-300 py-8 sm:py-14 border-t border-gray-800 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-y-6 gap-x-8">
+                
+                <div class="col-span-2 lg:col-span-1">
+                    <a href="homepage.html" class="flex items-center mb-3 sm:mb-4"> 
+                        <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-8 filter grayscale invert">
+                    </a>
+                    <p class="text-xs text-gray-500"> 
+                        The home of exclusive street wear and limited edition drops. Elevate your style.
+                    </p>
+                    <div class="flex space-x-4 mt-4 text-gray-400">
+                        <a href="https://www.instagram.com/outflickz01?igsh=Yzl3d3BjaGt5djll" aria-label="Instagram" class="hover:text-ash-red transition"><i class="fab fa-instagram"></i></a>
+                        <a href="https://www.tiktok.com/@outflickz?_r=1&_t=ZS-92AInaYzuTt" aria-label="TikTok" class="hover:text-ash-red transition"><i class="fab fa-tiktok"></i></a>
+                        <a href="https://www.facebook.com/profile.php?id=61584421929170" aria-label="Facebook" class="hover:text-ash-red transition"><i class="fab fa-facebook-f"></i></a>
+                    </div>
+                </div>
+
+                <div class="col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Quick Links</h3> 
+                    <ul class="space-y-1 sm:space-y-2 text-xs"> 
+                        <li><a href="wearscollection.html" class="text-gray-400 hover:text-ash-red transition">Wears</a></li>
+                        <li><a href="newarrivals.html" class="text-gray-400 hover:text-ash-red transition">New Arrivals</a></li>
+                        <li><a href="capcollection.html" class="text-gray-400 hover:text-ash-red transition">Caps</a></li>
+                        <li><a href="preorder.html" class="text-gray-400 hover:text-ash-red transition">Pre-Order</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Customer Care</h3> 
+                    <ul class="space-y-1 sm:space-y-2 text-xs"> 
+                        <li><a href="contact.html" class="text-gray-400 hover:text-ash-red transition">Contact Us</a></li>
+                        <li><a href="shipping_returns.html" class="text-gray-400 hover:text-ash-red transition">Shipping & Returns</a></li>
+                        <li><a href="faq.html" class="text-gray-400 hover:text-ash-red transition">FAQ</a></li>
+                        <li><a href="size_guide.html" class="text-gray-400 hover:text-ash-red transition">Size Guide</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-span-2 md:col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Get In Touch</h3> 
+                    <address class="text-xs not-italic space-y-2"> 
+                        <p class="text-gray-400">
+                            <i class="fas fa-map-marker-alt mr-2 text-ash-red"></i> Lagos , Nigeria
+                        </p>
+                        <p class="text-gray-400">
+                            <i class="fas fa-envelope mr-2 text-ash-red"></i> outflickzlimited@gmail.com 
+                        </p>
+                        <p class="text-gray-400">
+                            <i class="fas fa-phone mr-2 text-ash-red"></i> +234 7042882706
+                        </p>
+                    </address>
+                </div>
+                
+            </div>
+
+            <div class="border-t border-gray-800 mt-8 sm:mt-10 pt-4 sm:pt-6"> 
+                <p class="text-center text-xs text-gray-500">
+                    &copy; 2025 Outflickz. All rights reserved. | <a href="#" class="hover:text-ash-red">Privacy Policy</a> | <a href="#" class="hover:text-ash-red">Terms of Use</a>
+                </p>
+            </div>
+        </div>
+    </footer>
+    
+ <a href="https://t.me/+2347042882706" 
+       target="_blank"
+       class="fixed bottom-6 right-24 z-50 
+              bg-[#24A1DE] text-white 
+              p-3 rounded-full 
+              shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 
+              flex items-center justify-center w-14 h-14" 
+       aria-label="Chat with us on Telegram">
+       
+       <i class="fab fa-telegram-plane fa-2x"></i>
+    </a>
+    <a href="https://wa.me/2347042882706?text=HELLO%20OUTFLICKZ!%20My%20name%20is%20..."
+        target="_blank"
+        class="fixed bottom-6 right-6 z-50 
+               bg-[#25D366] text-white 
+               p-3 rounded-full 
+               shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 
+               flex items-center justify-center w-14 h-14" 
+        aria-label="Chat with us on WhatsApp">
+        
+        <i class="fab fa-whatsapp fa-2x"></i>
+    </a>
+</body>
+</html>

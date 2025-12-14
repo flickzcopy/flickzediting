@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Size Guide | Outflickz Streetwear</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
+
+    <style>
+        /* Define a primary brand color for ash-red to ensure consistency and modern look */
+        .text-ash-red { color: #D63031; }
+        .bg-ash-red { background-color: #D63031; }
+        .hover\:bg-ash-red-dark:hover { background-color: #A32324; }
+        .border-ash-red { border-color: #D63031; }
+
+        /* Custom Table Styling for better readability */
+        .size-table th, .size-table td {
+            /* Increased vertical padding for more whitespace within rows */
+            padding: 1rem 0.5rem; /* Increased vertical padding to 1rem */
+            text-align: center;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .size-table th {
+            background-color: #f3f4f6;
+            font-weight: 700;
+            color: #1f2937;
+            /* Added border-top to visually separate table from content above */
+            border-top: 1px solid #e5e7eb; 
+        }
+        /* Zebra-striping for better scanning */
+        .size-table tbody tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-900 antialiased">
+    
+    <script>
+        // Function to toggle the mobile menu
+        function toggleMenu() {
+            const mobileMenu = document.getElementById('mobile-menu');
+            mobileMenu.classList.toggle('hidden');
+        }
+    </script>
+
+    <header class="bg-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <a href="homepage.html" class="flex items-center" aria-label="Outflickz Home">
+                <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-10">
+            </a>
+
+            <nav class="hidden md:flex flex-grow justify-center space-x-6 lg:space-x-12 text-sm lg:text-base" aria-label="Main Navigation">
+                <a href="homepage.html" class="font-medium text-color-black hover:text-gray-600 transition">Homepage</a>
+                <a href="wearscollection.html" class="font-medium text-color-black hover:text-gray-600 transition">Wears Collections</a>
+                <a href="newarrivals.html" class="font-medium text-color-black hover:text-gray-600 transition">New Arrivals</a>
+                <a href="capcollection.html" class="font-medium text-color-black hover:text-gray-600 transition">Cap Collections</a>
+                <a href="preorder.html" class="font-medium text-color-black hover:text-gray-600 transition">Pre Order</a>
+            </nav>
+
+
+            <div class="flex items-center space-x-3 sm:space-x-4">
+                <a href="cart.html" class="relative p-2 text-gray-600 hover:text-ash-red transition rounded-full" aria-label="Shopping Bag">
+                    <i class="fas fa-shopping-bag w-5 h-5"></i>
+                    <span id="cart-badge" class="absolute top-0 right-0 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-ash-red border border-white rounded-full transform translate-x-1/3 -translate-y-1/3 hidden">
+                        0
+                    </span>
+                </a>
+                <a href="userprofile.html" class="p-2 text-gray-600 hover:text-ash-red transition rounded-full" aria-label="User Account">
+                    <i class="fas fa-user-circle w-5 h-5"></i>
+                </a>
+                <button class="md:hidden p-2 text-gray-600 hover:text-ash-red transition rounded-full focus:outline-none" onclick="toggleMenu()" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open main menu">
+                    <i class="fas fa-bars w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+    
+    <div id="mobile-menu" class="hidden md:hidden bg-white border-b border-gray-100 absolute w-full z-40 shadow-lg">
+        <div class="px-4 pt-2 pb-3 space-y-0.5 text-sm">
+            <a href="homepage.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Homepage</a>
+            <a href="preorder.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Pre Order</a>
+            <a href="newarrivals.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">New Arrivals</a>
+            <a href="wearscollection.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Wears Collection</a>
+            <a href="capcollection.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Cap Collection</a>
+            <a href="userprofile.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Account</a>
+            <a href="size_guide.html" class="block px-3 py-2 font-bold text-white bg-ash-red rounded-lg mt-1">Size Guide</a>
+        </div>
+    </div>
+    
+    <main class="container mx-auto p-4 sm:p-8 mt-6 sm:mt-10 lg:mt-16 max-w-6xl">
+        <div class="bg-white shadow-2xl rounded-xl p-6 sm:p-10 border border-gray-100">
+            <h1 class="text-4xl sm:text-5xl font-extrabold text-ash-red mb-2 flex items-center">
+                📏 Outflickz Size Guide
+            </h1>
+            <p class="text-gray-600 text-base sm:text-lg mb-10 border-b border-gray-100 pb-6">
+                Our pieces are designed for a relaxed, authentic streetwear fit. Use these charts to find your perfect size. All measurements are in **Inches (in)**.
+            </p>
+
+            <div class="p-4 sm:p-6 bg-yellow-50 border-l-4 border-ash-red rounded-lg mb-12">
+                <h2 class="text-xl sm:text-2xl font-bold text-ash-red mb-2 flex items-center">
+                    <i class="fas fa-ruler-combined mr-3"></i> Quick Sizing Tip
+                </h2>
+                <p class="text-gray-700 text-sm sm:text-base">
+                    **Outflickz Wear is designed with an Oversized/Boxy Fit.** If you prefer a more standard or fitted look, consider sizing down. Always measure your favorite fitting garment and compare the measurements to the table below.
+                </p>
+            </div>
+            
+            <section class="mb-16" id="wear-sizing">
+                <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 border-b border-gray-200 pb-3 mb-8">
+                    Wears (Tops, Hoodies, Jackets)
+                </h2>
+                <p class="text-gray-600 mb-6 text-sm sm:text-base">
+                    Measure across the chest from armpit to armpit (Chest Width) and from the top of the shoulder to the bottom hem (Length).
+                </p>
+                
+                
+
+                <div class="overflow-x-auto mt-6">
+                    <table class="w-full size-table text-sm sm:text-base">
+                        <thead>
+                            <tr>
+                                <th>Size</th>
+                                <th>Chest Width (in)</th>
+                                <th>Length (in)</th>
+                                <th>Suggested Fit</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>S</td>
+                                <td>22</td>
+                                <td>28</td>
+                                <td>Relaxed</td>
+                            </tr>
+                            <tr>
+                                <td>M</td>
+                                <td>23</td>
+                                <td>29</td>
+                                <td>Relaxed / Oversized</td>
+                            </tr>
+                            <tr>
+                                <td>L</td>
+                                <td>24</td>
+                                <td>30</td>
+                                <td>Oversized</td>
+                            </tr>
+                            <tr>
+                                <td>XL</td>
+                                <td>25</td>
+                                <td>31</td>
+                                <td>Very Oversized</td>
+                            </tr>
+                            <tr>
+                                <td>2XL</td>
+                                <td>26</td>
+                                <td>32</td>
+                                <td>Max Oversized</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            
+            <section class="mb-16" id="trouser-sizing">
+                <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 border-b border-gray-200 pb-3 mb-8">
+                    Trousers & Bottoms
+                </h2>
+                <p class="text-gray-600 mb-6 text-sm sm:text-base">
+                    Measure your waist where you naturally wear your trousers. The length listed below is the Inseam (crotch to ankle hem).
+                </p>
+                
+                
+
+                <div class="overflow-x-auto mt-6">
+                    <table class="w-full size-table text-sm sm:text-base">
+                        <thead>
+                            <tr>
+                                <th>Size (Inches)</th>
+                                <th>Waist (Relaxed/Stretched)</th>
+                                <th>Inseam Length</th>
+                                <th>Equivalent</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>S (28-30)</td>
+                                <td>28 / 30</td>
+                                <td>30</td>
+                                <td>Small</td>
+                            </tr>
+                            <tr>
+                                <td>M (30-32)</td>
+                                <td>30 / 32</td>
+                                <td>31</td>
+                                <td>Medium</td>
+                            </tr>
+                            <tr>
+                                <td>L (32-34)</td>
+                                <td>32 / 34</td>
+                                <td>32</td>
+                                <td>Large</td>
+                            </tr>
+                            <tr>
+                                <td>XL (34-36)</td>
+                                <td>34 / 36</td>
+                                <td>32</td>
+                                <td>X-Large</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="cap-sizing">
+                <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 border-b border-gray-200 pb-3 mb-8">
+                    Cap Collections
+                </h2>
+                <p class="text-gray-600 mb-6 text-sm sm:text-base">
+                    All Outflickz caps are designed as **One-Size-Fits-Most (OSFM)** with an adjustable closure (snapback, strapback, or buckle) for a customized, comfortable fit.
+                </p>
+
+                
+                
+                <div class="p-6 bg-gray-100 rounded-lg mt-6">
+                    <h3 class="text-xl font-semibold text-gray-700 flex items-center">
+                        <i class="fas fa-hat-only mr-3 text-ash-red"></i> Head Circumference Guide
+                    </h3>
+                    <ul class="list-disc list-inside space-y-2 mt-4 text-gray-600 text-sm sm:text-base">
+                        <li>**Standard Fit:** Suitable for head circumference between **21.5 inches (54.6 cm)** and **23.5 inches (59.7 cm)**.</li>
+                        <li>**How to Measure:** Use a soft tape measure and wrap it around the fullest part of your head, just above your ears.</li>
+                    </ul>
+                </div>
+            </section>
+            
+        </div>
+    </main>
+
+    <footer class="bg-black text-gray-300 py-8 sm:py-14 border-t border-gray-800 mt-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-y-6 gap-x-8">
+                
+                <div class="col-span-2 lg:col-span-1">
+                    <a href="homepage.html" class="flex items-center mb-3 sm:mb-4"> 
+                        <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-8 filter grayscale invert">
+                    </a>
+                    <p class="text-xs text-gray-500"> 
+                        The home of exclusive street wear and limited edition drops. Elevate your style.
+                    </p>
+                    <div class="flex space-x-4 mt-4 text-gray-400">
+                        <a href="https://www.instagram.com/outflickz01?igsh=Yzl3d3BjaGt5djll" aria-label="Instagram" class="hover:text-ash-red transition"><i class="fab fa-instagram"></i></a>
+                        <a href="https://www.tiktok.com/@outflickz?_r=1&_t=ZS-92AInaYzuTt" aria-label="TikTok" class="hover:text-ash-red transition"><i class="fab fa-tiktok"></i></a>
+                        <a href="https://www.facebook.com/profile.php?id=61584421929170" aria-label="Facebook" class="hover:text-ash-red transition"><i class="fab fa-facebook-f"></i></a>
+                    </div>
+                </div>
+
+                <div class="col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Quick Links</h3> 
+                    <ul class="space-y-1 sm:space-y-2 text-xs"> 
+                        <li><a href="wearscollection.html" class="text-gray-400 hover:text-ash-red transition">Wears</a></li>
+                        <li><a href="newarrivals.html" class="text-gray-400 hover:text-ash-red transition">New Arrivals</a></li>
+                        <li><a href="capcollection.html" class="text-gray-400 hover:text-ash-red transition">Caps</a></li>
+                        <li><a href="preorder.html" class="text-gray-400 hover:text-ash-red transition">Pre-Order</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Customer Care</h3> 
+                    <ul class="space-y-1 sm:space-y-2 text-xs"> 
+                        <li><a href="contact.html" class="text-gray-400 hover:text-ash-red transition">Contact Us</a></li>
+                        <li><a href="shipping_returns.html" class="text-gray-400 hover:text-ash-red transition">Shipping & Returns</a></li>
+                        <li><a href="faq.html" class="text-gray-400 hover:text-ash-red transition">FAQ</a></li>
+                        <li><a href="size_guide.html" class="text-gray-400 hover:text-ash-red transition">Size Guide</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-span-2 md:col-span-1">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Get In Touch</h3> 
+                    <address class="text-xs not-italic space-y-2"> 
+                        <p class="text-gray-400">
+                            <i class="fas fa-map-marker-alt mr-2 text-ash-red"></i> Lagos , Nigeria
+                        </p>
+                        <p class="text-gray-400">
+                            <i class="fas fa-envelope mr-2 text-ash-red"></i> outflickzlimited@gmail.com 
+                        </p>
+                        <p class="text-gray-400">
+                            <i class="fas fa-phone mr-2 text-ash-red"></i> +234 7042882706
+                        </p>
+                    </address>
+                </div>
+                
+            </div>
+
+            <div class="border-t border-gray-800 mt-8 sm:mt-10 pt-4 sm:pt-6"> 
+                <p class="text-center text-xs text-gray-500">
+                    &copy; 2025 Outflickz. All rights reserved. | <a href="#" class="hover:text-ash-red">Privacy Policy</a> | <a href="#" class="hover:text-ash-red">Terms of Use</a>
+                </p>
+            </div>
+        </div>
+    </footer>
+    
+    <a href="https://t.me/+2347042882706" 
+        target="_blank"
+        class="fixed bottom-6 right-24 z-50 
+               bg-[#24A1DE] text-white 
+               p-3 rounded-full 
+               shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 
+               flex items-center justify-center w-14 h-14" 
+        aria-label="Chat with us on Telegram">
+        
+        <i class="fab fa-telegram-plane fa-2x"></i>
+    </a>
+    
+    <a href="https://wa.me/2347042882706?text=HELLO%20OUTFLICKZ!%20My%20name%20is%20..."
+        target="_blank"
+        class="fixed bottom-6 right-6 z-50 
+               bg-[#25D366] text-white 
+               p-3 rounded-full 
+               shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 
+               flex items-center justify-center w-14 h-14" 
+        aria-label="Chat with us on WhatsApp">
+        
+        <i class="fab fa-whatsapp fa-2x"></i>
+    </a>
+</body>
+</html>
