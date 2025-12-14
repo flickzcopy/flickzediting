@@ -3,17 +3,32 @@
   publish = "public"
   # The directory where Netlify will find your functions
   functions = "netlify/functions"
+  # This command ensures all dependencies are installed before the functions are bundled.
   command = "npm install"
 
+# --- Recommended Fix for Module Loading Error ---
+# This block is essential for troubleshooting Node.js module loading issues in Netlify Functions.
+[functions]
+  # Explicitly set the bundler to 'esbuild' for better dependency tracing and smaller bundles.
+  # This often resolves issues where standard bundling fails to find dependencies in nested requires.
+  node_bundler = "esbuild"
+
+  # Explicitly declare Express and serverless-http as external modules 
+  # to ensure they are handled correctly by the bundler.
+  # This can sometimes force the resolution of 'express' that the system is missing.
+  external_node_modules = ["express", "serverless-http"]
+
+# --- Redirects (The standard proxy setup) ---
+
 [[redirects]]
-  # This maps all requests starting with /api/ to the Netlify function handler
+  # This maps all requests starting with /api/ to the Netlify function handler.
+  # This is the VITAL step that makes your serverless Express app accessible.
   from = "/api/*"
   to = "/.netlify/functions/api/:splat"
   status = 200
 
 [[redirects]]
-  # This redirects all other root requests to the static index.html file
+  # This redirects all other root requests to the static index.html file.
   from = "/"
   to = "/index.html"
-  status = 200 
-  
+  status = 200
