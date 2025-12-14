@@ -1,7 +1,7 @@
 // netlify/functions/api.js
 const serverless = require('serverless-http');
 // CHANGE 1: Import populateInitialData and mongoose from server.js
-const { app, populateInitialData, mongoose } = require('./server'); // Path to your Express app (server.js)
+const { app, populateInitialData, mongoose } = require('../server'); // Path to your Express app (server.js)
 
 // Cache the database connection across warm invocations
 let cachedDb = null;
