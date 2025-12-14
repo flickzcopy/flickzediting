@@ -174,168 +174,237 @@
         </div>
     </div>
 
-    <script>
-        // --- Configuration ---
-        const loginForm = document.getElementById('adminLoginForm');
-        const registerForm = document.getElementById('adminRegisterForm');
-        const showLoginBtn = document.getElementById('showLoginBtn');
-        const showRegisterBtn = document.getElementById('showRegisterBtn');
-        const messageBox = document.getElementById('messageBox');
+<script>
+    // --- Configuration ---
+    const loginForm = document.getElementById('adminLoginForm');
+    const registerForm = document.getElementById('adminRegisterForm');
+    const showLoginBtn = document.getElementById('showLoginBtn');
+    const showRegisterBtn = document.getElementById('showRegisterBtn');
+    const messageBox = document.getElementById('messageBox');
+    
+    // --- Client-side Refresh Token Configuration ---
+    // NOTE: This REFRESH_ENDPOINT and secureFetch function are primarily used on 
+    // the 'admin-dashboard.html' page. They are included here only for simplicity. 
+    // In a production application, move secureFetch to a shared script file.
+    const REFRESH_ENDPOINT = '/api/admin/refresh-token'; 
+
+
+    /**
+     * Custom fetch function to handle expired Access Tokens and refresh them.
+     * This is used for all protected API calls *after* logging in.
+     */
+    async function secureFetch(url, options = {}) {
+        const accessToken = localStorage.getItem('adminToken');
+
+        // 1. Prepare Request with Access Token
+        const defaultHeaders = {
+            'Content-Type': 'application/json',
+            // Attach Access Token to all requests
+            'Authorization': `Bearer ${accessToken}`
+        };
+        options.headers = { ...defaultHeaders, ...options.headers };
+
+        // 2. Initial API call
+        let response = await fetch(url, options);
+
+        // 3. Check for expired token response from the backend (401 + expired: true)
+        if (response.status === 401) {
+            try {
+                // We use response.clone() because the body stream can only be read once
+                const data = await response.clone().json();
+                
+                if (data.expired === true) {
+                    // Access Token is expired, initiate refresh
+                    console.warn('Access Token expired. Attempting refresh...');
+                    
+                    // 4. Request a new Access Token using the Refresh Token (sent automatically via cookie)
+                    const refreshResponse = await fetch(REFRESH_ENDPOINT, { method: 'POST' });
+                    
+                    if (refreshResponse.ok) {
+                        const refreshData = await refreshResponse.json();
+                        
+                        // 5. Update local Access Token
+                        localStorage.setItem('adminToken', refreshData.accessToken); // NOTE: Changed refreshData.token to refreshData.accessToken to match common backend return naming.
+                        
+                        // 6. Retry the original request with the new token
+                        options.headers['Authorization'] = `Bearer ${refreshData.accessToken}`;
+                        console.log('Token refreshed successfully. Retrying original request...');
+                        response = await fetch(url, options);
+                        
+                    } else {
+                        // Refresh Token failed (expired or invalid), force re-login
+                        console.error('Refresh Token failed. Forcing logout.');
+                        localStorage.removeItem('adminToken');
+                        // Use the existing redirect path for consistency
+                        window.location.href = 'admin-login.html'; 
+                        return; // Stop execution
+                    }
+                }
+            } catch (e) {
+                // Handle JSON parsing error or non-expired 401s (e.g., invalid signature on access token)
+                console.error('Token verification failed or parsing error:', e);
+                localStorage.removeItem('adminToken');
+                window.location.href = 'admin-login.html';
+            }
+        }
         
-        // --- Form Toggling Logic ---
+        // 7. Return the final response (either initial or retried)
+        return response;
+    }
 
-        function showForm(formId) {
-            loginForm.classList.add('hidden');
-            registerForm.classList.add('hidden');
-            showLoginBtn.classList.remove('text-custom-green', 'border-custom-green');
-            showLoginBtn.classList.add('text-gray-500', 'border-transparent');
-            showRegisterBtn.classList.remove('text-custom-green', 'border-custom-green');
-            showRegisterBtn.classList.add('text-gray-500', 'border-transparent');
 
-            if (formId === 'login') {
-                loginForm.classList.remove('hidden');
-                showLoginBtn.classList.add('text-custom-green', 'border-custom-green');
-            } else {
-                registerForm.classList.remove('hidden');
-                showRegisterBtn.classList.add('text-custom-green', 'border-custom-green');
-            }
+    // --- Form Toggling Logic ---
+
+    function showForm(formId) {
+        loginForm.classList.add('hidden');
+        registerForm.classList.add('hidden');
+        showLoginBtn.classList.remove('text-custom-green', 'border-custom-green');
+        showLoginBtn.classList.add('text-gray-500', 'border-transparent');
+        showRegisterBtn.classList.remove('text-custom-green', 'border-custom-green');
+        showRegisterBtn.classList.add('text-gray-500', 'border-transparent');
+
+        if (formId === 'login') {
+            loginForm.classList.remove('hidden');
+            showLoginBtn.classList.add('text-custom-green', 'border-custom-green');
+        } else {
+            registerForm.classList.remove('hidden');
+            showRegisterBtn.classList.add('text-custom-green', 'border-custom-green');
         }
+    }
 
-        showLoginBtn.addEventListener('click', () => showForm('login'));
-        showRegisterBtn.addEventListener('click', () => showForm('register'));
+    showLoginBtn.addEventListener('click', () => showForm('login'));
+    showRegisterBtn.addEventListener('click', () => showForm('register'));
 
-        // --- Utility Functions ---
+    // --- Utility Functions ---
 
-        function showMessage(message, isError = false) {
-            messageBox.textContent = message;
-            messageBox.classList.remove('hidden', 'bg-red-100', 'border-red-400', 'text-red-700', 'bg-green-100', 'border-green-400', 'text-green-700');
+    function showMessage(message, isError = false) {
+        messageBox.textContent = message;
+        messageBox.classList.remove('hidden', 'bg-red-100', 'border-red-400', 'text-red-700', 'bg-green-100', 'border-green-400', 'text-green-700');
+        
+        if (isError) {
+            messageBox.classList.add('bg-red-100', 'border-red-400', 'text-red-700');
+        } else {
+            messageBox.classList.add('bg-green-100', 'border-green-400', 'text-green-700');
+        }
+    }
+
+    function hideMessage() {
+        messageBox.classList.add('hidden');
+    }
+
+    // --- Password Visibility Toggle Logic ---
+    document.querySelectorAll('.toggle-password').forEach(button => {
+        button.addEventListener('click', function () {
+            // Find the associated password input
+            const passwordInput = this.parentElement.querySelector('.password-input');
+            const eyeOpenIcon = this.querySelector('.eye-open');
+            const eyeClosedIcon = this.querySelector('.eye-closed');
             
-            if (isError) {
-                messageBox.classList.add('bg-red-100', 'border-red-400', 'text-red-700');
-            } else {
-                messageBox.classList.add('bg-green-100', 'border-green-400', 'text-green-700');
-            }
-        }
+            // Toggle the type attribute
+            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+            passwordInput.setAttribute('type', type);
+            
+            // Toggle the eye icon visibility
+            eyeOpenIcon.classList.toggle('hidden');
+            eyeClosedIcon.classList.toggle('hidden');
+        });
+    });
 
-        function hideMessage() {
-            messageBox.classList.add('hidden');
-        }
+    // --- 1. LOGIN Submission Handler ---
+    loginForm.addEventListener('submit', async function(event) {
+        event.preventDefault();
 
-        // --- Password Visibility Toggle Logic ---
-        document.querySelectorAll('.toggle-password').forEach(button => {
-            button.addEventListener('click', function () {
-                // Find the associated password input
-                const passwordInput = this.parentElement.querySelector('.password-input');
-                const eyeOpenIcon = this.querySelector('.eye-open');
-                const eyeClosedIcon = this.querySelector('.eye-closed');
-                
-                // Toggle the type attribute
-                const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
-                passwordInput.setAttribute('type', type);
-                
-                // Toggle the eye icon visibility
-                eyeOpenIcon.classList.toggle('hidden');
-                eyeClosedIcon.classList.toggle('hidden');
+        const email = document.getElementById('loginEmail').value;
+        const password = document.getElementById('loginPassword').value;
+        const loginButton = document.getElementById('loginButton');
+
+        hideMessage();
+        loginButton.disabled = true;
+        loginButton.textContent = 'Signing in...';
+        
+        const payload = { email, password };
+
+        try {
+            const response = await fetch('/api/admin/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
             });
-        });
 
-        // --- 1. LOGIN Submission Handler ---
-        loginForm.addEventListener('submit', async function(event) {
-            event.preventDefault();
+            const data = await response.json();
 
-            const email = document.getElementById('loginEmail').value;
-            const password = document.getElementById('loginPassword').value;
-            const loginButton = document.getElementById('loginButton');
-
-            hideMessage();
-            loginButton.disabled = true;
-            loginButton.textContent = 'Signing in...';
-            
-            const payload = { email, password };
-
-            try {
-                const response = await fetch('/api/admin/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    const token = data.token;
-                    // Token is stored in localStorage for subsequent API requests
-                    localStorage.setItem('adminToken', token); 
-                    // Redirect to the dashboard page
-                    window.location.href = 'admin-dashboard.html'; 
-                } else {
-                    throw new Error(data.message || 'Login failed. Please check your credentials.');
-                }
-            } catch (error) {
-                console.error('Login error:', error.message);
-                showMessage(error.message, true);
-            } finally {
-                loginButton.disabled = false;
-                loginButton.textContent = 'Sign in';
+            if (response.ok) {
+                const token = data.accessToken;
+                localStorage.setItem('adminToken', token); 
+                window.location.href = 'admin-dashboard.html'; 
+            } else {
+                throw new Error(data.message || 'Login failed. Please check your credentials.');
             }
-        });
+        } catch (error) {
+            console.error('Login error:', error.message);
+            showMessage(error.message, true);
+        } finally {
+            loginButton.disabled = false;
+            loginButton.textContent = 'Sign in';
+        }
+    });
 
-        // --- 2. REGISTER Submission Handler ---
-        registerForm.addEventListener('submit', async function(event) {
-            event.preventDefault();
+    // --- 2. REGISTER Submission Handler ---
+    registerForm.addEventListener('submit', async function(event) {
+        event.preventDefault();
 
-            const email = document.getElementById('registerEmail').value;
-            const password = document.getElementById('registerPassword').value;
-            const registerButton = document.getElementById('registerButton');
+        const email = document.getElementById('registerEmail').value;
+        const password = document.getElementById('registerPassword').value;
+        const registerButton = document.getElementById('registerButton');
 
-            hideMessage();
-            registerButton.disabled = true;
-            registerButton.textContent = 'Creating account...';
-            
-            if (password.length < 6) {
-                showMessage('Password must be at least 6 characters long.', true);
-                registerButton.disabled = false;
-                registerButton.textContent = 'Create Admin Account';
-                return;
+        hideMessage();
+        registerButton.disabled = true;
+        registerButton.textContent = 'Creating account...';
+        
+        if (password.length < 6) {
+            showMessage('Password must be at least 6 characters long.', true);
+            registerButton.disabled = false;
+            registerButton.textContent = 'Create Admin Account';
+            return;
+        }
+
+        const payload = { email, password };
+
+        try {
+            const response = await fetch('/api/admin/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                showMessage(data.message || 'Registration successful! Please sign in.', false);
+                // Automatically switch to the login form after successful registration
+                showForm('login');
+            } else {
+                throw new Error(data.message || 'Registration failed. Please try again.');
             }
-
-            const payload = { email, password };
-
-            try {
-                const response = await fetch('/api/admin/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    showMessage(data.message || 'Registration successful! Please sign in.', false);
-                    // Automatically switch to the login form after successful registration
-                    showForm('login');
-                } else {
-                    throw new Error(data.message || 'Registration failed. Please try again.');
-                }
-            } catch (error) {
-                console.error('Registration error:', error.message);
-                showMessage(error.message, true);
-            } finally {
-                registerButton.disabled = false;
-                registerButton.textContent = 'Create Admin Account';
-            }
-        });
+        } catch (error) {
+            console.error('Registration error:', error.message);
+            showMessage(error.message, true);
+        } finally {
+            registerButton.disabled = false;
+            registerButton.textContent = 'Create Admin Account';
+        }
+    });
 
 
-        // --- Initial Load Check ---
-        document.addEventListener('DOMContentLoaded', () => {
-            // If a token exists, redirect immediately to the dashboard
-            if (localStorage.getItem('adminToken')) {
-                window.location.href = 'admin-dashboard.html';
-            }
-            // Ensure the login form is shown by default
-            showForm('login');
-        });
-    </script>
+    // --- Initial Load Check ---
+    document.addEventListener('DOMContentLoaded', () => {
+        // If a token exists, redirect immediately to the dashboard
+        if (localStorage.getItem('adminToken')) {
+            window.location.href = 'admin-dashboard.html';
+        }
+        // Ensure the login form is shown by default
+        showForm('login');
+    });
+</script>
 </body>
 </html>

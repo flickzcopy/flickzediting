@@ -209,6 +209,8 @@
 
     <script>
     // --- JAVASCRIPT LOGIC ---
+    const REFRESH_ENDPOINT = '/api/admin/refresh-token'; 
+
 
     const totalSalesElement = document.getElementById('total-sales');
     const wearsStockElement = document.getElementById('wears-stock');
@@ -311,6 +313,69 @@
         });
     });
 
+
+/**
+ * Custom fetch function to handle expired Access Tokens and refresh them.
+ * This function must be defined on the dashboard page.
+ */
+async function secureFetch(url, options = {}) {
+    // NOTE: Using 'secureFetch' name here for clarity, assuming it's the 
+    // function you implemented in the previous steps (which was named apiCall).
+
+    const accessToken = localStorage.getItem('adminToken');
+    
+    // Check for token presence before even starting the flow (quick exit)
+    if (!accessToken) {
+        console.error("No token found for secure fetch. Redirecting.");
+        logoutAdmin(); // Use the existing logout function
+        return { status: 401 }; // Return a dummy status to prevent further execution
+    }
+
+    const defaultHeaders = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+    };
+    options.headers = { ...defaultHeaders, ...options.headers };
+
+    let response = await fetch(url, options);
+
+    if (response.status === 401) {
+        try {
+            const data = await response.clone().json();
+            
+            if (data.expired === true) {
+                console.warn('Access Token expired. Attempting refresh...');
+                
+                const refreshResponse = await fetch(REFRESH_ENDPOINT, { method: 'POST' });
+                
+                if (refreshResponse.ok) {
+                    const refreshData = await refreshResponse.json();
+                    const newToken = refreshData.accessToken || refreshData.token; // Handle 'token' or 'accessToken'
+                    
+                    localStorage.setItem('adminToken', newToken);
+                    
+                    options.headers['Authorization'] = `Bearer ${newToken}`;
+                    console.log('Token refreshed successfully. Retrying original request...');
+                    response = await fetch(url, options);
+                    
+                } else {
+                    console.error('Refresh Token failed. Forcing logout.');
+                    localStorage.removeItem('adminToken');
+                    window.location.href = './admin-login.html'; 
+                    return { status: 401 };
+                }
+            }
+        } catch (e) {
+             console.error('Token refresh or JSON parsing failed:', e);
+             localStorage.removeItem('adminToken');
+             window.location.href = './admin-login.html';
+             return { status: 401 };
+        }
+    }
+    
+    return response;
+}
+
     // Function to switch between Dashboard, and Settings content (Internal Pages)
     function setActiveContent(contentId) {
         contentSections.forEach(section => {
@@ -361,13 +426,17 @@
 
     // --- DATA FETCHING AND RENDERING LOGIC ---
 
+   // --- DATA FETCHING AND RENDERING LOGIC ---
+
     /**
       * Fetches real-time dashboard statistics from the Node.js/MongoDB API.
+      * Now uses secureFetch to handle token expiration/refresh transparently.
       */
     async function fetchDashboardData() {
-        const token = localStorage.getItem('adminToken'); // Get the actual token
+        const token = localStorage.getItem('adminToken'); 
         
         if (!token) {
+            // Initial check for token absence (not expiration)
             console.error("[FRONTEND] No adminToken found. Redirecting to login for authentication.");
             window.location.href = './admin-login.html'; 
             return null;
@@ -375,40 +444,44 @@
 
         try {
             console.log('[FRONTEND] Attempting to fetch dashboard stats from API...');
-            // IMPORTANT: Replace this with your actual backend endpoint if deploying
-            const response = await fetch('/api/admin/dashboard/stats', { 
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}` 
+            
+            // 🔑 CRITICAL CHANGE: Use secureFetch instead of standard fetch
+            const response = await secureFetch('/api/admin/dashboard/stats', { 
+                method: 'GET'
+                // secureFetch automatically adds the 'Authorization' header
+            }); 
+
+            // If secureFetch returned a response with status 401, it means the 
+            // Refresh Token failed, and secureFetch already initiated logout/redirect.
+            if (!response || response.status === 401 || response.status === 403) {
+                // If 403 occurs after successful refresh, it's a genuine Forbidden error.
+                if (response && response.status === 403) {
+                    console.error('[FRONTEND] Forbidden access.');
+                    // You might still want to log out or show an error here.
                 }
-            });
+                return null;
+            }
 
             if (!response.ok) {
-                if (response.status === 401 || response.status === 403) {
-                    console.error('[FRONTEND] Unauthorized access. Token expired or invalid. Logging out.');
-                    logoutAdmin(); // Log out and redirect on Auth failure
-                    return null;
-                }
                 console.error(`[FRONTEND] API call failed with status: ${response.status}`);
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
           const data = await response.json();
             
-            console.log('[FRONTEND] Data received from API:', data); 
-            console.log(`[FRONTEND] Received totalSales: ${data.totalSales}, Type: ${typeof data.totalSales}`);
+          console.log('[FRONTEND] Data received from API:', data); 
+          console.log(`[FRONTEND] Received totalSales: ${data.totalSales}, Type: ${typeof data.totalSales}`);
 
-            return {
-                totalSales: data.totalSales || 0,
-                wearsStock: data.wearsStock || 0, 
-                capsStock: data.capsStock || 0, 
-                newArrivalsStock: data.newArrivalsStock || 0, 
-                preOrderStock: data.preOrderStock || 0, 
-                registeredUsers: data.userCount || 0,
-                activeSubscriptions: data.activeSubscriptions || 0, // NEW: Added this field
-                recentActivity: data.recentActivity || [] 
-            };
+          return {
+              totalSales: data.totalSales || 0,
+              wearsStock: data.wearsStock || 0, 
+              capsStock: data.capsStock || 0, 
+              newArrivalsStock: data.newArrivalsStock || 0, 
+              preOrderStock: data.preOrderStock || 0, 
+              registeredUsers: data.userCount || 0,
+              activeSubscriptions: data.activeSubscriptions || 0,
+              recentActivity: data.recentActivity || [] 
+          };
 
         } catch (error) {
             console.error('[FRONTEND] Error fetching dashboard data:', error);

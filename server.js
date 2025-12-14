@@ -2537,10 +2537,11 @@ app.put('/api/admin/change-password', verifyToken, async (req, res) => {
         return res.status(500).json({ message: 'Server error: Failed to change admin password.' });
     }
 });
+
 // POST /api/refresh-token
 // This endpoint is the engine for persistent, seamless admin sessions.
-app.post('/api/refresh-token', async (req, res) => {
-    // Determine production status for secure cookie settings
+app.post('/api/admin/refresh-token', async (req, res) => {
+        // Determine production status for secure cookie settings
     const isProduction = process.env.NODE_ENV === 'production';
     
     // 1. Get Refresh Token from secure cookie (MUST use the name set by the login route)
