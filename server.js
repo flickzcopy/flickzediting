@@ -18,8 +18,8 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 // --- CORS Configuration (The Fix) ---
 const allowedOrigins = [
-    'https://outflickz.netlify.app',
-    'https://outflickz.com' // Make sure you allow your primary domain too
+    'https://outflickzz.netlify.app',
+    'https://outflickzz.com' // Make sure you allow your primary domain too
 ];
 
 const corsOptions = {
