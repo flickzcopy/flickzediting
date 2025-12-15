@@ -2206,6 +2206,16 @@ function generateUserRefreshToken(payload) {
     return jwt.sign({ ...payload, role: 'user' }, process.env.JWT_SECRET, { expiresIn: '7d' }); 
 }
 
+// Helper to determine security settings based on environment and request headers
+const getCookieOptions = (req, isProduction) => {
+    const isSecure = isProduction && req.headers['x-forwarded-proto'] === 'https';
+    
+    return {
+        httpOnly: true,
+        secure: isSecure,
+        sameSite: 'None', // Crucial for Netlify/cross-origin
+    };
+};
 // --- EXPRESS CONFIGURATION AND MIDDLEWARE ---
 const app = express();
 // Ensure express.json() is used BEFORE the update route, but after the full form route
@@ -5356,7 +5366,7 @@ app.post('/api/users/login', async (req, res) => {
         const isSecure = process.env.NODE_ENV === 'production' && req.headers['x-forwarded-proto'] === 'https';
         console.log(`DEBUG LOGIN: Setting cookie with secure: ${isSecure} and sameSite: None`);
         
-
+        const options = getCookieOptions(req, isProduction);
         res.cookie('userRefreshToken', refreshToken, {
             httpOnly: true, 
             secure: isSecure, // <-- USING THE RELIABLE SECURE CHECK
@@ -5445,10 +5455,12 @@ app.post('/api/users/refresh', async (req, res) => {
 
     } catch (err) {
         // 5. If refresh token is expired/invalid, clear it and force re-login
+        const isSecure = isProduction && req.headers['x-forwarded-proto'] === 'https';
+
         res.clearCookie('userRefreshToken', { 
             httpOnly: true, 
-            secure: isProduction, 
-            sameSite: isProduction ? 'strict' : 'lax' 
+            secure: isSecure,
+            sameSite: 'None',
         });
         
         res.status(401).json({ message: 'Session expired. Please log in again.' });
