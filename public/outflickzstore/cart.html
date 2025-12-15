@@ -79,8 +79,6 @@ const AUTH_TOKEN_KEY = 'userAccessToken';
 const REFRESH_ENDPOINT = `${API_BASE_URL}/api/auth/refresh`;
 
 
-
-
 // Function to be called when the user clicks the Profile button
 async function redirectToProfileOrLogin() {
     const token = localStorage.getItem('userAccessToken');
@@ -483,6 +481,7 @@ async function simulateAddToCart(productDetails) {
 /**
  * Renders the entire cart contents and updates the summary.
  * Switches between API fetch (authenticated) and local storage (unauthenticated on 401/error).
+ * This now uses secureUserFetch for persistent authentication.
  */
 async function fetchAndRenderCart() {
     const cartList = document.getElementById('cart-items-list');
@@ -523,17 +522,18 @@ async function fetchAndRenderCart() {
     };
 
     try {
-       const response = await fetch('/api/users/cart', {
+        // 🔑 FIX: Use secureUserFetch to handle Authorization header and automatic refresh
+        const response = await secureUserFetch('/api/users/cart', {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json'
             },
-            credentials: 'include' 
+            credentials: 'include' // Still sends the secure Refresh Token cookie
         });
 
         if (response.status === 401 || response.status === 403) {
-            // Unauthorized (Cookie expired or missing). Show the local cart if one exists.
-            console.warn("Session expired (401/403). Falling back to local cart.");
+            // Unauthorized. This means the Access Token failed AND the Refresh Token failed.
+            console.warn("Session expired (401/403) after refresh attempt. Falling back to local cart.");
             localStorage.setItem('outflickzAuthStatus', 'loggedOut');
             renderLocalCart();
             return;
@@ -773,15 +773,18 @@ function updateQuantityInput(itemId, value) {
  */
 async function updateItemQuantityAPI(itemId, newQuantity) {
     try {
-        const response = await fetch(`/api/users/cart/${itemId}`, {
+        // 🔑 FIX: Use secureUserFetch for authenticated PATCH request, handling headers and refresh.
+        const response = await secureUserFetch(`/api/users/cart/${itemId}`, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ quantity: newQuantity })
+            body: JSON.stringify({ quantity: newQuantity }),
+            credentials: 'include' 
         });
 
         if (!response.ok) {
+            // After secureUserFetch, a 401 means non-recoverable token failure.
             if (response.status === 401) {
                 displayMessage('Session expired. Please log in again to update cart.');
                 redirectToProfileOrLogin();
@@ -797,7 +800,6 @@ async function updateItemQuantityAPI(itemId, newQuantity) {
         displayMessage('Could not update cart quantity. Please try again.');
     }
 }
-
 /**
  * Handles item removal via API.
  */
@@ -809,14 +811,19 @@ async function removeItemFromCart(itemId) {
     }
 
     try {
-        const response = await fetch(`/api/users/cart/${itemId}`, {
+        // 🔑 FIX: Use secureUserFetch for authenticated DELETE request, handling headers and refresh.
+        const response = await secureUserFetch(`/api/users/cart/${itemId}`, {
             method: 'DELETE',
             headers: {
-            }
+                 // Include content-type header so secureUserFetch knows to use headers
+                'Content-Type': 'application/json' 
+            },
+            credentials: 'include' 
         });
 
         if (!response.ok) {
             if (itemElement) itemElement.style.opacity = '1'; // Revert if failed
+            // After secureUserFetch, a 401 means non-recoverable token failure.
             if (response.status === 401) {
                 displayMessage('Session expired. Please log in again to remove item.');
                 redirectToProfileOrLogin();
@@ -834,46 +841,46 @@ async function removeItemFromCart(itemId) {
         displayMessage('Could not remove item from cart. Please try again.');
     }
 }
-
-
 /**
  * Clears the cart by sending a DELETE request to clear all items (API or Local).
  */
 async function clearCart() {
-    // Check if we are clearing the local cart or the API cart
-    if (!await isUserLoggedIn()) { // Assuming isUserLoggedIn() is async
-        // Local cart clear logic
-        
+    
+    // --- Local cart clear logic (Helper function to reuse on failure) ---
+    const handleLocalClear = () => {
         // 🚀 FIX: Ensure the local array is cleared/empty
         localStorage.setItem(LOCAL_CART_KEY, '[]'); 
-        
         localStorage.setItem(CART_STORAGE_KEY, '0');
         updateCartBadge();
         fetchAndRenderCart();
         displayMessage('Local shopping bag cleared successfully.');
-        console.log('[ClearCart] Logged Out: LOCAL_CART_KEY array reset to [].');
-        return;
-    }
+        console.log('[ClearCart] Logged Out/Fallback: LOCAL_CART_KEY array reset to [].');
+    };
 
     try {
-        // API cart clear logic
-        const response = await fetch('/api/users/cart', {
+        // 🔑 FIX: Use secureUserFetch for authenticated DELETE request, handling headers and refresh.
+        const response = await secureUserFetch('/api/users/cart', {
             method: 'DELETE',
             headers: {
-                // Assuming headers like 'Authorization' are handled by another layer or getAuthToken()
-            }
+                'Content-Type': 'application/json' // Set headers to ensure secureFetch adds auth
+            },
+            credentials: 'include' 
         });
 
-        if (!response.ok) {
-            if (response.status === 401) {
-                displayMessage('Session expired. Please log in again to clear cart.');
-                redirectToProfileOrLogin();
-                return;
-            }
+        if (response.status === 401) {
+            // User is definitely not logged in or session expired non-recoverably.
+            console.log('[ClearCart] API 401: Non-recoverable session failure. Clearing local cart.');
+            handleLocalClear();
+            return;
+            
+        } else if (!response.ok) {
+            // Other API errors (400, 500 etc.)
             throw new Error('Failed to clear cart on server.');
-        }
-
-        // 🚀 CRITICAL FIX: After successful server clear, clear the local item array!
+        } 
+        
+        // --- API cart clear logic SUCCESS (HTTP 200) ---
+        
+        // CRITICAL FIX: After successful server clear, clear the local item array!
         localStorage.removeItem(LOCAL_CART_KEY); 
         
         // Update Local Storage count and badge
@@ -883,27 +890,11 @@ async function clearCart() {
         fetchAndRenderCart();
         displayMessage('All items removed from your permanent cart. Cart cleared.');
         console.log('[ClearCart] Logged In: API cleared, local LOCAL_CART_KEY removed.');
+        
     } catch (error) {
-        console.error('Error clearing cart:', error);
-        displayMessage('Could not clear cart. Please try again.');
-    }
-}
-
-// Placeholder for `updateCartBadge`
-function updateCartBadge() {
-    const badge = document.getElementById('cart-badge');
-    
-    if (!badge) {
-        return; 
-    } 
-    
-    const count = parseInt(localStorage.getItem(CART_STORAGE_KEY) || '0');
-    
-    if (count > 0) {
-        badge.textContent = count;
-        badge.classList.remove('hidden');
-    } else {
-        badge.classList.add('hidden');
+        console.error('Error clearing API cart (Network issue):', error);
+        // Network error. Fallback to Local cart clear logic.
+        handleLocalClear();
     }
 }
 
