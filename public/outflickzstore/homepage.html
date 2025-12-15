@@ -580,8 +580,10 @@ function addToCart(collectionId, quantity) {
 
 /**
  * Handles adding an item to the cart. 
- * Tries API (permanent cart via secure cookie) first.
+ * Tries API (permanent cart via Access Token/secure cookie) first.
  * If API fails with 401/403 or network error, falls back to local storage.
+ * NOTE: This function now relies on the globally available secureUserFetch() 
+ * to handle Authorization headers and automatic token refresh.
  */
 async function simulateAddToCart(productDetails) {
     // --- 1. Gather all item details from DOM and input ---
@@ -690,9 +692,8 @@ async function simulateAddToCart(productDetails) {
 
         localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
         
-        // ⭐ FIX 2: DELETE THE INCORRECT LINE. We now rely on updateCartBadge() 
+        // We now rely on updateCartBadge() 
         // to call the corrected getCartCount() which sums the total quantity.
-        // localStorage.setItem(CART_STORAGE_KEY, localCart.length.toString()); 
         
         updateCartBadge();
         
@@ -702,18 +703,20 @@ async function simulateAddToCart(productDetails) {
 
     console.log('[CART] Attempting to add item to API cart:', requiredDetails.name);
 
-    // --- 3. Attempt Authenticated API Call ---
+    // --- 3. Attempt Authenticated API Call using Secure Wrapper ---
     try {
-        const response = await fetch('/api/users/cart', {
+        // Use secureUserFetch instead of raw fetch. 
+        // It handles the Authorization header and automatic refresh flow.
+        const response = await secureUserFetch('/api/users/cart', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(itemDataForAPI),
-            credentials: 'include' // Sends secure cookies (session/JWT)
+            credentials: 'include' 
         });
 
-        // 💡 FIX: Safely parse JSON or default to an error object
+        // Safely parse JSON or default to an error object
         let data;
         try {
             data = await response.json();
@@ -728,7 +731,7 @@ async function simulateAddToCart(productDetails) {
         if (response.ok) {
             // 3a. Success: Item added to permanent cart
             
-            // 🔑 CRITICAL FIX: Ensure the server response has items
+            // Ensure the server response has items
             if (data.items && Array.isArray(data.items)) {
                 
                 // 1. Store the full permanent cart array in LOCAL_CART_KEY
@@ -747,8 +750,8 @@ async function simulateAddToCart(productDetails) {
             displayCartAlert('Item added to your permanent shopping bag!', 'success');
 
         } else if (response.status === 401 || response.status === 403) {
-            // 3b. Unauthorized (Cookie failed/expired) -> FALLBACK TO LOCAL CART
-            console.log("401/403 received (Unauthenticated). Falling back to local cart.");
+            // 3b. Unauthorized (This 401/403 should mean the Refresh Token also failed after the AT failed) -> FALLBACK TO LOCAL CART
+            console.log("401/403 received (Unauthenticated after refresh attempt). Falling back to local cart.");
             handleLocalCartFallback(requiredDetails);
 
         } else {
@@ -756,8 +759,8 @@ async function simulateAddToCart(productDetails) {
             
             // If it's a 5xx error, we should probably treat it like a temporary outage and use the local cart.
             if (response.status >= 500) {
-                    console.log(`Server Error ${response.status} received. Falling back to local cart.`);
-                    handleLocalCartFallback(requiredDetails);
+                console.log(`Server Error ${response.status} received. Falling back to local cart.`);
+                handleLocalCartFallback(requiredDetails);
             }
 
             // Use the flashing alert for generic error (Red background) - Using helper function
