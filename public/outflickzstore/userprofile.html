@@ -29,6 +29,13 @@
     // --- Authentication Constants (Must match global definition) ---
     const API_BASE_URL = 'https://outflickzz.netlify.app';
     const AUTH_TOKEN_KEY = 'userAccessToken';
+    const REFRESH_ENDPOINT = `${API_BASE_URL}/api/users/refresh`; 
+    
+    // ⭐ ADDED: Helper for handleLogout to be used inside secureUserFetch catch blocks
+    function handleLogout() {
+        localStorage.removeItem(AUTH_TOKEN_KEY); 
+        window.location.replace('useraccount.html');
+    }
 
     let currentProfileData = {
         profile: {},
@@ -41,6 +48,7 @@
     // --- Core Functions (Redirect, Logout) ---
 
     // Checks authentication status via the secure cookie and redirects accordingly.
+    // NOTE: This function is typically for navigation (e.g., on index.html)
     async function redirectToProfileOrLogin() {
         try {
             const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
@@ -72,65 +80,72 @@
         }
         
         // 2. Client-side cleanup and redirect
-        // FIX: Using the correct standardized constant AUTH_TOKEN_KEY
         localStorage.removeItem(AUTH_TOKEN_KEY); 
         window.location.replace('useraccount.html');
     }
 
     async function secureUserFetch(url, options = {}) {
-    let token = localStorage.getItem(AUTH_TOKEN_KEY);
-    
-    // Add Authorization header if a token exists
-    if (token) {
-        options.headers = {
-            ...options.headers,
-            'Authorization': `Bearer ${token}`
-        };
-    }
-
-    let response = await fetch(url, options);
-
-    // If response is 401, attempt token refresh
-    if (response.status === 401) {
-        console.log("Token expired (401). Attempting refresh...");
+        let token = localStorage.getItem(AUTH_TOKEN_KEY);
         
-        try {
-            const refreshResponse = await fetch(REFRESH_ENDPOINT, { method: 'POST' });
-
-            if (refreshResponse.ok) {
-                const data = await refreshResponse.json();
-                const newToken = data.accessToken;
-                
-                if (!newToken) {
-                    throw new Error("Refresh successful, but no new token received.");
-                }
-
-                // Store new token and retry the original request
-                localStorage.setItem(AUTH_TOKEN_KEY, newToken);
-                token = newToken; // Update token for retry
-
-                console.log("Token refreshed successfully. Retrying original request...");
-                
-                // Update Authorization header with the new token
-                options.headers['Authorization'] = `Bearer ${token}`;
-                
-                // Retry the original request
-                response = await fetch(url, options);
-
-            } else {
-                console.error("Token refresh failed.");
-                handleLogout(); // Log out user if refresh fails
-                // Return original 401 response for the caller to handle (e.g., disable cart)
-                return response; 
-            }
-        } catch (error) {
-            console.error("Error during token refresh process:", error);
-            handleLogout();
-            return response; // Return original 401 response
+        // Add Authorization header if a token exists
+        if (token) {
+            options.headers = {
+                ...options.headers,
+                'Authorization': `Bearer ${token}`
+            };
         }
+
+        let response = await fetch(url, options);
+
+        // If response is 401, attempt token refresh
+        if (response.status === 401) {
+            console.log("Token expired (401). Attempting refresh...");
+            
+            try {
+                // ⭐ FIX: Added credentials: 'include' for the refresh request 
+                // to send the necessary secure Refresh Token cookie.
+                const refreshResponse = await fetch(REFRESH_ENDPOINT, { 
+                    method: 'POST',
+                    credentials: 'include' 
+                });
+
+                if (refreshResponse.ok) {
+                    const data = await refreshResponse.json();
+                    const newToken = data.accessToken;
+                    
+                    if (!newToken) {
+                        throw new Error("Refresh successful, but no new token received.");
+                    }
+
+                    // Store new token and retry the original request
+                    localStorage.setItem(AUTH_TOKEN_KEY, newToken);
+                    token = newToken; // Update token for retry
+
+                    console.log("Token refreshed successfully. Retrying original request...");
+                    
+                    // Update Authorization header with the new token
+                    options.headers = {
+                        ...options.headers,
+                        'Authorization': `Bearer ${token}`
+                    };
+                    
+                    // Retry the original request
+                    response = await fetch(url, options);
+
+                } else {
+                    console.error("Token refresh failed. Server returned non-200.");
+                    handleLogout(); // Log out user if refresh fails
+                    // Return original 401 response for the caller to handle (e.g., disable cart)
+                    return response; 
+                }
+            } catch (error) {
+                console.error("Error during token refresh process:", error);
+                handleLogout();
+                return response; // Return original 401 response
+            }
+        }
+        return response;
     }
-    return response;
-}
 
     // --- Modal Functions ---
     function closeModal(modalId) {
@@ -216,11 +231,12 @@
         };
 
         try {
-            const response = await fetch(`${API_BASE_URL}/api/users/profile`, {
+            // ⭐ FIX: Use secureUserFetch here to ensure Access Token header is sent/refreshed
+            const response = await secureUserFetch(`${API_BASE_URL}/api/users/profile`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(profileData),
-                credentials: 'include'
+                // credentials: 'include' removed, as secureUserFetch handles auth via header
             });
 
             const data = await response.json();
@@ -229,7 +245,7 @@
                 showStatusMessage(data.message || 'Failed to update personal details.', false);
                 if (response.status === 401 || response.status === 403) {
                     console.error("Profile update unauthorized, forcing logout.");
-                    window.location.replace('useraccount.html');
+                    handleLogout(); // Use new helper
                     return;
                 }
                 throw new Error(data.message || 'Update failed');
@@ -268,11 +284,12 @@
         };
 
         try {
-            const response = await fetch(`${API_BASE_URL}/api/users/address`, {
+            // ⭐ FIX: Use secureUserFetch here to ensure Access Token header is sent/refreshed
+            const response = await secureUserFetch(`${API_BASE_URL}/api/users/address`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(addressData),
-                credentials: 'include'
+                // credentials: 'include' removed, as secureUserFetch handles auth via header
             });
 
             const data = await response.json();
@@ -281,7 +298,7 @@
                 showStatusMessage(data.message || 'Failed to update contact address.', false);
                 if (response.status === 401 || response.status === 403) {
                     console.error("Address update unauthorized, forcing logout.");
-                    window.location.replace('useraccount.html');
+                    handleLogout(); // Use new helper
                     return;
                 }
                 throw new Error(data.message || 'Update failed');
@@ -314,7 +331,10 @@
         `;
         
         try {
-            const response = await fetch(`${API_BASE_URL}/api/orders/history`, { credentials: 'include' });
+            // ⭐ FIX: Use secureUserFetch here to ensure Access Token header is sent/refreshed
+            const response = await secureUserFetch(`${API_BASE_URL}/api/orders/history`, { 
+                method: 'GET' 
+            }); 
             
             if (!response.ok) {
                 const errorText = await response.text();
@@ -323,7 +343,7 @@
                 
                 if (response.status === 401 || response.status === 403) {
                     console.error("Order history fetch unauthorized, forcing redirect.");
-                    window.location.replace('useraccount.html');
+                    handleLogout(); // Use new helper
                 }
                 return;
             }
@@ -416,8 +436,8 @@
     }
 
     /**
-     * Populates the DOM with the latest user data object.
-     */
+    * Populates the DOM with the latest user data object.
+    */
     function updateDOM(data) {
         const profile = data.profile || {};
         const status = data.status || {};
@@ -484,11 +504,12 @@
             newPassword: newPassword
         };
         try {
-            const response = await fetch(`${API_BASE_URL}/api/users/change-password`, {
+            // ⭐ FIX: Use secureUserFetch here to ensure Access Token header is sent/refreshed
+            const response = await secureUserFetch(`${API_BASE_URL}/api/users/change-password`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(passwordData),
-                credentials: 'include'
+                // credentials: 'include' removed, as secureUserFetch handles auth via header
             });
 
             const data = await response.json();
@@ -497,7 +518,7 @@
                 showStatusMessage(data.message || 'Failed to change password.', false);
                 if (response.status === 401 || response.status === 403) {
                     console.error("Password change unauthorized, forcing logout.");
-                    window.location.replace('useraccount.html');
+                    handleLogout(); // Use new helper
                     return;
                 }
                 throw new Error(data.message || 'Password change failed');
@@ -520,78 +541,63 @@
         }
     }
         
-   /**
- * Attempts to fetch user data and redirects to login on failure (401/403).
- * Uses secureUserFetch to automatically handle Access Token headers and refresh logic.
- */
-async function fetchUserData() {
-    const mainContent = document.getElementById('main-profile-content');
-    const loadingIndicator = document.getElementById('loading-indicator');
-    
-    // Initial display state
-    if (loadingIndicator) loadingIndicator.classList.remove('hidden');
-    if (mainContent) mainContent.classList.add('hidden');
-
-    try {
-        // ⭐ CRITICAL FIX: Use secureUserFetch 
-        // secureUserFetch will:
-        // 1. Read the Access Token from localStorage (AUTH_TOKEN_KEY).
-        // 2. Add the 'Authorization: Bearer <token>' header.
-        // 3. Automatically retry the request if a 401 response triggers a token refresh.
-        const response = await secureUserFetch(`${API_BASE_URL}/api/users/account`, {
-            method: 'GET',
-            // NOTE: The 'headers' and 'credentials: include' are handled internally by secureUserFetch
-            // but we can add headers here if we had custom ones (like 'Content-Type').
-            // The method is sufficient here.
-        });
+    /**
+    * Attempts to fetch user data and redirects to login on failure (401/403).
+    * Uses secureUserFetch to automatically handle Access Token headers and refresh logic.
+    */
+    async function fetchUserData() {
+        const mainContent = document.getElementById('main-profile-content');
+        const loadingIndicator = document.getElementById('loading-indicator');
         
-        console.log(`Fetch Status: ${response.status}`); 
-
-        if (!response.ok) {
-            // This catches non-200 statuses (403, 500, or a final 401 after refresh failed)
-            console.error(`Authentication failed (Status: ${response.status}). Redirecting.`);
-            
-            // The secureUserFetch wrapper should ideally call handleLogout, 
-            // but we ensure the redirect happens here as a final safeguard.
-            if (loadingIndicator) loadingIndicator.classList.add('hidden');
-            
-            setTimeout(() => {
-                window.location.replace('useraccount.html'); // Force re-login
-            }, 100); 
-            return; 
-        } 
-        
-        // ------------------ Success Path ------------------
-        const data = await response.json();
-        console.log('User Data fetched successfully:', data);
-        currentProfileData = data;
-        updateDOM(data); 
-
-        // fetchOrderHistory should also use secureUserFetch!
-        await fetchOrderHistory(); 
-
-        if (loadingIndicator) loadingIndicator.classList.add('hidden');
-        if (mainContent) mainContent.classList.remove('hidden');
-
-    } catch (error) {
-        // This catches network errors or the error thrown by secureUserFetch 
-        // when the Refresh Token itself is invalid (forcing a logout/re-login).
-        console.error("Fetch user data error (Auth Failure or Network):", error);
-        
-        if (loadingIndicator) loadingIndicator.classList.add('hidden');
+        // Initial display state
+        if (loadingIndicator) loadingIndicator.classList.remove('hidden');
         if (mainContent) mainContent.classList.add('hidden');
-        
-        // Clear any remaining tokens/state on the client before redirecting
-        localStorage.removeItem(AUTH_TOKEN_KEY); 
 
-        setTimeout(() => {
-            window.location.replace('useraccount.html');
-        }, 100); 
+        try {
+            // This already uses secureUserFetch - correct.
+            const response = await secureUserFetch(`${API_BASE_URL}/api/users/account`, {
+                method: 'GET',
+            });
+            
+            console.log(`Fetch Status: ${response.status}`); 
+
+            if (!response.ok) {
+                console.error(`Authentication failed (Status: ${response.status}). Redirecting.`);
+                
+                if (loadingIndicator) loadingIndicator.classList.add('hidden');
+                
+                // secureUserFetch should have called handleLogout if the 401 was non-recoverable,
+                // but we ensure the redirect happens here as a final safeguard.
+                setTimeout(handleLogout, 100); 
+                return; 
+            } 
+            
+            // ------------------ Success Path ------------------
+            const data = await response.json();
+            console.log('User Data fetched successfully:', data);
+            currentProfileData = data;
+            updateDOM(data); 
+
+            // fetchOrderHistory is also fixed above to use secureUserFetch, ensuring consistency.
+            await fetchOrderHistory(); 
+
+            if (loadingIndicator) loadingIndicator.classList.add('hidden');
+            if (mainContent) mainContent.classList.remove('hidden');
+
+        } catch (error) {
+            // This catches network errors or the error thrown by secureUserFetch 
+            // when the Refresh Token itself is invalid (forcing a logout/re-login).
+            console.error("Fetch user data error (Auth Failure or Network):", error);
+            
+            if (loadingIndicator) loadingIndicator.classList.add('hidden');
+            if (mainContent) mainContent.classList.add('hidden');
+            
+            handleLogout(); // Clear state and redirect
+        }
     }
-}
 
-document.addEventListener('DOMContentLoaded', fetchUserData);
-    </script>
+    document.addEventListener('DOMContentLoaded', fetchUserData);
+</script>
 
     <header class="bg-white sticky top-0 z-50 shadow-md">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
