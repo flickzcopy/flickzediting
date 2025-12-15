@@ -25,8 +25,10 @@
 </head>
 <body class="bg-gray-50 min-h-screen text-gray-900 antialiased">
     
-    <script>
+<script>
+    // --- Authentication Constants (Must match global definition) ---
     const API_BASE_URL = 'https://outflickzz.netlify.app';
+    const AUTH_TOKEN_KEY = 'userAccessToken';
 
     let currentProfileData = {
         profile: {},
@@ -36,15 +38,28 @@
         orders: []
     };
 
-    function redirectToProfileOrLogin() {
-        window.location.href = 'useraccount.html';
-    }
-    function toggleMenu() {
-        const mobileMenu = document.getElementById('mobile-menu');
-        mobileMenu.classList.toggle('hidden');
+    // --- Core Functions (Redirect, Logout) ---
+
+    // Checks authentication status via the secure cookie and redirects accordingly.
+    async function redirectToProfileOrLogin() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
+                method: 'GET',
+                credentials: 'include' 
+            });
+
+            if (response.status === 200) {
+                window.location.href = 'userprofile.html'; 
+            } else {
+                window.location.href = 'useraccount.html';
+            }
+        } catch (error) {
+            console.error('Authentication status check failed (Network Error):', error);
+            window.location.href = 'useraccount.html';
+        }
     }
 
-    // ⭐ CRITICAL SECURITY UPDATE: Needs server endpoint to clear HTTP-only cookie
+    // ⭐ CORRECTED LOGOUT: Uses the standard AUTH_TOKEN_KEY variable
     async function logoutUser() {
         // 1. Attempt to call server endpoint to clear the HTTP-only cookie
         try {
@@ -53,11 +68,12 @@
                 credentials: 'include' 
             });
         } catch (error) {
-            console.warn('Server logout call failed or was unreachable, proceeding with client-side redirect.', error);
+            console.warn('Server logout call failed or was unreachable, proceeding with client-side cleanup.', error);
         }
         
         // 2. Client-side cleanup and redirect
-        localStorage.removeItem('outflickzToken'); 
+        // FIX: Using the correct standardized constant AUTH_TOKEN_KEY
+        localStorage.removeItem(AUTH_TOKEN_KEY); 
         window.location.replace('useraccount.html');
     }
 
@@ -67,21 +83,18 @@
     }
 
     function openChangePasswordModal() {
-    const modal = document.getElementById('change-password-modal');
-    modal.classList.remove('hidden');
-    // Optional: Clear form on open
-    document.getElementById('change-password-form').reset();
-}
+        const modal = document.getElementById('change-password-modal');
+        modal.classList.remove('hidden');
+        document.getElementById('change-password-form').reset();
+    }
 
     function openEditProfileModal() {
         const modal = document.getElementById('edit-profile-modal');
         modal.classList.remove('hidden');
 
-        // Pre-fill form fields with current data
         document.getElementById('edit-profile-firstName').value = currentProfileData.profile.firstName || '';
         document.getElementById('edit-profile-lastName').value = currentProfileData.profile.lastName || '';
         document.getElementById('edit-profile-phone').value = currentProfileData.profile.phone || '';
-        // 🎉 NEW: Pre-fill whatsapp
         document.getElementById('edit-profile-whatsapp').value = currentProfileData.profile.whatsapp || '';
     }
 
@@ -91,7 +104,6 @@
 
         const address = currentProfileData.address || {}; 
         
-        // Pre-fill form fields with current data
         document.getElementById('edit-address-street').value = address.street || '';
         document.getElementById('edit-address-city').value = address.city || '';
         document.getElementById('edit-address-state').value = address.state || '';
@@ -118,20 +130,20 @@
     }
 
     // --- New Function for Password Visibility ---
-function togglePasswordVisibility(inputId, iconId) {
-    const input = document.getElementById(inputId);
-    const icon = document.getElementById(iconId);
+    function togglePasswordVisibility(inputId, iconId) {
+        const input = document.getElementById(inputId);
+        const icon = document.getElementById(iconId);
 
-    if (input.type === 'password') {
-        input.type = 'text';
-        icon.classList.remove('fa-eye');
-        icon.classList.add('fa-eye-slash');
-    } else {
-        input.type = 'password';
-        icon.classList.remove('fa-eye-slash');
-        icon.classList.add('fa-eye');
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
     }
-}
 
     // --- Submission Handlers (Personal Information) ---
     async function submitEditProfile(event) {
@@ -145,7 +157,6 @@ function togglePasswordVisibility(inputId, iconId) {
             firstName: document.getElementById('edit-profile-firstName').value.trim(),
             lastName: document.getElementById('edit-profile-lastName').value.trim(),
             phone: document.getElementById('edit-profile-phone').value.trim(),
-            // 🎉 NEW: Get WhatsApp value
             whatsapp: document.getElementById('edit-profile-whatsapp').value.trim() 
         };
 
@@ -161,10 +172,14 @@ function togglePasswordVisibility(inputId, iconId) {
 
             if (!response.ok) {
                 showStatusMessage(data.message || 'Failed to update personal details.', false);
+                if (response.status === 401 || response.status === 403) {
+                    console.error("Profile update unauthorized, forcing logout.");
+                    window.location.replace('useraccount.html');
+                    return;
+                }
                 throw new Error(data.message || 'Update failed');
             }
 
-            // SUCCESS: Update current data and re-render DOM
             currentProfileData.profile = data.profile;
             updateDOM(currentProfileData);
             closeModal('edit-profile-modal');
@@ -209,10 +224,14 @@ function togglePasswordVisibility(inputId, iconId) {
 
             if (!response.ok) {
                 showStatusMessage(data.message || 'Failed to update contact address.', false);
+                if (response.status === 401 || response.status === 403) {
+                    console.error("Address update unauthorized, forcing logout.");
+                    window.location.replace('useraccount.html');
+                    return;
+                }
                 throw new Error(data.message || 'Update failed');
             }
 
-            // SUCCESS: Update current data and re-render DOM
             currentProfileData.address = data.address;
             updateDOM(currentProfileData);
             closeModal('edit-address-modal');
@@ -229,7 +248,7 @@ function togglePasswordVisibility(inputId, iconId) {
         }
     }
 
-    // --- Fetch and Render Order History (Mock Data Removed) ---
+    // --- Fetch and Render Order History ---
     async function fetchOrderHistory() {
         const orderList = document.getElementById('order-history-list');
         orderList.innerHTML = `
@@ -243,10 +262,14 @@ function togglePasswordVisibility(inputId, iconId) {
             const response = await fetch(`${API_BASE_URL}/api/orders/history`, { credentials: 'include' });
             
             if (!response.ok) {
-                // If the user isn't authorized or the API fails, show an error and return
                 const errorText = await response.text();
                 console.error(`Failed to fetch order history (Status: ${response.status}):`, errorText);
                 document.getElementById('order-history-list').innerHTML = '<p class="text-red-500 italic">Failed to load order history. Please ensure you are logged in.</p>';
+                
+                if (response.status === 401 || response.status === 403) {
+                    console.error("Order history fetch unauthorized, forcing redirect.");
+                    window.location.replace('useraccount.html');
+                }
                 return;
             }
 
@@ -261,9 +284,9 @@ function togglePasswordVisibility(inputId, iconId) {
         }
     }
 
-   function renderOrderHistory(orders) {
+    function renderOrderHistory(orders) {
         const orderList = document.getElementById('order-history-list');
-        orderList.innerHTML = ''; // Clear existing content
+        orderList.innerHTML = ''; 
 
         if (orders.length === 0) {
             orderList.innerHTML = '<p class="text-gray-500 italic">You have no previous orders.</p>';
@@ -295,7 +318,6 @@ function togglePasswordVisibility(inputId, iconId) {
                     statusIcon = 'info-circle';
             }
             const formattedDate = new Date(order.date).toLocaleDateString('en-US');
-            // ⭐ CURRENCY CORRECTION: Changed '$' to '₦'
             const formattedTotal = order.total.toFixed(2);
 
             return `
@@ -351,7 +373,6 @@ function togglePasswordVisibility(inputId, iconId) {
         const emailAddress = data.email || 'Email Not Available'; 
         const userRole = status.role || 'user';
         const isVerified = status.isVerified;
-        // Use the existing memberSince data if available, otherwise process the new one
         const memberSince = membership.memberSince ? new Date(membership.memberSince).toLocaleDateString() : 'N/A';
 
         document.getElementById('user-name').textContent = fullName;
@@ -362,7 +383,6 @@ function togglePasswordVisibility(inputId, iconId) {
             : '<span class="text-red-600 font-bold"><i class="fas fa-times-circle mr-1"></i> Unverified</span>';
         document.getElementById('member-since').textContent = memberSince;
         document.getElementById('user-phone').textContent = profile.phone || 'Not Set';
-        // 🎉 NEW: Update WhatsApp display
         document.getElementById('user-whatsapp').textContent = profile.whatsapp || 'Not Set';
 
 
@@ -386,64 +406,67 @@ function togglePasswordVisibility(inputId, iconId) {
     }
 
     // --- Submission Handlers (Change Password) ---
-async function submitChangePassword(event) {
-    event.preventDefault();
-    const button = document.getElementById('submit-password-btn');
-    const originalText = button.textContent;
-    button.disabled = true;
-    button.textContent = 'Updating...';
+    async function submitChangePassword(event) {
+        event.preventDefault();
+        const button = document.getElementById('submit-password-btn');
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = 'Updating...';
 
-    const oldPassword = document.getElementById('change-password-old').value;
-    const newPassword = document.getElementById('change-password-new').value;
-    const confirmPassword = document.getElementById('change-password-confirm').value;
+        const oldPassword = document.getElementById('change-password-old').value;
+        const newPassword = document.getElementById('change-password-new').value;
+        const confirmPassword = document.getElementById('change-password-confirm').value;
 
-    if (newPassword !== confirmPassword) {
-        showStatusMessage('New password and confirmation do not match.', false);
-        button.disabled = false;
-        button.textContent = originalText;
-        return;
-    }
-
-    const passwordData = {
-        currentPassword: oldPassword, // Changed key name to match server expectation
-        newPassword: newPassword
-    };
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/users/change-password`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(passwordData),
-            credentials: 'include'
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            showStatusMessage(data.message || 'Failed to change password.', false);
-            throw new Error(data.message || 'Password change failed');
+        if (newPassword !== confirmPassword) {
+            showStatusMessage('New password and confirmation do not match.', false);
+            button.disabled = false;
+            button.textContent = originalText;
+            return;
         }
 
-        // SUCCESS
-        closeModal('change-password-modal');
-        showStatusMessage('Password updated successfully! Please log in again using your new password.', true);
+        const passwordData = {
+            currentPassword: oldPassword, 
+            newPassword: newPassword
+        };
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/users/change-password`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(passwordData),
+                credentials: 'include'
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                showStatusMessage(data.message || 'Failed to change password.', false);
+                if (response.status === 401 || response.status === 403) {
+                    console.error("Password change unauthorized, forcing logout.");
+                    window.location.replace('useraccount.html');
+                    return;
+                }
+                throw new Error(data.message || 'Password change failed');
+            }
+
+            // SUCCESS
+            closeModal('change-password-modal');
+            showStatusMessage('Password updated successfully! Please log in again using your new password.', true);
+            
+            setTimeout(logoutUser, 3000); 
+
+        } catch (error) {
+            console.error('Password Change Error:', error);
+            if (!document.getElementById('status-message-container').classList.contains('bg-red-100')) {
+                showStatusMessage('An unexpected error occurred during password change.', false);
+            }
+        } finally {
+            button.disabled = false;
+            button.textContent = originalText;
+        }
+    }
         
-        // Optional: Force user to log out after successful password change
-        setTimeout(logoutUser, 3000); 
-
-    } catch (error) {
-        console.error('Password Change Error:', error);
-        if (!document.getElementById('status-message-container').classList.contains('bg-red-100')) {
-            showStatusMessage('An unexpected error occurred during password change.', false);
-        }
-    } finally {
-        button.disabled = false;
-        button.textContent = originalText;
-    }
-}
-    
     /**
      * Attempts to fetch user data and redirects to login on failure (401/403).
-     * MOCK DATA REMOVED.
      */
     async function fetchUserData() {
         const mainContent = document.getElementById('main-profile-content');
@@ -461,36 +484,29 @@ async function submitChangePassword(event) {
             console.log(`Fetch Status: ${response.status}`); 
 
             if (!response.ok) {
-                // Real failure path: Redirect to login/account page
                 console.error(`Authentication failed (Status: ${response.status}). Redirecting.`);
                 
-                // Hide everything
                 if (loadingIndicator) loadingIndicator.classList.add('hidden');
                 if (mainContent) mainContent.classList.add('hidden');
 
-                // Redirect after a brief delay
                 setTimeout(() => {
                     window.location.replace('useraccount.html');
                 }, 100); 
-                return; // Stop execution here
+                return; 
             } 
             
-            // Real success path
             const data = await response.json();
             console.log('User Data fetched successfully:', data);
             currentProfileData = data;
             updateDOM(data); 
 
-            // Fetch and render order history after profile data is loaded
             await fetchOrderHistory(); 
 
-            // Show content
             if (loadingIndicator) loadingIndicator.classList.add('hidden');
             if (mainContent) mainContent.classList.remove('hidden');
 
         } catch (error) {
-            console.error("Fetch user data error:", error);
-            // Hide everything and redirect on fatal network failure
+            console.error("Fetch user data error (Network Failure):", error);
             if (loadingIndicator) loadingIndicator.classList.add('hidden');
             if (mainContent) mainContent.classList.add('hidden');
             
