@@ -1482,6 +1482,16 @@ function handleBuyNowImmediateLogout() {
 
     // --- Main Initialization (Modified to handle both Logged-In and Guest users) ---
 document.addEventListener('DOMContentLoaded', () => {
+
+    /**
+ * Utility function to check if a user is currently logged in based on client-side status.
+ * (Note: The server is the ultimate authority, but this client-side check provides quick UI guidance.)
+ */
+function isUserLoggedIn() {
+    // We check the status flag set by the login/logout process or secureUserFetch.
+    const authStatus = localStorage.getItem('outflickzAuthStatus');
+    return authStatus === 'loggedIn';
+}
     
     // ... (Buy Now console logging) ...
     sessionStorage.getItem(BUY_NOW_KEY); 
