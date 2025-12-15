@@ -2361,6 +2361,38 @@ const verifyUserToken = (req, res, next) => {
     }
 };
 
+
+const verifySessionCookie = (req, res, next) => {
+    // 1. Get Refresh Token from the secure cookie
+    const refreshToken = req.cookies.userRefreshToken; 
+    
+    if (!refreshToken) {
+        // If NO cookie is found, the user is NOT logged in.
+        return res.status(401).json({ message: 'No valid session cookie found.' });
+    }
+
+    try {
+        // 2. Verify the Refresh Token
+        const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+        
+        // 3. Ensure role is correct (optional but good practice)
+        if (decoded.role !== 'user') {
+            return res.status(403).json({ message: 'Forbidden. Invalid token role in cookie.' });
+        }
+
+        // 4. Success: User is authenticated via session cookie.
+        // We attach the ID just in case, but usually we just want the 200 status.
+        req.userId = decoded.id; 
+        next(); 
+
+    } catch (err) {
+        // 5. If refresh token is expired/invalid/bad signature
+        // Server will respond 401, forcing the client to re-login.
+        console.error("Session Cookie verification failed:", err.message);
+        res.status(401).json({ message: 'Session cookie invalid or expired.' });
+    }
+};
+
 /**
  * Verifies the user token if present, but allows the request to proceed if absent.
  * (This middleware is generally not needed for a protected route like /api/orders/:orderId)
@@ -5688,15 +5720,8 @@ app.put('/api/users/change-password', verifyUserToken, async (req, res) => {
     }
 });
 
-// 4. GET /api/auth/status (Check Authentication Status - Protected)
-app.get('/api/auth/status', verifyUserToken, (req, res) => {
-    // If verifyUserToken successfully executed, it means:
-    // 1. The request had a token/session.
-    // 2. The token/session was valid.
-    // 3. The user is logged in.
-    
-    // We don't need to query the database here.
-    // We just return a success status.
+app.get('/api/auth/status', verifySessionCookie, (req, res) => {
+    // If verifySessionCookie successfully executed, the user is logged in via cookie.
     res.status(200).json({ message: 'Authenticated', isAuthenticated: true });
 });
 
