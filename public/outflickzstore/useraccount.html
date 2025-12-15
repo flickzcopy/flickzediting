@@ -441,17 +441,12 @@ const REGISTER_ENDPOINT = `${API_BASE_URL}/users/register`;
 const VERIFY_ENDPOINT = `${API_BASE_URL}/users/verify`;
 const RESEND_ENDPOINT = `${API_BASE_URL}/users/resend-verification`;
 const LOGIN_ENDPOINT = `${API_BASE_URL}/users/login`;
-// Add a LOGOUT endpoint (assuming one exists or will be created)
 const LOGOUT_ENDPOINT = `${API_BASE_URL}/users/logout`; 
-// ⭐ NEW GLOBAL CONSTANT: KEY for the JWT token for client-side API calls
-const AUTH_TOKEN_KEY = 'outflickzAuthToken'; 
-// ⭐ NEW GLOBAL CONSTANT: KEY for the local cart data
+const AUTH_TOKEN_KEY = 'userAccessToken'; 
 const LOCAL_CART_KEY = 'outflickzLocalCart';
-// ⭐ NEW GLOBAL CONSTANT: Key for the cart item count (used for the badge)
 const CART_STORAGE_KEY = 'outflickzCartItemCount'; 
-// ⭐ NEW GLOBAL STATE for the permanent cart items (must be loaded after login)
-let globalCartItems = []; 
 
+let globalCartItems = []; 
 
 let pendingVerificationEmail = '';
 
@@ -727,8 +722,8 @@ async function handleLogin(event) {
             // Token is now set via HTTP-only cookie by the server response.
 
             // ⭐ CRITICAL FIX: Save the JWT token received from the server in the response body
-            if (data.token) {
-                localStorage.setItem(AUTH_TOKEN_KEY, data.token);
+            if (data.accessToken) {
+                localStorage.setItem(AUTH_TOKEN_KEY, data.accessToken);
                 console.log('JWT Token successfully stored for API access.');
             } else {
                  console.warn('No JWT token received in the login response body. API calls might fail.');
@@ -795,64 +790,60 @@ async function handleLogin(event) {
 
 /**
  * Fetches the permanent cart from the server after a successful login/auth.
- * Assumes a global variable 'globalCartItems' and the presence of 'CART_STORAGE_KEY'
- * and 'updateCartBadge' function in the file's scope.
+ * Assumes 'secureUserFetch', 'globalCartItems', 'CART_STORAGE_KEY', and 'updateCartBadge' 
+ * are available in the file's scope.
  */
-async function fetchAndSetPermanentCartState() {
-    // 1. Prepare the fetch request
-    // We rely on the HTTP-only cookie set by the server, so an Authorization header is optional
-    // but the 'credentials' option is CRITICAL for cross-origin requests.
-    // NOTE: The endpoint is a relative path assuming the API is at the root. Adjust if needed.
-    const authToken = localStorage.getItem(AUTH_TOKEN_KEY); 
-    if (!authToken) {
-        console.warn('Cannot fetch cart: JWT token is missing.');
-        globalCartItems = [];
-        localStorage.setItem(CART_STORAGE_KEY, '0');
-        updateCartBadge();
-        return;
-    }
-    
-    const response = await fetch(`${API_BASE_URL}/user/cart`, { // Adjusted to use API_BASE_URL
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-            // Include JWT token for authorization
-            'Authorization': `Bearer ${authToken}` 
-        },
-        // 'credentials: include' is usually for HTTP-only cookies, but JWT is handled via Authorization header. 
-        // We can omit 'credentials' unless using a proxy or strictly cross-origin cookies.
-    });
+async function fetchAndSetPermanentCartState() {  
+    try {
+        const response = await secureUserFetch(`${API_BASE_URL}/user/cart`, { 
+            method: 'GET'
+            // No need for custom headers or credentials here; secureUserFetch handles them.
+        });
 
-    // 2. Handle non-OK response (401, 403, 500)
-    if (!response.ok) {
-        // Log the failure but don't crash the application
-        console.error(`Failed to retrieve permanent cart. Status: ${response.status}`);
-        // Ensure the frontend cart state is cleared/empty if fetching the permanent cart fails
+        // 2. Handle non-OK response (If it failed, it means the server 
+        //    returned a non-401 failure, like a 403 or 500, or a retry failed).
+        if (!response.ok) {
+            // Log the failure but don't crash the application
+            console.error(`Failed to retrieve permanent cart. Status: ${response.status}`);
+            
+            // Ensure the frontend cart state is cleared/empty if fetching the permanent cart fails
+            globalCartItems = [];
+            localStorage.setItem(CART_STORAGE_KEY, '0');
+            updateCartBadge();
+            
+            throw new Error(`Could not retrieve permanent cart from server. Status: ${response.status}`);
+        }
+        
+        // 3. Process the successful response (HTTP 200)
+        const cartData = await response.json();
+        
+        // Ensure the data structure is an array of items (or an empty array)
+        const permanentItems = cartData.items && Array.isArray(cartData.items) 
+                                ? cartData.items 
+                                : [];
+
+        // 4. Store the items in the global state/cache
+        globalCartItems = permanentItems; 
+        console.log(`Permanent cart loaded with ${permanentItems.length} unique items.`);
+        
+        // 5. Update the local storage item count and UI badge
+        localStorage.setItem(CART_STORAGE_KEY, permanentItems.length.toString()); 
+        updateCartBadge();
+        
+    } catch (error) {
+        // This catches network errors OR the 'Session expired. Must re-login.' error 
+        // thrown by secureUserFetch if the refresh token failed.
+        console.error('Fetch permanent cart error caught:', error.message);
+        
+        // Crucial for cleanup: Ensure local state is cleared if the secure fetch failed
         globalCartItems = [];
         localStorage.setItem(CART_STORAGE_KEY, '0');
         updateCartBadge();
         
-        throw new Error('Could not retrieve permanent cart from server.');
+        // Re-throw to signal the calling function (like handleLogin) of the failure
+        throw error;
     }
-    
-    // 3. Process the successful response (HTTP 200)
-    const cartData = await response.json();
-    
-    // Ensure the data structure is an array of items (or an empty array)
-    const permanentItems = cartData.items && Array.isArray(cartData.items) 
-                            ? cartData.items 
-                            : [];
-
-    // 4. Store the items in the global state/cache
-    // Assuming 'globalCartItems' is the variable read by your product page buttons and cart view
-    globalCartItems = permanentItems; 
-    console.log(`Permanent cart loaded with ${permanentItems.length} unique items.`);
-    
-    // 5. Update the local storage item count and UI badge
-    localStorage.setItem(CART_STORAGE_KEY, permanentItems.length.toString()); 
-    updateCartBadge();
 }
-
 
 /**
 * Handles create account form submission and transitions to verification view.
