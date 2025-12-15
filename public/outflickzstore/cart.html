@@ -279,6 +279,24 @@ async function secureUserFetch(url, options = {}) {
 // --- CART LOGIC FUNCTIONS (Core) ---
 // ---------------------------------------------------
 
+// Placeholder for `updateCartBadge`
+function updateCartBadge() {
+    const badge = document.getElementById('cart-badge');
+    
+    if (!badge) {
+        return; 
+    } 
+    
+    const count = parseInt(localStorage.getItem(CART_STORAGE_KEY) || '0');
+    
+    if (count > 0) {
+        badge.textContent = count;
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
+}
+
 /**
  * Helper function to handle the local storage cart addition.
  * @param {Object} details - The product details to add.
