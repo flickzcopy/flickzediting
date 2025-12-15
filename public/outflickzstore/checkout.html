@@ -494,6 +494,7 @@
     }
 
     
+    
 // Function to be called when the user clicks the Profile button
 async function redirectToProfileOrLogin() {
     const token = localStorage.getItem('userAccessToken');
@@ -573,6 +574,17 @@ function enforceAuthGate() {
     const PAYSTACK_PUBLIC_KEY = 'pk_live_914b068e58d4ff0d8c50e5a035cae86b1142da35'; 
     const CURRENCY_CODE = 'NGN'; 
     const CURRENCY_SYMBOL = '₦';
+
+
+       /**
+ * Utility function to check if a user is currently logged in based on client-side status.
+ * (Note: The server is the ultimate authority, but this client-side check provides quick UI guidance.)
+ */
+function isUserLoggedIn() {
+    // We check the status flag set by the login/logout process or secureUserFetch.
+    const authStatus = localStorage.getItem('outflickzAuthStatus');
+    return authStatus === 'loggedIn';
+}
 
     // --- MESSAGE & MODAL DISPLAY FUNCTION (Unchanged) ---
     function displayMessage(message) {
@@ -1482,48 +1494,10 @@ function handleBuyNowImmediateLogout() {
 
     // --- Main Initialization (Modified to handle both Logged-In and Guest users) ---
 document.addEventListener('DOMContentLoaded', () => {
-
-    /**
- * Utility function to check if a user is currently logged in based on client-side status.
- * (Note: The server is the ultimate authority, but this client-side check provides quick UI guidance.)
- */
-function isUserLoggedIn() {
-    // We check the status flag set by the login/logout process or secureUserFetch.
-    const authStatus = localStorage.getItem('outflickzAuthStatus');
-    return authStatus === 'loggedIn';
-}
     
     // ... (Buy Now console logging) ...
     sessionStorage.getItem(BUY_NOW_KEY); 
     console.log("CRITICAL FIX APPLIED: Checked 'buyNowItem' from sessionStorage to force standard cart load.");
-
-    // ======================================================================
-    // ⭐ CRITICAL INTEGRATION POINT: Check for immediate logout requirement
-    // ======================================================================
-    // We MUST keep this check in case a redirect is necessary for Buy Now flow.
-   // const didLogout = handleBuyNowImmediateLogout();
-    //if (didLogout) return; // HALT execution if redirect occurred
-    // ======================================================================
-    
-
-    // --- Initialization Logic Starts Here ---
-    
-    // If the user is NOT logged in, we MUST stop them if the checkout 
-    // is designed ONLY for logged-in users (which the old code implied).
-    // If you intend to allow GUEST CHECKOUT, you must modify this logic below.
-
-    // 🛑 SOLUTION 1: If you MUST force login (original intent, but stops the redirect loop)
-    /*
-    if (!isUserLoggedIn()) {
-        // Since the user is coming from Buy Now, they should be redirected to register/login
-        // and then return to the checkout page. The old code was buggy because it didn't
-        // handle the 'Buy Now' case properly when redirecting back.
-        // For now, if the page requires login, we put the redirect back.
-        // This *will* redirect the user to useraccount.html if they are not logged in.
-        redirectToProfileOrLogin();
-        return;
-    }
-    */
 
     // ⭐ SOLUTION 2: The preferred method (Allow Guest, but conditionally fetch user data) ⭐
     // We only need to pre-fill the form if the user is logged in.
