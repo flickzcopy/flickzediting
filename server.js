@@ -52,6 +52,23 @@ const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 const PAYSTACK_API_BASE_URL = 'https://api.paystack.co';
 
 
+// Define isProduction at the top level
+const isNetlifyProduction = process.env.NODE_ENV === 'production' || process.env.NETLIFY === 'true';
+
+const getCookieOptions = (req) => {
+    // If running on Netlify (or production) AND request is HTTPS
+    const isSecure = isNetlifyProduction && req.headers['x-forwarded-proto'] === 'https';
+    
+    // Fallback: If on Netlify, assume secure for cookie attributes
+    const secureCookieAttribute = isSecure || process.env.NODE_ENV === 'production'; // This is the crucial change
+    
+    return {
+        httpOnly: true,
+        secure: secureCookieAttribute, 
+        sameSite: 'None', 
+    };
+};
+
 // --- 1. EMAIL TRANSPORT SETUP ---
 // Configuration to connect to an SMTP service (e.g., Gmail using an App Password)
 const transporter = nodemailer.createTransport({
@@ -2206,23 +2223,6 @@ function generateUserRefreshToken(payload) {
     return jwt.sign({ ...payload, role: 'user' }, process.env.JWT_SECRET, { expiresIn: '7d' }); 
 }
 
-// Define isProduction at the top level
-const isNetlifyProduction = process.env.NODE_ENV === 'production' || process.env.NETLIFY === 'true';
-
-const getCookieOptions = (req) => {
-    // If running on Netlify (or production) AND request is HTTPS
-    const isSecure = isNetlifyProduction && req.headers['x-forwarded-proto'] === 'https';
-    
-    // Fallback: If on Netlify, assume secure for cookie attributes
-    const secureCookieAttribute = isSecure || process.env.NODE_ENV === 'production'; // This is the crucial change
-    
-    return {
-        httpOnly: true,
-        // FORCE 'Secure' if we are likely in a production/HTTPS environment
-        secure: secureCookieAttribute, 
-        sameSite: 'None', 
-    };
-};
 // --- EXPRESS CONFIGURATION AND MIDDLEWARE ---
 const app = express();
 // Ensure express.json() is used BEFORE the update route, but after the full form route
