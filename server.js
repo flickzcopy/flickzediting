@@ -5329,71 +5329,67 @@ app.post('/api/users/verify', async (req, res) => {
 // 2. POST /api/users/login (Login) - OPTIMIZED FOR SPEED & PERSISTENCE
 // =========================================================
 app.post('/api/users/login', async (req, res) => {
-    const { email, password, localCartItems } = req.body; 
-    const isProduction = process.env.NODE_ENV === 'production';
-    
-    try {
-        const user = await User.findOne({ email }).select('+password').lean();
-        
-        // 1. Check for user existence and password match (same as yours)
-        if (!user || !(await bcrypt.compare(password, user.password))) {
-            return res.status(401).json({ message: 'Invalid email or password.' });
-        }
-        
-        // 2. Check verification status (same as yours)
-        if (!user.status.isVerified) {
-            return res.status(403).json({ 
-                message: 'Account not verified. Please verify your email to log in.',
-                needsVerification: true,
-                userId: user._id
-            });
-        }
+    const { email, password, localCartItems } = req.body; 
+    // const isProduction = process.env.NODE_ENV === 'production'; // Original check
+    
+    try {
+        const user = await User.findOne({ email }).select('+password').lean();
+        
+        // 1. Check for user existence and password match
+        if (!user || !(await bcrypt.compare(password, user.password))) {
+            return res.status(401).json({ message: 'Invalid email or password.' });
+        }
+        
+        // 2. Check verification status
+        if (!user.status.isVerified) {
+            return res.status(403).json({ 
+                message: 'Account not verified. Please verify your email to log in.',
+                needsVerification: true,
+                userId: user._id
+            });
+        }
 
-        // --- 3. 🚀 GENERATE DUAL TOKENS (Speed & Persistence) ---
-        const tokenPayload = { id: user._id, email: user.email }; // role is set inside the helper
-        
-        // A. Short-Lived Access Token (For API calls, sent in response body)
-        const accessToken = generateUserAccessToken(tokenPayload);
-        
-        // B. Long-Lived Refresh Token (For persistent session, sent as secure cookie)
-        const refreshToken = generateUserRefreshToken(tokenPayload);
-        
-        // 4. Set the Refresh Token in a Secure HTTP-Only Cookie
-        // Rename the cookie to avoid confusion with the old system.
-        res.cookie('userRefreshToken', refreshToken, {
-            httpOnly: true, 
-            secure: isProduction, 
-            sameSite: 'None', 
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        });
-        // --------------------------------------------------------
+        // --- 3. 🚀 GENERATE DUAL TOKENS ---
+        const tokenPayload = { id: user._id, email: user.email }; 
+        const accessToken = generateUserAccessToken(tokenPayload);
+        const refreshToken = generateUserRefreshToken(tokenPayload);
+        const isSecure = process.env.NODE_ENV === 'production' && req.headers['x-forwarded-proto'] === 'https';
+        console.log(`DEBUG LOGIN: Setting cookie with secure: ${isSecure} and sameSite: None`);
+        
 
-        // 5. Merge Cart & Log Activity (Your logic remains the same)
-        if (localCartItems && Array.isArray(localCartItems) && localCartItems.length > 0) {
-            await mergeLocalCart(user._id, localCartItems);
-            console.log(`Cart merged for user: ${user._id}`);
-        }
-        
-        try {
-            await logActivity('LOGIN', `User **${user.email}** successfully logged in.`, user._id, { ipAddress: req.ip });
-        } catch (logErr) {
-            console.warn('Activity logging failed:', logErr);
-        }
-        
-        // 6. Send the Access Token back to the client
-        delete user.password; 
+        res.cookie('userRefreshToken', refreshToken, {
+            httpOnly: true, 
+            secure: isSecure, // <-- USING THE RELIABLE SECURE CHECK
+            sameSite: 'None', // REMAINS 'None'
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
+        // --------------------------------------------------------
 
-        res.status(200).json({ 
-            message: 'Login successful',
-            // 🚨 CRITICAL CHANGE: Send Access Token, not the Refresh Token
-            accessToken: accessToken, 
-            user: user
-        });
+        // 5. Merge Cart & Log Activity
+        if (localCartItems && Array.isArray(localCartItems) && localCartItems.length > 0) {
+            await mergeLocalCart(user._id, localCartItems);
+            console.log(`Cart merged for user: ${user._id}`);
+        }
+        
+        try {
+            await logActivity('LOGIN', `User **${user.email}** successfully logged in.`, user._id, { ipAddress: req.ip });
+        } catch (logErr) {
+            console.warn('Activity logging failed:', logErr);
+        }
+        
+        // 6. Send the Access Token back to the client
+        delete user.password; 
 
-    } catch (error) {
-        console.error("User login error:", error);
-        res.status(500).json({ message: 'Server error during login.' });
-    }
+        res.status(200).json({ 
+            message: 'Login successful',
+            accessToken: accessToken, 
+            user: user
+        });
+
+    } catch (error) {
+        console.error("User login error:", error);
+        res.status(500).json({ message: 'Server error during login.' });
+    }
 });
 
 // 3. GET /api/users/account (Fetch Profile - Protected)
