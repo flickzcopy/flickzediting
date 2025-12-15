@@ -258,49 +258,174 @@
         <i class="fab fa-whatsapp fa-2x"></i>
     </a>
     <script>
-  
-// --- GLOBAL API CONFIG ---
-    const API_BASE_URL = 'https://outflickzz.netlify.app';
-    const CART_STORAGE_KEY = 'outflickzCartCount';
-    const LOCAL_CART_KEY = 'outflickzLocalCart';
+  function toggleMenu() { 
+    const menu = document.getElementById('mobile-menu');
+    menu.classList.toggle('hidden');
+}   
 
-
-    const PLACEHOLDER_URL_MODAL = 'https://s3.us-west-1.idrivee2.com/outflickz/public/placeholder-image-v1.jpg';
-    let modalImageUrls = [];
-    let currentImageIndex = 0;
-
-/**
- * Checks the user's authentication status via the API (/api/auth/status) 
- * and relies on the HTTP-only cookie for proof of session.
- */
+// Function to be called when the user clicks the Profile button
 async function redirectToProfileOrLogin() {
+    const token = localStorage.getItem('userAccessToken');
+    const headers = token 
+        ? { 'Authorization': `Bearer ${token}` } 
+        : {}; // If no token, headers is empty
+    
+    // NOTE: This approach requires your /api/auth/status endpoint to 
+    // accept the Authorization: Bearer header.
+    
     try {
-        // Fetch status - the browser automatically sends the secure HTTP-only cookie.
-        const response = await fetch('/api/auth/status', {
+        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
             method: 'GET',
-            // CRITICAL: Ensure credentials are included for the cookie
-            credentials: 'include' 
+            headers: headers, // <-- NEW: Sends the Access Token
+            credentials: 'include' // Still sends the cookie if the browser allows it
         });
 
+        // If the Access Token is valid, we get 200 immediately.
         if (response.status === 200) {
-            // Server confirms user is authenticated (Cookie is valid)
+            console.log("Profile click: Auth check successful via Token/Cookie. Redirecting to userprofile.html");
             window.location.href = 'userprofile.html'; 
+            
+        } else if (response.status === 401 || response.status === 403) {
+            // The Access Token or Cookie Session is invalid/missing.
+            console.warn(`Profile click: Auth check failed (Status ${response.status}). Redirecting to useraccount.html`);
+            
+            // Note: Since this fetch is simple, it doesn't auto-refresh the token like secureUserFetch.
+            // If the 401 is due to an expired Access Token, the subsequent fetchUserData on the profile page
+            // will catch the 401 and attempt the secure cookie refresh.
+            
+            window.location.href = 'useraccount.html';
         } else {
-            // Server returned 401/403 (Cookie is missing or expired)
+            console.error(`Profile click: Unexpected status ${response.status}. Redirecting to useraccount.html`);
             window.location.href = 'useraccount.html';
         }
 
     } catch (error) {
-        // Handle network errors
-        console.error('Authentication status check failed:', error);
+        // Network failure
+        console.error('Authentication status check failed (Network Error):', error);
         window.location.href = 'useraccount.html';
     }
-}    
-
-function toggleMenu() { 
-    const menu = document.getElementById('mobile-menu');
-    menu.classList.toggle('hidden');
 }
+
+// 2. **CRITICAL SECURITY GATE**: Enforces redirect immediately on page load
+//    if the user is not authenticated.
+function enforceAuthGate() {
+    fetch(`${API_BASE_URL}/api/auth/status`, { 
+        method: 'GET',
+        credentials: 'include' // <-- CRITICAL FIX: Ensures the secure cookie is sent.
+    })
+    .then(response => {
+        if (response.status !== 200) {
+            // If not authenticated, redirect to login page (use replace to disable back button)
+            console.warn(`Auth gate failed (Status ${response.status}). Redirecting.`);
+            window.location.replace('useraccount.html');
+        } else {
+             console.log("Auth gate passed (Status 200). User session confirmed.");
+        }
+    })
+    .catch(error => {
+        // Treat network failure as unauthenticated/unverified
+        console.error('Initial Auth Check Failed (Network Error):', error);
+        window.location.replace('useraccount.html');
+    });
+}
+
+/**
+ * CONCEPTUAL: This function should be called ONLY after a successful login API response 
+ * from your server (in useraccount.html). It sets the login flag and redirects 
+ * to the homepage (or profile).
+ */
+function onSuccessfulLogin() {
+    // Save the login state to the browser's storage
+    localStorage.setItem('isLoggedIn', 'true');
+    console.log("Login successful! isLoggedIn set to true.");
+
+    // Redirect the user to the homepage after login
+    window.location.href = 'homepage.html'; 
+}
+
+
+
+// REMOVED: const USER_AUTH_TOKEN = localStorage.getItem('outflickzToken');
+const API_BASE_URL = 'https://outflickzz.netlify.app';
+const CART_STORAGE_KEY = 'outflickzCartCount';
+const LOCAL_CART_KEY = 'outflickzLocalCart';
+const AUTH_TOKEN_KEY = 'userAccessToken';
+const REFRESH_ENDPOINT = `${API_BASE_URL}/api/auth/refresh`;
+
+const PLACEHOLDER_URL_MODAL = 'https://s3.us-west-1.idrivee2.com/outflickz/public/placeholder-image-v1.jpg';
+
+let modalImageUrls = [];
+let currentImageIndex = 0;
+
+/**
+ * Handles user logout by clearing tokens and redirecting.
+ * Used by secureUserFetch on non-recoverable token failure.
+ */
+function handleLogout() {
+    console.warn("Token refresh failed or expired. User must re-authenticate.");
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    // You should implement a proper redirection here, e.g., to the login page
+    // window.location.href = '/login.html'; 
+    alert("Session expired. Please log in again."); 
+}
+
+// --- SECURE USER FETCH FUNCTION (CRITICAL AUTH MECHANISM) ---
+
+async function secureUserFetch(url, options = {}) {
+    let token = localStorage.getItem(AUTH_TOKEN_KEY);
+    
+    // Add Authorization header if a token exists
+    if (token) {
+        options.headers = {
+            ...options.headers,
+            'Authorization': `Bearer ${token}`
+        };
+    }
+
+    let response = await fetch(url, options);
+
+    // If response is 401, attempt token refresh
+    if (response.status === 401) {
+        console.log("Token expired (401). Attempting refresh...");
+        
+        try {
+            const refreshResponse = await fetch(REFRESH_ENDPOINT, { method: 'POST' });
+
+            if (refreshResponse.ok) {
+                const data = await refreshResponse.json();
+                const newToken = data.accessToken;
+                
+                if (!newToken) {
+                    throw new Error("Refresh successful, but no new token received.");
+                }
+
+                // Store new token and retry the original request
+                localStorage.setItem(AUTH_TOKEN_KEY, newToken);
+                token = newToken; // Update token for retry
+
+                console.log("Token refreshed successfully. Retrying original request...");
+                
+                // Update Authorization header with the new token
+                options.headers['Authorization'] = `Bearer ${token}`;
+                
+                // Retry the original request
+                response = await fetch(url, options);
+
+            } else {
+                console.error("Token refresh failed.");
+                handleLogout(); // Log out user if refresh fails
+                // Return original 401 response for the caller to handle (e.g., disable cart)
+                return response; 
+            }
+        } catch (error) {
+            console.error("Error during token refresh process:", error);
+            handleLogout();
+            return response; // Return original 401 response
+        }
+    }
+    return response;
+}
+
 
 /**
  * Handles the logic for a "Buy Now" action.
@@ -475,12 +600,12 @@ function addToCart(collectionId, quantity) {
 
     console.log(`Added ${quantity} of item ${collectionId}. New cart total: ${newCount}`);
 }
-
 /**
  * Handles adding an item to the cart. 
- * Tries API (permanent cart via secure cookie) first.
+ * Tries API (permanent cart via Access Token/secure cookie) first.
  * If API fails with 401/403 or network error, falls back to local storage.
- * * IMPORTANT: This function no longer reads the token from localStorage or uses the Authorization header.
+ * NOTE: This function now relies on the globally available secureUserFetch() 
+ * to handle Authorization headers and automatic token refresh.
  */
 async function simulateAddToCart(productDetails) {
     // --- 1. Gather all item details from DOM and input ---
@@ -569,114 +694,111 @@ async function simulateAddToCart(productDetails) {
     };
     
     // --- 2. Local Cart Fallback Helper Function (Updated for variationIndex) ---
-const handleLocalCartFallback = (details) => {
-    // NOTE: Assume LOCAL_CART_KEY and CART_STORAGE_KEY are defined globally or elsewhere
-    let localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-    
-    // 🚀 CRITICAL FIX 5: Include variationIndex in the findIndex check for local cart
-    const existingItemIndex = localCart.findIndex(item => 
-        item.productId === details.productId && 
-        item.size === details.size &&
-        item.color === details.color &&
-        item.variationIndex === details.variationIndex // Check the new required field
-    );
+    const handleLocalCartFallback = (details) => {
+        // NOTE: Assume LOCAL_CART_KEY is defined globally
+        let localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
+        
+        // 🚀 CRITICAL FIX 5: Include variationIndex in the findIndex check for local cart
+        const existingItemIndex = localCart.findIndex(item => 
+            item.productId === details.productId && 
+            item.size === details.size &&
+            item.color === details.color &&
+            item.variationIndex === details.variationIndex // Check the new required field
+        );
 
-    if (existingItemIndex > -1) {
-        localCart[existingItemIndex].quantity += details.quantity;
-    } else {
-        localCart.push(details);
-    }
+        if (existingItemIndex > -1) {
+            localCart[existingItemIndex].quantity += details.quantity;
+        } else {
+            localCart.push(details);
+        }
 
-    localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
-    
-    // ⭐ FIX 2: DELETE THE INCORRECT LINE. We now rely on updateCartBadge() 
-    // to call the corrected getCartCount() which sums the total quantity.
-    // localStorage.setItem(CART_STORAGE_KEY, localCart.length.toString()); 
-    
-    updateCartBadge();
-    
-    // Display info alert for local cart (Blue background)
-    // **REPLACED MANUAL ALERT WITH CLEAN HELPER FUNCTION**
-    displayCartAlert(`"${details.name}" added to your bag! (Sign in to save permanently)`, 'info');
-};
+        localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
+        
+        // We now rely on updateCartBadge() 
+        // to call the corrected getCartCount() which sums the total quantity.
+        
+        updateCartBadge();
+        
+        // Display info alert for local cart (Blue background)
+        displayCartAlert(`"${details.name}" added to your bag! (Sign in to save permanently)`, 'info');
+    };
 
-console.log('Sending API Payload:', itemDataForAPI);
+    console.log('[CART] Attempting to add item to API cart:', requiredDetails.name);
 
-// --- 3. Attempt Authenticated API Call ---
-try {
-    const response = await fetch('/api/users/cart', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(itemDataForAPI),
-        credentials: 'include' 
-    });
+    // --- 3. Attempt Authenticated API Call using Secure Wrapper ---
+    try {
+        // Use secureUserFetch instead of raw fetch. 
+        // It handles the Authorization header and automatic refresh flow.
+        const response = await secureUserFetch('/api/users/cart', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(itemDataForAPI),
+            credentials: 'include' 
+        });
 
-    // 💡 FIX: Safely parse JSON or default to an error object
-    let data;
-    try {
-        data = await response.json();
-    } catch (e) {
-        console.warn(`Could not parse JSON response for status ${response.status}. Assuming non-JSON body.`);
-        data = { 
-            message: `Server Error (${response.status}) received. Item added to local cart.`,
-            status: response.status 
-        };
-    }
+        // Safely parse JSON or default to an error object
+        let data;
+        try {
+            data = await response.json();
+        } catch (e) {
+            console.warn(`Could not parse JSON response for status ${response.status}. Assuming non-JSON body.`);
+            data = { 
+                message: `Server Error (${response.status}) received. Item added to local cart.`,
+                status: response.status 
+            };
+        }
 
-    if (response.ok) {
-        // 3a. Success: Item added to permanent cart
-        
-        // 🔑 CRITICAL FIX: Ensure the server response has items
-        if (data.items && Array.isArray(data.items)) {
-            
-            // 1. Store the full permanent cart array in LOCAL_CART_KEY
-            // This is CRITICAL for sync, as getCartCount() will read this array.
-             localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(data.items));
+        if (response.ok) {
+            // 3a. Success: Item added to permanent cart
+            
+            // Ensure the server response has items
+            if (data.items && Array.isArray(data.items)) {
+                
+                // 1. Store the full permanent cart array in LOCAL_CART_KEY
+                localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(data.items));
+                
+                // 2. Update the visual badge immediately (reads from the synced LOCAL_CART_KEY)
+                updateCartBadge();
+                
+            } else {
+                // If API is OK but returns unexpected data, still alert the user
+                console.error("API success but data.items missing. Relying on current local state.");
+                updateCartBadge(); // Ensure the badge is updated with existing count
+            }
+            
+            // Display success alert (Green background) - Using helper function
+            displayCartAlert('Item added to your permanent shopping bag!', 'success');
 
-            // ❌ DELETION: The previous logic stored a single number in CART_STORAGE_KEY,
-            // which contradicts the logic relying on LOCAL_CART_KEY array.
-            
-            // 3. Update the visual badge immediately (reads from the synced LOCAL_CART_KEY)
-            updateCartBadge();
-            
-        } else {
-            // If API is OK but returns unexpected data, still alert the user
-            console.error("API success but data.items missing. Relying on current local state.");
-            updateCartBadge(); // Ensure the badge is updated with existing count
-        }
-        
-        // Display success alert (Green background) - Using helper function
-        displayCartAlert('Item added to your permanent shopping bag!', 'success');
+        } else if (response.status === 401 || response.status === 403) {
+            // 3b. Unauthorized (This 401/403 should mean the Refresh Token also failed after the AT failed) -> FALLBACK TO LOCAL CART
+            console.log("401/403 received (Unauthenticated after refresh attempt). Falling back to local cart.");
+            handleLocalCartFallback(requiredDetails);
 
-    } else if (response.status === 401 || response.status === 403) {
-        // 3b. Unauthorized (Cookie failed/expired) -> FALLBACK TO LOCAL CART
-        console.log("401/403 received (Unauthenticated). Falling back to local cart.");
-        handleLocalCartFallback(requiredDetails);
+        } else {
+            // 3c. Other API Errors (e.g., 400 Bad Request, 409 Conflict/Stock, 503 Service Unavailable)
+            
+            // If it's a 5xx error, we should probably treat it like a temporary outage and use the local cart.
+            if (response.status >= 500) {
+                console.log(`Server Error ${response.status} received. Falling back to local cart.`);
+                handleLocalCartFallback(requiredDetails);
+            }
 
-    } else {
-        // 3c. Other API Errors (e.g., 400 Bad Request, 409 Conflict/Stock, 503 Service Unavailable)
-        
-        // If it's a 5xx error, we should probably treat it like a temporary outage and use the local cart.
-        if (response.status >= 500) {
-                console.log(`Server Error ${response.status} received. Falling back to local cart.`);
-                handleLocalCartFallback(requiredDetails);
-        }
+            // Use the flashing alert for generic error (Red background) - Using helper function
+            displayCartAlert(data.message || `Failed to add item (Status ${response.status}).`, 'error');
+        }
+        
+    } catch (error) {
+        // --- 4. Network or Fetch Error -> FALLBACK TO LOCAL CART ---
+        console.error('Error in addToCart API (Network or Fetch Error):', error);
+        
+        // Use the fallback function
+        handleLocalCartFallback(requiredDetails);
 
-        // Use the flashing alert for generic error (Red background) - Using helper function
-        displayCartAlert(data.message || `Failed to add item (Status ${response.status}).`, 'error');
-    }
-    
-} catch (error) {
-    // --- 4. Network or Fetch Error -> FALLBACK TO LOCAL CART ---
-    console.error('Error in addToCart API (Network or Fetch Error):', error);
-    
-    // Use the fallback function
-    handleLocalCartFallback(requiredDetails);
-
-    // Display error alert (Red background) - Using helper function
-    displayCartAlert('Could not reach server. Item added to local cart.', 'error');
+        // Display error alert (Red background) - Using helper function
+        displayCartAlert('Could not reach server. Item added to local cart.', 'error');
+    }
 }
 
 /**
@@ -719,8 +841,6 @@ function displayCartAlert(message, type) {
         alertMessage.classList.add('opacity-0', '-translate-y-full');
     }, 3000);
 }
-}
-
 
 // Initialize the cart badge on page load
 // NOTE: Assuming updateCartBadge() is defined elsewhere
