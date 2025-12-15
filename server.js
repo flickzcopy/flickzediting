@@ -2207,16 +2207,19 @@ function generateUserRefreshToken(payload) {
 }
 
 // Define isProduction at the top level
-const isProduction = process.env.NODE_ENV === 'production'; 
+const isNetlifyProduction = process.env.NODE_ENV === 'production' || process.env.NETLIFY === 'true';
 
-// Helper to determine security settings...
-const getCookieOptions = (req) => { // NOTE: Removed 'isProduction' argument
-    // We can now use the top-level isProduction variable
-    const isSecure = isProduction && req.headers['x-forwarded-proto'] === 'https';
-
+const getCookieOptions = (req) => {
+    // If running on Netlify (or production) AND request is HTTPS
+    const isSecure = isNetlifyProduction && req.headers['x-forwarded-proto'] === 'https';
+    
+    // Fallback: If on Netlify, assume secure for cookie attributes
+    const secureCookieAttribute = isSecure || process.env.NODE_ENV === 'production'; // This is the crucial change
+    
     return {
         httpOnly: true,
-        secure: isSecure,
+        // FORCE 'Secure' if we are likely in a production/HTTPS environment
+        secure: secureCookieAttribute, 
         sameSite: 'None', 
     };
 };
@@ -2375,11 +2378,20 @@ const verifyUserToken = (req, res, next) => {
     }
 };
 
-
 const verifySessionCookie = (req, res, next) => {
+    // ------------------- 💡 DEBUG LOGGING ADDED -------------------
+    // Log incoming cookie headers to see if the browser sent anything at all.
+    // The 'cookie' header is what the browser sends.
+    console.log('DEBUG COOKIE CHECK: Incoming Cookie Header:', req.headers.cookie);
+    // -----------------------------------------------------------------
+
     // 1. Get Refresh Token from the secure cookie
     const refreshToken = req.cookies.userRefreshToken; 
     
+    // ------------------- 💡 DEBUG LOGGING ADDED -------------------
+    console.log('DEBUG REFRESH TOKEN:', refreshToken ? 'Token FOUND' : 'Token MISSING from req.cookies');
+    // -----------------------------------------------------------------
+
     if (!refreshToken) {
         // If NO cookie is found, the user is NOT logged in.
         return res.status(401).json({ message: 'No valid session cookie found.' });
@@ -2387,6 +2399,7 @@ const verifySessionCookie = (req, res, next) => {
 
     try {
         // 2. Verify the Refresh Token
+        // NOTE: Ensure process.env.JWT_SECRET is identical to the one used for signing.
         const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
         
         // 3. Ensure role is correct (optional but good practice)
@@ -2395,14 +2408,18 @@ const verifySessionCookie = (req, res, next) => {
         }
 
         // 4. Success: User is authenticated via session cookie.
-        // We attach the ID just in case, but usually we just want the 200 status.
         req.userId = decoded.id; 
+        
+        console.log('DEBUG REFRESH TOKEN: Verification SUCCESS. Proceeding...');
         next(); 
 
     } catch (err) {
         // 5. If refresh token is expired/invalid/bad signature
-        // Server will respond 401, forcing the client to re-login.
         console.error("Session Cookie verification failed:", err.message);
+        
+        // In a real environment, you should clear the cookie here using the
+        // consistent 'SameSite=None; Secure' settings before sending 401.
+        
         res.status(401).json({ message: 'Session cookie invalid or expired.' });
     }
 };
@@ -5338,6 +5355,7 @@ app.post('/api/users/verify', async (req, res) => {
         res.status(500).json({ message: 'Server error during verification.' });
     }
 });
+
 // =========================================================
 // 2. POST /api/users/login (Login) - OPTIMIZED FOR SPEED & PERSISTENCE
 // =========================================================
