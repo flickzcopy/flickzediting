@@ -19,6 +19,8 @@
     
 <script>
     const API_BASE_URL = 'https://outflickzz.netlify.app';
+    const AUTH_TOKEN_KEY = 'userAccessToken';
+    const REFRESH_ENDPOINT = `${API_BASE_URL}/api/auth/refresh`;
 
     function toggleMenu() {
         const mobileMenu = document.getElementById('mobile-menu');
@@ -159,7 +161,7 @@
         // We will mock the breakdown for rendering consistency. If your backend calculates and includes these, 
         // replace the 0.00's with the actual fields (e.g., order.subtotal).
         const subtotal = order.totalAmount; // Assuming totalAmount is the only reliable field
-        const shippingFee = 3000; // Placeholder for real data
+        const shippingFee = 0.00; // Placeholder for real data
         const tax = 0.00;         // Placeholder for real data
         const total = order.totalAmount;
 
