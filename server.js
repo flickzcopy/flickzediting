@@ -5331,7 +5331,7 @@ app.post('/api/users/login', async (req, res) => {
         res.cookie('userRefreshToken', refreshToken, {
             httpOnly: true, 
             secure: isProduction, 
-            sameSite: isProduction ? 'lax' : 'lax', 
+            sameSite: 'None', 
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
         // --------------------------------------------------------
