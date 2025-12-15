@@ -2206,14 +2206,18 @@ function generateUserRefreshToken(payload) {
     return jwt.sign({ ...payload, role: 'user' }, process.env.JWT_SECRET, { expiresIn: '7d' }); 
 }
 
-// Helper to determine security settings based on environment and request headers
-const getCookieOptions = (req, isProduction) => {
+// Define isProduction at the top level
+const isProduction = process.env.NODE_ENV === 'production'; 
+
+// Helper to determine security settings...
+const getCookieOptions = (req) => { // NOTE: Removed 'isProduction' argument
+    // We can now use the top-level isProduction variable
     const isSecure = isProduction && req.headers['x-forwarded-proto'] === 'https';
-    
+
     return {
         httpOnly: true,
         secure: isSecure,
-        sameSite: 'None', // Crucial for Netlify/cross-origin
+        sameSite: 'None', 
     };
 };
 // --- EXPRESS CONFIGURATION AND MIDDLEWARE ---
@@ -5334,72 +5338,61 @@ app.post('/api/users/verify', async (req, res) => {
         res.status(500).json({ message: 'Server error during verification.' });
     }
 });
-
 // =========================================================
 // 2. POST /api/users/login (Login) - OPTIMIZED FOR SPEED & PERSISTENCE
 // =========================================================
 app.post('/api/users/login', async (req, res) => {
-    const { email, password, localCartItems } = req.body; 
-    // const isProduction = process.env.NODE_ENV === 'production'; // Original check
-    
-    try {
-        const user = await User.findOne({ email }).select('+password').lean();
-        
-        // 1. Check for user existence and password match
-        if (!user || !(await bcrypt.compare(password, user.password))) {
-            return res.status(401).json({ message: 'Invalid email or password.' });
-        }
-        
-        // 2. Check verification status
-        if (!user.status.isVerified) {
-            return res.status(403).json({ 
-                message: 'Account not verified. Please verify your email to log in.',
-                needsVerification: true,
-                userId: user._id
-            });
-        }
+    const { email, password, localCartItems } = req.body; 
+    try {
+        const user = await User.findOne({ email }).select('+password').lean();
+                if (!user || !(await bcrypt.compare(password, user.password))) {
+            return res.status(401).json({ message: 'Invalid email or password.' });
+        }
+        // 2. Check verification status
+        if (!user.status.isVerified) {
+            return res.status(403).json({ 
+                message: 'Account not verified. Please verify your email to log in.',
+                needsVerification: true,
+                userId: user._id
+            });
+        }
+        // --- 3. 🚀 GENERATE DUAL TOKENS ---
+        const tokenPayload = { id: user._id, email: user.email }; 
+        const accessToken = generateUserAccessToken(tokenPayload);
+        const refreshToken = generateUserRefreshToken(tokenPayload);
+        // --- FIX: USE THE CONSISTENT HELPER FUNCTION ---
+        // Assuming getCookieOptions(req) relies on the global isProduction variable
+        const options = getCookieOptions(req); 
+        console.log(`DEBUG LOGIN: Setting cookie with secure: ${options.secure} and sameSite: ${options.sameSite}`);
+        // 4. Set the secure HTTP-only Refresh Token cookie
+        res.cookie('userRefreshToken', refreshToken, {
+            ...options, // Uses httpOnly, secure, and sameSite: 'None'
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
+        // --------------------------------------------------------
+        // 5. Merge Cart & Log Activity
+        if (localCartItems && Array.isArray(localCartItems) && localCartItems.length > 0) {
+            await mergeLocalCart(user._id, localCartItems);
+            console.log(`Cart merged for user: ${user._id}`);
+        }
+        try {
+            await logActivity('LOGIN', `User **${user.email}** successfully logged in.`, user._id, { ipAddress: req.ip });
+        } catch (logErr) {
+            console.warn('Activity logging failed:', logErr);
+        }
+        // 6. Send the Access Token back to the client
+        delete user.password; 
+        res.status(200).json({ 
+            message: 'Login successful',
+            accessToken: accessToken, 
+            user: user
+        });
 
-        // --- 3. 🚀 GENERATE DUAL TOKENS ---
-        const tokenPayload = { id: user._id, email: user.email }; 
-        const accessToken = generateUserAccessToken(tokenPayload);
-        const refreshToken = generateUserRefreshToken(tokenPayload);
-        const isSecure = process.env.NODE_ENV === 'production' && req.headers['x-forwarded-proto'] === 'https';
-        console.log(`DEBUG LOGIN: Setting cookie with secure: ${isSecure} and sameSite: None`);
-        
-        const options = getCookieOptions(req, isProduction);
-        res.cookie('userRefreshToken', refreshToken, {
-            httpOnly: true, 
-            secure: isSecure, // <-- USING THE RELIABLE SECURE CHECK
-            sameSite: 'None', // REMAINS 'None'
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        });
-        // --------------------------------------------------------
-
-        // 5. Merge Cart & Log Activity
-        if (localCartItems && Array.isArray(localCartItems) && localCartItems.length > 0) {
-            await mergeLocalCart(user._id, localCartItems);
-            console.log(`Cart merged for user: ${user._id}`);
-        }
-        
-        try {
-            await logActivity('LOGIN', `User **${user.email}** successfully logged in.`, user._id, { ipAddress: req.ip });
-        } catch (logErr) {
-            console.warn('Activity logging failed:', logErr);
-        }
-        
-        // 6. Send the Access Token back to the client
-        delete user.password; 
-
-        res.status(200).json({ 
-            message: 'Login successful',
-            accessToken: accessToken, 
-            user: user
-        });
-
-    } catch (error) {
-        console.error("User login error:", error);
-        res.status(500).json({ message: 'Server error during login.' });
-    }
+    } catch (error) {
+        // This is the error caught by the ReferenceError
+        console.error("User login error:", error);
+        res.status(500).json({ message: 'Server error during login.' });
+    }
 });
 
 // 3. GET /api/users/account (Fetch Profile - Protected)
