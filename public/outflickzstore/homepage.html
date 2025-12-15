@@ -171,25 +171,27 @@ function toggleMenu() {
 
 /// --- USER AUTHENTICATION & REDIRECTION FUNCTIONS (SECURE FIX) ---
 
+// Function to be called when the user clicks the Profile button
 async function redirectToProfileOrLogin() {
     try {
-        // Fetch status - the browser automatically sends the secure HTTP-only cookie.
-        const response = await fetch('/api/auth/status', {
+        // Use the absolute path via API_BASE_URL for consistency and reliability
+        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
             method: 'GET',
-            credentials: 'include' // <--- CRITICAL FIX: Ensures cookies are sent
+            credentials: 'include' // Sends the secure HTTP-only cookie
         });
 
         if (response.status === 200) {
-            // Server confirms user is authenticated (Cookie is valid)
+            // Logged in: Go to profile
+            console.log("Profile click: Auth check successful. Redirecting to userprofile.html");
             window.location.href = 'userprofile.html'; 
         } else {
-            // Server returned 401/403 (Cookie is missing or expired)
-            console.warn(`Auth check returned status ${response.status}. Redirecting to login.`);
+            // Not logged in: Go to login page
+            console.warn(`Profile click: Auth check failed (Status ${response.status}). Redirecting to useraccount.html`);
             window.location.href = 'useraccount.html';
         }
 
     } catch (error) {
-        // Handle network errors
+        // Network failure
         console.error('Authentication status check failed (Network Error):', error);
         window.location.href = 'useraccount.html';
     }
@@ -278,13 +280,7 @@ function handleLogout() {
 }
 
 // --- SECURE USER FETCH FUNCTION (CRITICAL AUTH MECHANISM) ---
-/**
- * A secure fetch wrapper that intercepts 401 Unauthorized errors
- * and attempts to automatically refresh the JWT using the refresh token.
- * * @param {string} url - The API endpoint URL.
- * @param {object} options - Fetch options (method, headers, body, etc.).
- * @returns {Promise<Response>} The API response object.
- */
+
 async function secureUserFetch(url, options = {}) {
     let token = localStorage.getItem(AUTH_TOKEN_KEY);
     

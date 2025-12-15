@@ -77,6 +77,61 @@
         window.location.replace('useraccount.html');
     }
 
+    async function secureUserFetch(url, options = {}) {
+    let token = localStorage.getItem(AUTH_TOKEN_KEY);
+    
+    // Add Authorization header if a token exists
+    if (token) {
+        options.headers = {
+            ...options.headers,
+            'Authorization': `Bearer ${token}`
+        };
+    }
+
+    let response = await fetch(url, options);
+
+    // If response is 401, attempt token refresh
+    if (response.status === 401) {
+        console.log("Token expired (401). Attempting refresh...");
+        
+        try {
+            const refreshResponse = await fetch(REFRESH_ENDPOINT, { method: 'POST' });
+
+            if (refreshResponse.ok) {
+                const data = await refreshResponse.json();
+                const newToken = data.accessToken;
+                
+                if (!newToken) {
+                    throw new Error("Refresh successful, but no new token received.");
+                }
+
+                // Store new token and retry the original request
+                localStorage.setItem(AUTH_TOKEN_KEY, newToken);
+                token = newToken; // Update token for retry
+
+                console.log("Token refreshed successfully. Retrying original request...");
+                
+                // Update Authorization header with the new token
+                options.headers['Authorization'] = `Bearer ${token}`;
+                
+                // Retry the original request
+                response = await fetch(url, options);
+
+            } else {
+                console.error("Token refresh failed.");
+                handleLogout(); // Log out user if refresh fails
+                // Return original 401 response for the caller to handle (e.g., disable cart)
+                return response; 
+            }
+        } catch (error) {
+            console.error("Error during token refresh process:", error);
+            handleLogout();
+            return response; // Return original 401 response
+        }
+    }
+    return response;
+}
+
     // --- Modal Functions ---
     function closeModal(modalId) {
         document.getElementById(modalId).classList.add('hidden');
@@ -465,58 +520,77 @@
         }
     }
         
-    /**
-     * Attempts to fetch user data and redirects to login on failure (401/403).
-     */
-    async function fetchUserData() {
-        const mainContent = document.getElementById('main-profile-content');
-        const loadingIndicator = document.getElementById('loading-indicator');
+   /**
+ * Attempts to fetch user data and redirects to login on failure (401/403).
+ * Uses secureUserFetch to automatically handle Access Token headers and refresh logic.
+ */
+async function fetchUserData() {
+    const mainContent = document.getElementById('main-profile-content');
+    const loadingIndicator = document.getElementById('loading-indicator');
+    
+    // Initial display state
+    if (loadingIndicator) loadingIndicator.classList.remove('hidden');
+    if (mainContent) mainContent.classList.add('hidden');
+
+    try {
+        // ⭐ CRITICAL FIX: Use secureUserFetch 
+        // secureUserFetch will:
+        // 1. Read the Access Token from localStorage (AUTH_TOKEN_KEY).
+        // 2. Add the 'Authorization: Bearer <token>' header.
+        // 3. Automatically retry the request if a 401 response triggers a token refresh.
+        const response = await secureUserFetch(`${API_BASE_URL}/api/users/account`, {
+            method: 'GET',
+            // NOTE: The 'headers' and 'credentials: include' are handled internally by secureUserFetch
+            // but we can add headers here if we had custom ones (like 'Content-Type').
+            // The method is sufficient here.
+        });
         
-        try {
-            const response = await fetch(`${API_BASE_URL}/api/users/account`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                credentials: 'include' 
-            });
+        console.log(`Fetch Status: ${response.status}`); 
+
+        if (!response.ok) {
+            // This catches non-200 statuses (403, 500, or a final 401 after refresh failed)
+            console.error(`Authentication failed (Status: ${response.status}). Redirecting.`);
             
-            console.log(`Fetch Status: ${response.status}`); 
-
-            if (!response.ok) {
-                console.error(`Authentication failed (Status: ${response.status}). Redirecting.`);
-                
-                if (loadingIndicator) loadingIndicator.classList.add('hidden');
-                if (mainContent) mainContent.classList.add('hidden');
-
-                setTimeout(() => {
-                    window.location.replace('useraccount.html');
-                }, 100); 
-                return; 
-            } 
-            
-            const data = await response.json();
-            console.log('User Data fetched successfully:', data);
-            currentProfileData = data;
-            updateDOM(data); 
-
-            await fetchOrderHistory(); 
-
+            // The secureUserFetch wrapper should ideally call handleLogout, 
+            // but we ensure the redirect happens here as a final safeguard.
             if (loadingIndicator) loadingIndicator.classList.add('hidden');
-            if (mainContent) mainContent.classList.remove('hidden');
-
-        } catch (error) {
-            console.error("Fetch user data error (Network Failure):", error);
-            if (loadingIndicator) loadingIndicator.classList.add('hidden');
-            if (mainContent) mainContent.classList.add('hidden');
             
             setTimeout(() => {
-                window.location.replace('useraccount.html');
+                window.location.replace('useraccount.html'); // Force re-login
             }, 100); 
-        }
-    }
+            return; 
+        } 
+        
+        // ------------------ Success Path ------------------
+        const data = await response.json();
+        console.log('User Data fetched successfully:', data);
+        currentProfileData = data;
+        updateDOM(data); 
 
-    document.addEventListener('DOMContentLoaded', fetchUserData);
+        // fetchOrderHistory should also use secureUserFetch!
+        await fetchOrderHistory(); 
+
+        if (loadingIndicator) loadingIndicator.classList.add('hidden');
+        if (mainContent) mainContent.classList.remove('hidden');
+
+    } catch (error) {
+        // This catches network errors or the error thrown by secureUserFetch 
+        // when the Refresh Token itself is invalid (forcing a logout/re-login).
+        console.error("Fetch user data error (Auth Failure or Network):", error);
+        
+        if (loadingIndicator) loadingIndicator.classList.add('hidden');
+        if (mainContent) mainContent.classList.add('hidden');
+        
+        // Clear any remaining tokens/state on the client before redirecting
+        localStorage.removeItem(AUTH_TOKEN_KEY); 
+
+        setTimeout(() => {
+            window.location.replace('useraccount.html');
+        }, 100); 
+    }
+}
+
+document.addEventListener('DOMContentLoaded', fetchUserData);
     </script>
 
     <header class="bg-white sticky top-0 z-50 shadow-md">
