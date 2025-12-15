@@ -72,12 +72,12 @@ tailwind.config = {
     }
 }
 
-// Global Constants
+const API_BASE_URL = 'https://outflickzz.netlify.app';
 const CART_STORAGE_KEY = 'outflickzCartCount';
 const LOCAL_CART_KEY = 'outflickzLocalCart';
 const AUTH_TOKEN_KEY = 'userAccessToken';
 const REFRESH_ENDPOINT = `${API_BASE_URL}/api/auth/refresh`;
-const API_BASE_URL = 'https://outflickzz.netlify.app';
+
 
 
 
@@ -948,7 +948,8 @@ document.addEventListener('DOMContentLoaded', () => {
             </a>   
             <nav class="hidden md:flex flex-grow justify-center space-x-6 lg:space-x-10 text-sm" aria-label="Main Navigation">
                 <a href="homepage.html" class="font-medium text-color-black hover:text-gray-600 transition">Homepage</a>
-                <a href="wearscollection.html" class="font-bold text-ash-red transition flex items-center border-b-2 border-ash-red">Wears Collections</a>
+                <a href="cart.html" class="font-bold text-ash-red transition flex items-center border-b-2 border-ash-red">Cart</a>
+                <a href="wearscollection.html" class="font-medium text-color-black hover:text-gray-600 transition">Wears Collection</a>
                 <a href="newarrivals.html" class="font-medium text-color-black hover:text-gray-600 transition">New Arrivals</a>
                 <a href="capcollection.html" class="font-medium text-color-black hover:text-gray-600 transition flex items-center">Cap Collections</a>
                 <a href="preorder.html" class="font-medium text-color-black hover:text-gray-600 transition">Pre Order</a>
