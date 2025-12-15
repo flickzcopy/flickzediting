@@ -168,23 +168,39 @@ tailwind.config = {
 function toggleMenu() {
     document.getElementById('mobile-menu').classList.toggle('hidden');
 }
-
 // Function to be called when the user clicks the Profile button
 async function redirectToProfileOrLogin() {
+    const token = localStorage.getItem('userAccessToken');
+    const headers = token 
+        ? { 'Authorization': `Bearer ${token}` } 
+        : {}; // If no token, headers is empty
+    
+    // NOTE: This approach requires your /api/auth/status endpoint to 
+    // accept the Authorization: Bearer header.
+    
     try {
-        // Use the absolute path via API_BASE_URL for consistency and reliability
         const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
             method: 'GET',
-            credentials: 'include' // Sends the secure HTTP-only cookie
+            headers: headers, // <-- NEW: Sends the Access Token
+            credentials: 'include' // Still sends the cookie if the browser allows it
         });
 
+        // If the Access Token is valid, we get 200 immediately.
         if (response.status === 200) {
-            // Logged in: Go to profile
-            console.log("Profile click: Auth check successful. Redirecting to userprofile.html");
+            console.log("Profile click: Auth check successful via Token/Cookie. Redirecting to userprofile.html");
             window.location.href = 'userprofile.html'; 
-        } else {
-            // Not logged in: Go to login page
+            
+        } else if (response.status === 401 || response.status === 403) {
+            // The Access Token or Cookie Session is invalid/missing.
             console.warn(`Profile click: Auth check failed (Status ${response.status}). Redirecting to useraccount.html`);
+            
+            // Note: Since this fetch is simple, it doesn't auto-refresh the token like secureUserFetch.
+            // If the 401 is due to an expired Access Token, the subsequent fetchUserData on the profile page
+            // will catch the 401 and attempt the secure cookie refresh.
+            
+            window.location.href = 'useraccount.html';
+        } else {
+            console.error(`Profile click: Unexpected status ${response.status}. Redirecting to useraccount.html`);
             window.location.href = 'useraccount.html';
         }
 

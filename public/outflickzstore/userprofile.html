@@ -45,27 +45,41 @@
         orders: []
     };
 
-    // --- Core Functions (Redirect, Logout) ---
 
-    // Checks authentication status via the secure cookie and redirects accordingly.
-    // NOTE: This function is typically for navigation (e.g., on index.html)
-    async function redirectToProfileOrLogin() {
-        try {
-            const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
-                method: 'GET',
-                credentials: 'include' 
-            });
+/**
+ * Checks authentication status via Access Token (Header) and Session Cookie.
+ * This is the robust way to handle the profile button click immediately after login.
+ */
+async function redirectToProfileOrLogin() {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    // Prepare headers, including the Authorization Bearer header if a token exists.
+    const headers = token 
+        ? { 'Authorization': `Bearer ${token}` } 
+        : {}; 
 
-            if (response.status === 200) {
-                window.location.href = 'userprofile.html'; 
-            } else {
-                window.location.href = 'useraccount.html';
-            }
-        } catch (error) {
-            console.error('Authentication status check failed (Network Error):', error);
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
+            method: 'GET',
+            headers: headers, // <-- NEW: Sends the Access Token to the server
+            credentials: 'include' // Still sends the cookie if the browser allows it (for fallbacks)
+        });
+
+        if (response.status === 200) {
+            // Success via Access Token or successfully-read secure cookie
+            window.location.href = 'userprofile.html'; 
+        } else {
+            // Failed both checks (Token expired AND cookie failed/missing).
+            // Clear local state and redirect to login page.
+            localStorage.removeItem(AUTH_TOKEN_KEY);
             window.location.href = 'useraccount.html';
         }
+    } catch (error) {
+        console.error('Authentication status check failed (Network Error):', error);
+        // On network error, assume logged out or unreachable
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        window.location.href = 'useraccount.html';
     }
+}
 
     // ⭐ CORRECTED LOGOUT: Uses the standard AUTH_TOKEN_KEY variable
     async function logoutUser() {

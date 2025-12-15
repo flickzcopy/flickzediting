@@ -2332,45 +2332,26 @@ const singleReceiptUpload = multer({
 }).single('receipt'); 
 
 const verifyUserToken = (req, res, next) => {
-    // 1. Check for token in the 'Authorization: Bearer <token>' header
-    // The short-lived Access Token should be strictly sent here by the client for speed.
     const authHeader = req.headers.authorization;
-    
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        // If the Access Token is missing from the header, deny access.
         return res.status(401).json({ message: 'Access denied. No Access Token provided in header.' });
     }
-
-    // 2. Extract the Access Token
     const accessToken = authHeader.split(' ')[1];
-
     try {
-        // 3. Verify the Access Token (Fast, stateless check)
-        // Assuming JWT_SECRET is available in scope
         const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
-        
-        // 4. Ensure this is a regular user token 
-        if (decoded.role !== 'user') {
+                if (decoded.role !== 'user') {
             return res.status(403).json({ message: 'Forbidden. Invalid token role for user access.' });
-        }
-        
-        // 5. Success: Attach the user ID and proceed
+        }        
         req.userId = decoded.id; 
-        next();
-        
+        next();        
     } catch (err) {
-        // 6. Handle verification errors
-        
         // --- 🔑 HIGH-PERFORMANCE REFRESH HANDLING ---
         if (err.name === 'TokenExpiredError') {
-            // Access Token is expired, but valid. Signal the client to 
-            // silently call the /api/users/refresh endpoint using the secure Refresh Token cookie.
             return res.status(401).json({ 
                 message: 'Access Token expired. Refresh required.',
                 expired: true // CRITICAL flag for the client to initiate refresh flow
             });
         }
-        
         // For all other errors (invalid signature, tampering, etc.), force re-login
         // No need to clear the cookie here; the Refresh Endpoint handles clearing its own cookie on failure.
         console.error("JWT Verification Error:", err.message);
@@ -2379,47 +2360,27 @@ const verifyUserToken = (req, res, next) => {
 };
 
 const verifySessionCookie = (req, res, next) => {
-    // ------------------- 💡 DEBUG LOGGING ADDED -------------------
-    // Log incoming cookie headers to see if the browser sent anything at all.
-    // The 'cookie' header is what the browser sends.
     console.log('DEBUG COOKIE CHECK: Incoming Cookie Header:', req.headers.cookie);
-    // -----------------------------------------------------------------
-
-    // 1. Get Refresh Token from the secure cookie
     const refreshToken = req.cookies.userRefreshToken; 
-    
     // ------------------- 💡 DEBUG LOGGING ADDED -------------------
     console.log('DEBUG REFRESH TOKEN:', refreshToken ? 'Token FOUND' : 'Token MISSING from req.cookies');
-    // -----------------------------------------------------------------
-
     if (!refreshToken) {
         // If NO cookie is found, the user is NOT logged in.
         return res.status(401).json({ message: 'No valid session cookie found.' });
     }
 
     try {
-        // 2. Verify the Refresh Token
-        // NOTE: Ensure process.env.JWT_SECRET is identical to the one used for signing.
         const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
-        
         // 3. Ensure role is correct (optional but good practice)
         if (decoded.role !== 'user') {
             return res.status(403).json({ message: 'Forbidden. Invalid token role in cookie.' });
         }
-
-        // 4. Success: User is authenticated via session cookie.
         req.userId = decoded.id; 
         
         console.log('DEBUG REFRESH TOKEN: Verification SUCCESS. Proceeding...');
         next(); 
-
     } catch (err) {
-        // 5. If refresh token is expired/invalid/bad signature
         console.error("Session Cookie verification failed:", err.message);
-        
-        // In a real environment, you should clear the cookie here using the
-        // consistent 'SameSite=None; Secure' settings before sending 401.
-        
         res.status(401).json({ message: 'Session cookie invalid or expired.' });
     }
 };
@@ -5739,9 +5700,45 @@ app.put('/api/users/change-password', verifyUserToken, async (req, res) => {
     }
 });
 
-app.get('/api/auth/status', verifySessionCookie, (req, res) => {
-    // If verifySessionCookie successfully executed, the user is logged in via cookie.
-    res.status(200).json({ message: 'Authenticated', isAuthenticated: true });
+app.get('/api/auth/status', (req, res) => {
+    // --- 1. Attempt Access Token Verification (The immediate fix for the profile click) ---
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1];
+        try {
+            // Verify the Access Token from the header
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            
+            // SUCCESS via Access Token: The user can access the profile.
+            console.log('DEBUG STATUS: Access Token verification successful.');
+            return res.status(200).json({ message: 'Authenticated via Access Token', isAuthenticated: true });
+            
+        } catch (err) {
+            console.warn('DEBUG STATUS: Access Token expired/invalid. Checking session cookie...');
+            // Fall through to cookie check
+        }
+    }    
+    const refreshToken = req.cookies.userRefreshToken; 
+    
+    // NOTE: This is the check that currently fails due to the missing cookie.
+    if (!refreshToken) {
+        console.warn('DEBUG STATUS: Final Auth Check Failed. No Access Token and no Refresh Token cookie.');
+        return res.status(401).json({ message: 'Authentication failed. No valid token or session cookie.' });
+    }
+
+    try {
+        // Verify the Refresh Token from the cookie
+        const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+        
+        // SUCCESS via Refresh Token Cookie: Should be used by secureUserFetch refresh calls
+        console.log('DEBUG STATUS: Authentication via Refresh Token cookie successful.');
+        return res.status(200).json({ message: 'Authenticated via Session Cookie', isAuthenticated: true });
+        
+    } catch (err) {
+        // Failed all checks.
+        console.error("DEBUG STATUS: Session Cookie verification failed:", err.message);
+        return res.status(401).json({ message: 'Session cookie invalid or expired. Re-login required.' });
+    }
 });
 
 // =========================================================
