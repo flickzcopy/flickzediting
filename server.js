@@ -7036,9 +7036,10 @@ app.get('/api/orders/history', verifyUserToken, async (req, res) => {
         });
     }
 });
+
 // 6. GET /api/orders/:orderId (Fetch Single Order Details - Protected)
 app.get('/api/orders/:orderId', verifyUserToken, async function (req, res) {
-    const orderId = req.params.orderId; // This is the user-facing reference (e.g., 'outflickz_1765...')
+    const orderId = req.params.orderId; // Can be custom ref (Paystack) OR ObjectId (Bank Transfer)
     const userId = req.userId; // Set by verifyUserToken middleware
 
     if (!orderId) {
@@ -7049,19 +7050,31 @@ app.get('/api/orders/:orderId', verifyUserToken, async function (req, res) {
     }
 
     try {
-        // 1. Fetch the specific order document
-        const order = await Order.findOne({ 
-            // 🛑 CRITICAL FIX: CHANGED FIELD NAME from 'orderRef' to 'orderReference' 
-            // to match what is saved in the database by the POST route.
-            orderReference: orderId, 
-            userId: userId, // AND ensure it belongs to the authenticated user
-        })
+        // ⭐ CRITICAL HYBRID FIX: Build a flexible query to find the order by EITHER 
+        // the custom reference ID OR the MongoDB ObjectId, ensuring it belongs to the user.
+        
+        const queryConditions = {
+            userId: userId, // Always ensure ownership
+            $or: [
+                // 1. Check the custom reference field (used by Paystack/Custom Refs)
+                { orderReference: orderId },
+            ]
+        };
+
+        // Check if the ID *could* be a MongoDB ObjectId (24 hex characters)
+        // If it is, we add it to the $or query to allow lookup by internal ID.
+        if (orderId.length === 24 && /^[0-9a-fA-F]+$/.test(orderId)) {
+             queryConditions.$or.push({ _id: orderId });
+        }
+
+        // 1. Fetch the specific order document using the hybrid query
+        const order = await Order.findOne(queryConditions) // <-- USES THE NEW $OR LOGIC
         // ⭐ FIX: Ensure we select the new financial breakdown fields
         .select('+subtotal +shippingFee +tax')
         .lean();
 
         if (!order) {
-            // This handles cases where the orderReference is valid but not found, or doesn't belong to the user.
+            // This handles cases where the orderReference/ObjectId is valid but not found, or doesn't belong to the user.
             return res.status(404).json({ message: 'Order not found or access denied.' });
         }
         
