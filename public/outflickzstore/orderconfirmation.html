@@ -237,14 +237,6 @@
     
 <script>    
 
-const API_BASE_URL = 'https://outflickzz.netlify.app';
-const LOCAL_TAX_RATE = 0.00; 
-const LOCAL_CART_KEY = 'outflickzLocalCart'; 
-const CART_STORAGE_KEY = 'outflickzCartCount';
-const AUTH_TOKEN_KEY = 'userAccessToken';
-const REFRESH_ENDPOINT = `${API_BASE_URL}/api/auth/refresh`;
-const CURRENCY_SYMBOL = '₦'; 
-
 
 // Function to be called when the user clicks the Profile button
 async function redirectToProfileOrLogin() {
@@ -302,7 +294,7 @@ function enforceAuthGate() {
             console.warn(`Auth gate failed (Status ${response.status}). Redirecting.`);
             window.location.replace('useraccount.html');
         } else {
-             console.log("Auth gate passed (Status 200). User session confirmed.");
+            console.log("Auth gate passed (Status 200). User session confirmed.");
         }
     })
     .catch(error => {
@@ -312,48 +304,55 @@ function enforceAuthGate() {
     });
 }
 
-/**
- * CONCEPTUAL: This function should be called ONLY after a successful login API response 
- * from your server (in useraccount.html). It sets the login flag and redirects 
- * to the homepage (or profile).
- */
-function onSuccessfulLogin() {
-    // Save the login state to the browser's storage
-    localStorage.setItem('isLoggedIn', 'true');
-    console.log("Login successful! isLoggedIn set to true.");
+const API_BASE_URL = 'https://outflickzz.netlify.app';
+const LOCAL_TAX_RATE = 0.00; 
+const LOCAL_CART_KEY = 'outflickzLocalCart'; 
+const CART_STORAGE_KEY = 'outflickzCartCount';
+const AUTH_TOKEN_KEY = 'userAccessToken';
+const REFRESH_ENDPOINT = `${API_BASE_URL}/api/auth/refresh`;
+const CURRENCY_SYMBOL = '₦'; 
 
-    // Redirect the user to the homepage after login
-    window.location.href = 'homepage.html'; 
+
+ /**
+ * Utility function to check if a user is currently logged in based on client-side status.
+ * (Note: The server is the ultimate authority, but this client-side check provides quick UI guidance.)
+ */
+function isUserLoggedIn() {
+    // We check the status flag set by the login/logout process or secureUserFetch.
+    const authStatus = localStorage.getItem('outflickzAuthStatus');
+    return authStatus === 'loggedIn';
 }
 
+    // --- MESSAGE & MODAL DISPLAY FUNCTION (Unchanged) ---
+    function displayMessage(message) {
+        const modalContainer = document.getElementById('message-modal-container');
+        const modalText = document.getElementById('message-modal-text');
 
+        if (modalContainer && modalText) {
+            modalText.textContent = message;
+            modalContainer.classList.remove('hidden');
 
-/**
- * MISSING FUNCTION 1: Retrieves the JWT token from localStorage.
- */
-function getAuthToken() {
-    return localStorage.getItem(AUTH_TOKEN_KEY);
-}
+            modalContainer.onclick = (e) => {
+                if (e.target === modalContainer) {
+                    hideMessageModal();
+                }
+            };
 
-/**
- * MISSING FUNCTION 2: Checks if the user is logged in by attempting to validate the session cookie.
- * NOTE: This relies on the server's /api/auth/status endpoint returning 200 on success.
- */
-async function isUserLoggedIn() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
-            method: 'GET',
-            credentials: 'include' // Must send the secure cookie
-        });
-        // 200 OK means the session cookie is valid
-        return response.status === 200;
-    } catch (error) {
-        // Network error, assume logged out or session cannot be verified
-        console.error("Auth status check failed:", error);
-        return false; 
+            setTimeout(hideMessageModal, 4000);
+        } else {
+            console.warn("Modal elements not found. Message:", message);
+        }
     }
-}
 
+    function hideMessageModal() {
+        const modalContainer = document.getElementById('message-modal-container');
+        if (modalContainer) {
+            modalContainer.classList.add('hidden');
+            modalContainer.onclick = null;
+        }
+    }
+
+ 
 /**
  * Handles user logout by clearing tokens and redirecting.
  * Used by secureUserFetch on non-recoverable token failure.
@@ -365,6 +364,64 @@ function handleLogout() {
     // window.location.href = '/login.html'; 
     alert("Session expired. Please log in again."); 
 }
+
+// --- SECURE USER FETCH FUNCTION (CRITICAL AUTH MECHANISM) ---
+
+async function secureUserFetch(url, options = {}) {
+    let token = localStorage.getItem(AUTH_TOKEN_KEY);
+    
+    // Add Authorization header if a token exists
+    if (token) {
+        options.headers = {
+            ...options.headers,
+            'Authorization': `Bearer ${token}`
+        };
+    }
+
+    let response = await fetch(url, options);
+
+    // If response is 401, attempt token refresh
+    if (response.status === 401) {
+        console.log("Token expired (401). Attempting refresh...");
+        
+        try {
+            const refreshResponse = await fetch(REFRESH_ENDPOINT, { method: 'POST' });
+
+            if (refreshResponse.ok) {
+                const data = await refreshResponse.json();
+                const newToken = data.accessToken;
+                
+                if (!newToken) {
+                    throw new Error("Refresh successful, but no new token received.");
+                }
+
+                // Store new token and retry the original request
+                localStorage.setItem(AUTH_TOKEN_KEY, newToken);
+                token = newToken; // Update token for retry
+
+                console.log("Token refreshed successfully. Retrying original request...");
+                
+                // Update Authorization header with the new token
+                options.headers['Authorization'] = `Bearer ${token}`;
+                
+                // Retry the original request
+                response = await fetch(url, options);
+
+            } else {
+                console.error("Token refresh failed.");
+                handleLogout(); // Log out user if refresh fails
+                // Return original 401 response for the caller to handle (e.g., disable cart)
+                return response; 
+            }
+        } catch (error) {
+            console.error("Error during token refresh process:", error);
+            handleLogout();
+            return response; // Return original 401 response
+        }
+    }
+    return response;
+}
+
 
 /**
  * Helper function for currency formatting (NGN)
