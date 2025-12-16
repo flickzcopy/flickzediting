@@ -696,64 +696,60 @@ async function secureUserFetch(url, options = {}) {
             badge.classList.add('hidden');
         }
     }
-
-    // --- FETCH USER DATA TO PRE-FILL FORM (FIXED) ---
-    async function fetchUserData() {
-        if (!isUserLoggedIn()) {
-            return;
-        }
-
-        try {
-            // ⭐ FIX: Using secureUserFetch for protected user data endpoint.
-            const response = await secureUserFetch(`${API_BASE_URL}/api/users/account`, {
-                method: 'GET',
-                // Authorization is now handled by secureUserFetch
-            });
-
-            if (!response.ok) {
-                // If secureUserFetch failed to get a good response (even after token refresh attempt)
-                throw new Error('Failed to fetch user data. Please log in again.');
-            }
-
-            const userData = await response.json();
-            const userProfile = userData.profile || {};
-            const userAddress = userData.address || {};
-
-            // Pre-fill Contact Info
-            document.getElementById('email').value = userData.email || '';
-
-            // Pre-fill Shipping Info
-            const firstNameEl = document.getElementById('first-name');
-            const lastNameEl = document.getElementById('last-name');
-
-            if (userProfile.firstName) firstNameEl.value = userProfile.firstName;
-            if (userProfile.lastName) lastNameEl.value = userProfile.insecureUserFetch;
-
-            if (userData.address) {
-                if (userAddress.street) document.getElementById('address-line-1').value = userAddress.street;
-                if (userAddress.city) document.getElementById('city').value = userAddress.city;
-                if (userAddress.state) document.getElementById('state').value = userAddress.state;
-                if (userAddress.zipCode) document.getElementById('zip-code').value = userAddress.zipCode;
-                if (userAddress.country) document.getElementById('country').value = userAddress.country;
-            }
-
-            // Save to local storage for use in the review step (Step 2)
-            localStorage.setItem('outflickzShippingData', JSON.stringify({
-                firstName: userProfile.firstName, 
-                lastName: userProfile.lastName, 
-                email: userData.email,
-                street: userAddress.street,
-                city: userAddress.city,
-                state: userAddress.state,
-                zipCode: userAddress.zipCode,
-                country: userAddress.country
-            }));
-
-        } catch (error) {
-            console.error('Error fetching user data:', error);
-            displayMessage('Could not load saved address. Please enter manually.');
-        }
+// --- FETCH USER DATA TO PRE-FILL FORM (FIXED) ---
+async function fetchUserData() {
+    if (!isUserLoggedIn()) {
+        return;
     }
+
+    try {
+        const response = await secureUserFetch(`${API_BASE_URL}/api/users/account`, {
+            method: 'GET',
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch user data. Please log in again.');
+        }
+
+        const userData = await response.json();
+        const userProfile = userData.profile || {};
+        const userAddress = userData.address || {};
+
+        // Pre-fill Contact Info
+        document.getElementById('email').value = userData.email || '';
+
+        // Pre-fill Shipping Info
+        const firstNameEl = document.getElementById('first-name');
+        const lastNameEl = document.getElementById('last-name');
+
+        if (userProfile.firstName) firstNameEl.value = userProfile.firstName;
+        if (userProfile.lastName) lastNameEl.value = userProfile.lastName;
+
+        if (userData.address) {
+            if (userAddress.street) document.getElementById('address-line-1').value = userAddress.street;
+            if (userAddress.city) document.getElementById('city').value = userAddress.city;
+            if (userAddress.state) document.getElementById('state').value = userAddress.state;
+            if (userAddress.zipCode) document.getElementById('zip-code').value = userAddress.zipCode;
+            if (userAddress.country) document.getElementById('country').value = userAddress.country;
+        }
+
+        // Save to local storage for use in the review step (Step 2)
+        localStorage.setItem('outflickzShippingData', JSON.stringify({
+            firstName: userProfile.firstName, 
+            lastName: userProfile.lastName, 
+            email: userData.email,
+            street: userAddress.street,
+            city: userAddress.city,
+            state: userAddress.state,
+            zipCode: userAddress.zipCode,
+            country: userAddress.country
+        }));
+
+    } catch (error) {
+        console.error('Error fetching user data:', error);
+        displayMessage('Could not load saved address. Please enter manually.');
+    }
+}
 
     // ---------------------------------------------------
     // --- CHECKOUT LOGIC ---
