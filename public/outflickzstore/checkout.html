@@ -1081,7 +1081,40 @@ async function fetchInitialCartData() {
         }, 2000);
     }
 
-    
+    /**
+ * Helper function to notify admin of a new order. 
+ */
+async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = null) {
+    const orderTotal = localStorage.getItem('outflickzOrderTotal');
+    const shippingData = localStorage.getItem('outflickzShippingData');
+    const orderItems = localStorage.getItem('outflickzOrderItems');
+
+   const notificationPayload = {
+     orderId: orderId,
+     totalAmount: orderTotal,
+     paymentMethod: paymentMethod,
+     shippingDetails: JSON.parse(shippingData || '{}'),
+     items: JSON.parse(orderItems || '[]'),
+     adminEmail: DEFAULT_ADMIN_EMAIL, // Assuming DEFAULT_ADMIN_EMAIL is defined globally
+     paymentReceiptUrl: receiptUrl // Pass the receipt URL if available
+   };
+
+    try {
+        // Assuming API_BASE_URL is defined globally
+        const response = await fetch(`${API_BASE_URL}/api/notifications/admin-order-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(notificationPayload)
+        });
+
+        if (!response.ok) {
+            console.error('Failed to send admin notification email:', response.status);
+        }
+    } catch (error) {
+        console.error('Network error while sending admin notification:', error);
+    }
+}
+
     /**
      * ⭐ UPDATED: Centralized function to finalize the order.
      * ONLY used by Bank Transfer to perform client-side cleanup and notification.
