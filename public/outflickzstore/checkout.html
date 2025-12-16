@@ -908,158 +908,145 @@ async function fetchUserData() {
     }
 
 
-   // ... existing functions ...
 
-    /**
-    * Fetches the initial cart data, CHECKING FOR A 'BUY NOW' ITEM FIRST. (UPDATED FOR PRIORITIZATION)
-    */
-    async function fetchInitialCartData() {
-        const subtotalEl = document.getElementById('summary-subtotal');
-        const shippingCostEl = document.getElementById('summary-shipping-cost');
-        const taxEstimateEl = document.getElementById('summary-tax-estimate');
-        const estimatedTotalEl = document.getElementById('summary-estimated-total');
-        const finalTotalEl = document.getElementById('summary-estimated-total-final');
-        const itemsListEl = document.getElementById('review-items-list');
-        const paymentBtn = document.getElementById('checkout-next-btn');
+   /**
+ * Fetches the initial cart data, CHECKING FOR A 'BUY NOW' ITEM FIRST. (UPDATED FOR PRIORITIZATION)
+ */
+async function fetchInitialCartData() {
+    const subtotalEl = document.getElementById('summary-subtotal');
+    const shippingCostEl = document.getElementById('summary-shipping-cost');
+    const taxEstimateEl = document.getElementById('summary-tax-estimate');
+    const estimatedTotalEl = document.getElementById('summary-estimated-total');
+    const finalTotalEl = document.getElementById('summary-estimated-total-final');
+    const itemsListEl = document.getElementById('review-items-list');
+    const paymentBtn = document.getElementById('checkout-next-btn');
+    
+    // Set loading state
+    subtotalEl.textContent = '...';
+    shippingCostEl.textContent = '...';
+    taxEstimateEl.textContent = '...';
+    estimatedTotalEl.textContent = '...';
+    finalTotalEl.textContent = '...';
+    itemsListEl.innerHTML = '<div class="text-center py-6 text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i> Loading order details...</div>';
+    paymentBtn.disabled = true;
+
+    let cartData;
+    
+    // Determine if the user has a local cart with items (Standard Checkout intention)
+    const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
+    const isStandardCartCheckout = localCart.length > 0;
+    const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
+    
+    // =========================================================================
+    // 🎯 BUY NOW / PRE-ORDER LOGIC START: (Only proceed if NO standard cart items exist)
+    // =========================================================================
+    
+    if (buyNowItemJSON && !isStandardCartCheckout) { // ⭐ CRITICAL CHANGE HERE: ADD `&& !isStandardCartCheckout`
+        console.log("Processing Buy Now flow...");
         
-        // Set loading state
-        subtotalEl.textContent = '...';
-        shippingCostEl.textContent = '...';
-        taxEstimateEl.textContent = '...';
-        estimatedTotalEl.textContent = '...';
-        finalTotalEl.textContent = '...';
-        itemsListEl.innerHTML = '<div class="text-center py-6 text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i> Loading order details...</div>';
-        paymentBtn.disabled = true;
+        let item = JSON.parse(buyNowItemJSON);
 
-        let cartData;
+        // ⭐ CRITICAL FIXES FOR SERVER VALIDATION (Addressing 400 Bad Request) ⭐
         
-        // Determine if the user has a local cart with items (Standard Checkout intention)
-        const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-        const isStandardCartCheckout = localCart.length > 0;
-        const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
-        
-        // =========================================================================
-        // 🎯 BUY NOW / PRE-ORDER LOGIC START: (Only proceed if NO standard cart items exist)
-        // =========================================================================
-        
-        if (buyNowItemJSON && !isStandardCartCheckout) { // ⭐ CRITICAL CHANGE HERE: ADD `&& !isStandardCartCheckout`
-            console.log("Processing Buy Now flow...");
-            
-            let item = JSON.parse(buyNowItemJSON);
-
-            // ... (Your existing Buy Now Fixes 1, 2, 3 remain here) ...
-            
-            try {
-                // ... (Your existing API call to /calculate-buy-now remains here) ...
-                const response = await secureUserFetch(`${API_BASE_URL}/api/orders/calculate-buy-now`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(item) 
-                });
-                
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.message || 'Failed to calculate Buy Now totals from API.');
-                }
-
-                cartData = await response.json(); 
-                renderCartData(cartData, paymentBtn);
-                return; // EXIT: Buy Now flow complete
-
-            } catch (error) {
-                console.error('Error fetching Buy Now totals:', error);
-                itemsListEl.innerHTML = '<div class="text-center py-6 text-red-500">Error calculating totals. Please try again.</div>';
-                displayMessage(error.message || 'A critical error occurred. Cannot proceed to checkout.');
-                return;
-            }
+        // 1. FIX: Ensure productType is present (Correcting faulty assignment from previous versions)
+        if (!item.productType || item.productType === "undefined" || item.productType === null) {
+            item.productType = 'Uncategorized'; // *** FIX: Use assignment = ***
+            console.warn(`Fixed invalid productType to '${item.productType}' for Buy Now item.`);
         }
-        // =========================================================================
-        // --- STANDARD CART LOGIC START ---
         
-        // If Buy Now flag existed but was ignored (because isStandardCartCheckout was true), 
-        // ensure the flag is cleared before proceeding to prevent issues on subsequent pages.
-        if (buyNowItemJSON && isStandardCartCheckout) {
-             console.warn('Clearing residual BUY_NOW_KEY to proceed with Standard Cart.');
-             sessionStorage.removeItem(BUY_NOW_KEY); 
+        // 2. Fix empty 'size' field (Critical for Caps which use variation as size identifier)
+        if (!item.size && item.variation) {
+            item.size = item.variation; 
+            console.warn("Fixed empty size by using variation value for Buy Now item (Cap fix).");
         }
 
-        // Check for empty local cart if user is NOT logged in 
-        if (!isUserLoggedIn()) {
-            // Re-check localCart here, though it should be caught by isStandardCartCheckout 
-            if (localCart.length === 0) { 
-                displayMessage('Your cart is empty. Redirecting to home.');
-                setTimeout(() => window.location.href = 'homepage.html', 1500);
-                return;
-            } 
+        // 3. FIX: Ensure variationIndex is a positive integer or set a safe default of 1
+        const variationIndexNum = parseInt(item.variationIndex, 10);
+        if (isNaN(variationIndexNum) || variationIndexNum <= 0) {
+            item.variationIndex = 1; 
+            console.warn(`Fixed invalid variationIndex to 1 for Buy Now item.`);
+        } else {
+            item.variationIndex = variationIndexNum; // Ensure it's treated as a number
         }
+        
+        // --- END CRITICAL FIXES ---
 
         try {
-            // === REAL API CALL FOR STANDARD CART ===
-            // ... (rest of your standard cart logic is correct and remains unchanged) ...
-            const url = isUserLoggedIn() ? `${API_BASE_URL}/api/users/cart` : `${API_BASE_URL}/api/guest/cart`;
+            // ⭐ FIX: Using secureUserFetch for protected API endpoint (handles token refresh)
+            const response = await secureUserFetch(`${API_BASE_URL}/api/orders/calculate-buy-now`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(item) // Send the corrected item object
+            });
             
-            // If the user is logged in, use secureUserFetch. Otherwise, use standard fetch.
-            const fetcher = isUserLoggedIn() ? secureUserFetch : fetch;
-            
-            const response = await fetcher(url, { method: 'GET' });
-
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.message || 'Failed to fetch cart data from API.');
+                throw new Error(errorData.message || 'Failed to calculate Buy Now totals from API.');
             }
 
-            cartData = await response.json();
-
-            if (!cartData.items || cartData.items.length === 0) {
-                displayMessage('Your cart is empty. Redirecting to home.');
-                setTimeout(() => window.location.href = 'homepage.html', 1500);
-                return;
-            }
-            
-            // Render the data received from the API (which should now be ₦70,000.00)
+            cartData = await response.json(); 
             renderCartData(cartData, paymentBtn);
-            
+            return; // EXIT: Buy Now flow complete
+
         } catch (error) {
-            console.error('Error fetching cart data for checkout:', error);
-            itemsListEl.innerHTML = '<div class="text-center py-6 text-red-500">Error loading cart. Please go back to cart.</div>';
-            displayMessage(error.message || 'An error occurred loading your cart. Please try again.');
-            paymentBtn.disabled = true;
+            console.error('Error fetching Buy Now totals:', error);
+            itemsListEl.innerHTML = '<div class="text-center py-6 text-red-500">Error calculating totals. Please try again.</div>';
+            displayMessage(error.message || 'A critical error occurred. Cannot proceed to checkout.');
+            return;
         }
     }
+    // =========================================================================
+    // --- STANDARD CART LOGIC START ---
+    
+    // If Buy Now flag existed but was ignored (because isStandardCartCheckout was true), 
+    // ensure the flag is cleared before proceeding to prevent issues on subsequent pages.
+    if (buyNowItemJSON && isStandardCartCheckout) {
+          console.warn('Clearing residual BUY_NOW_KEY to proceed with Standard Cart.');
+          sessionStorage.removeItem(BUY_NOW_KEY); 
+    }
 
-/**
-     * Helper function to notify admin of a new order. (Fixed API call)
-     */
-    async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = null) {
-        const orderTotal = localStorage.getItem('outflickzOrderTotal');
-        const shippingData = localStorage.getItem('outflickzShippingData');
-        const orderItems = localStorage.getItem('outflickzOrderItems');
+    // Check for empty local cart if user is NOT logged in 
+    if (!isUserLoggedIn()) {
+        // Re-check localCart here, though it should be caught by isStandardCartCheckout 
+        if (localCart.length === 0) { 
+            displayMessage('Your cart is empty. Redirecting to home.');
+            setTimeout(() => window.location.href = 'homepage.html', 1500);
+            return;
+        } 
+    }
 
-       const notificationPayload = {
-        orderId: orderId,
-        totalAmount: orderTotal,
-        paymentMethod: paymentMethod,
-        shippingDetails: JSON.parse(shippingData || '{}'),
-        items: JSON.parse(orderItems || '[]'),
-        adminEmail: DEFAULT_ADMIN_EMAIL,
-        paymentReceiptUrl: receiptUrl // Pass the receipt URL if available
-       };
+    try {
+        // === REAL API CALL FOR STANDARD CART ===
+        const url = isUserLoggedIn() ? `${API_BASE_URL}/api/users/cart` : `${API_BASE_URL}/api/guest/cart`;
+        
+        // If the user is logged in, use secureUserFetch. Otherwise, use standard fetch.
+        const fetcher = isUserLoggedIn() ? secureUserFetch : fetch;
+        
+        const response = await fetcher(url, { method: 'GET' });
 
-        try {
-            // ⭐ FIX: Prepend API_BASE_URL for external API call (assuming this is an authenticated or serverless endpoint)
-            const response = await fetch(`${API_BASE_URL}/api/notifications/admin-order-email`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(notificationPayload)
-            });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to fetch cart data from API.');
+        }
 
-            if (!response.ok) {
-                console.error('Failed to send admin notification email:', response.status);
-            }
-        } catch (error) {
-            console.error('Network error while sending admin notification:', error);
-        }
-    }
+        cartData = await response.json();
+
+        if (!cartData.items || cartData.items.length === 0) {
+            displayMessage('Your cart is empty. Redirecting to home.');
+            setTimeout(() => window.location.href = 'homepage.html', 1500);
+            return;
+        }
+        
+        // Render the data received from the API (which should now be ₦70,000.00)
+        renderCartData(cartData, paymentBtn);
+        
+    } catch (error) {
+        console.error('Error fetching cart data for checkout:', error);
+        itemsListEl.innerHTML = '<div class="text-center py-6 text-red-500">Error loading cart. Please go back to cart.</div>';
+        displayMessage(error.message || 'An error occurred loading your cart. Please try again.');
+        paymentBtn.disabled = true;
+    }
+}
 
     // -----------------------------------------------------------------
     // ⭐ PAYMENT PROCESSING FUNCTIONS (UPDATED FOR WEBHOOK) ⭐
