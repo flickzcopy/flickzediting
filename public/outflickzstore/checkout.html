@@ -1049,38 +1049,39 @@ async function fetchInitialCartData() {
     }
 }
 
-    // -----------------------------------------------------------------
-    // ⭐ PAYMENT PROCESSING FUNCTIONS (UPDATED FOR WEBHOOK) ⭐
-    // -----------------------------------------------------------------
-
     /**
-     * ⭐ NEW: Handles client-side cleanup and redirect after a successful Paystack payment.
-     * The server-side finalization (status update, cart clear, email) is handled by the webhook.
-     * @param {string} orderRef - The Paystack transaction reference.
-     */
-    function handlePaystackSuccessRedirect(orderRef) {
-        // 1. Clear local storage items (cleanup)
-        localStorage.removeItem(LOCAL_CART_KEY);
-        localStorage.setItem(CART_STORAGE_KEY, '0');
-        localStorage.removeItem('outflickzOrderTotal');
-        localStorage.removeItem('outflickzOrderItems'); 
-        localStorage.removeItem('outflickzOrderSubtotal');
-        localStorage.removeItem('outflickzOrderShipping');
-        localStorage.removeItem('outflickzOrderTax');
-        
-        // Clear Buy Now flag from sessionStorage
-        sessionStorage.removeItem(BUY_NOW_KEY); 
+ * ⭐ UPDATED & CORRECTED: Handles client-side cleanup and redirect after a successful Paystack payment.
+ * The server-side finalization (status update, cart clear, email) is handled by the webhook.
+ * @param {string} mongoId - The MongoDB _id of the order (e.g., '6541b...'). <--- NEW PARAMETER
+ * @param {string} orderRef - The Paystack transaction reference (now optional in this context).
+ */
+function handlePaystackSuccessRedirect(mongoId, orderRef) { // 👈 ADD mongoId as the primary identifier
+    // 1. Clear local storage items (cleanup)
+    localStorage.removeItem(LOCAL_CART_KEY);
+    localStorage.setItem(CART_STORAGE_KEY, '0');
+    localStorage.removeItem('outflickzOrderTotal');
+    localStorage.removeItem('outflickzOrderItems'); 
+    localStorage.removeItem('outflickzOrderSubtotal');
+    localStorage.removeItem('outflickzOrderShipping');
+    localStorage.removeItem('outflickzOrderTax');
+    
+    // Clear Buy Now flag from sessionStorage
+    sessionStorage.removeItem(BUY_NOW_KEY); 
 
-        updateCartBadge();
-        
-        // 2. Display message and redirect
-        displayMessage('Payment successful! Your order is being confirmed. Redirecting...');
-        
-        setTimeout(() => {
-            // Redirect using the transaction reference for Paystack
-            window.location.href = `orderconfirmation.html?ref=${orderRef}&method=paystack`;
-        }, 2000);
-    }
+    updateCartBadge();
+    
+    // 2. Display message and redirect
+    displayMessage('Payment successful! Your order is being confirmed. Redirecting...');
+    
+    setTimeout(() => {
+        // 🚀 CRITICAL FIX: Redirect using the MongoDB ID under the 'id' parameter.
+        // This is the identifier your /api/orders/:id endpoint expects.
+        window.location.href = `orderconfirmation.html?id=${mongoId}&method=paystack`;
+        
+        // Note: The 'orderRef' argument is no longer strictly needed in the URL, 
+        // as the confirmation page will now successfully fetch by 'id'.
+    }, 2000);
+}
 
     /**
  * Helper function to notify admin of a new order. 
@@ -1178,43 +1179,115 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
         }
     }
 
-    /**
-     * ⭐ UPDATED: Handles Paystack Payment Flow. (No fix needed here, logic is correct)
-     */
-    function processPaystackPayment(totalAmount, email) {
-        const payBtn = document.getElementById('checkout-next-btn');
-        const paymentMethod = 'Paystack/Card';
-        const reference = `outflickz_${Date.now()}`;
-        
-        if (typeof PaystackPop === 'undefined') {
-            displayMessage('Paystack script not loaded. Please check your internet connection and page HTML.');
-            payBtn.disabled = false;
-            payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
-            return;
-        }
+   /**
+ * ⭐ CORRECTED: Paystack Payment Flow.
+ * * Flow:
+ * 1. Collect cart/shipping data.
+ * 2. Call backend to create PENDING order (GETS MongoDB _id).
+ * 3. Initialize Paystack widget using the reference from the server.
+ * 4. On success, redirect using the MongoDB _id.
+ */
+async function processPaystackPayment(totalAmount, email) { // Make this async
+    const payBtn = document.getElementById('checkout-next-btn');
+    // const paymentMethod = 'Paystack/Card'; // Unused in this scope
+    
+    // =======================================================
+    // 1. COLLECT DATA FOR SERVER CALL
+    // =======================================================
+    const shippingAddress = localStorage.getItem('outflickzShippingData');
+    const orderItems = localStorage.getItem('outflickzLocalCart');
+    const subtotal = localStorage.getItem('outflickzOrderSubtotal') || '0';
+    const shippingFee = localStorage.getItem('outflickzOrderShipping') || '0';
+    const tax = localStorage.getItem('outflickzOrderTax') || '0';
+    
+    // Ensure button state is set for loading
+    payBtn.disabled = true;
+    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Creating Order...';
 
-        const handler = PaystackPop.setup({
-            key: PAYSTACK_PUBLIC_KEY,
-            email: email,
-            amount: totalAmount * 100, // Paystack expects amount in Kobo
-            ref: reference,
-            currency: CURRENCY_CODE,
-            
-            callback: function(response){
-                // ⭐ CRITICAL FIX: DO NOT call finalizeOrderOnServer for Paystack.
-                // The webhook at /api/paystack/webhook will handle server finalization.
-                handlePaystackSuccessRedirect(response.reference);
-            },
-            
-            onClose: function(){
-                displayMessage('Payment cancelled or abandoned. Please try again.');
-                payBtn.disabled = false;
-                payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
-            }
-        });
-        
-        handler.openIframe();
-    }
+
+    // =======================================================
+    // 2. CALL API TO CREATE PENDING ORDER AND GET MONGODB ID
+    // =======================================================
+    let mongoOrderId;
+    let paystackReference; // Use reference returned by server
+    
+    try {
+        const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/paystack`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json', // Using JSON body now
+            },
+            body: JSON.stringify({ // Send required data as JSON
+                shippingAddress: shippingAddress, 
+                totalAmount: totalAmount, 
+                subtotal: subtotal,
+                shippingFee: shippingFee,
+                tax: tax,
+                // Pass orderItems only if Buy Now flow requires it, otherwise backend uses cart.
+                orderItems: sessionStorage.getItem(BUY_NOW_KEY) ? orderItems : null 
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Server error during order creation.' }));
+            displayMessage(`Order setup failed: ${errorData.message}`);
+            throw new Error(errorData.message);
+        }
+
+        const data = await response.json();
+        
+        // ⭐ CRITICAL CAPTURE: Store the MongoDB ID and the Paystack reference from the server
+        mongoOrderId = data.orderId; 
+        paystackReference = data.orderReference;
+
+        console.log(`[Paystack] Pending order created. Mongo ID: ${mongoOrderId}, Ref: ${paystackReference}`);
+
+    } catch (error) {
+        console.error('Error creating pending order:', error);
+        payBtn.disabled = false;
+        payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
+        return; // Stop the process if order creation failed
+    }
+    
+    // Check if Paystack script is loaded (same as before)
+    if (typeof PaystackPop === 'undefined') {
+        displayMessage('Paystack script not loaded.');
+        payBtn.disabled = false;
+        payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
+        return;
+    }
+
+    // =======================================================
+    // 3. LAUNCH PAYSTACK POPUP
+    // =======================================================
+    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Opening Payment Gateway...';
+    
+    const handler = PaystackPop.setup({
+        key: PAYSTACK_PUBLIC_KEY,
+        email: email,
+        amount: totalAmount * 100, // Paystack expects amount in Kobo
+        ref: paystackReference, // USE THE REFERENCE RETURNED BY THE SERVER
+        currency: CURRENCY_CODE,
+        
+        callback: function(response){
+            console.log('[Paystack] Payment successful. Redirecting...');
+            // ⭐ CRITICAL FIX: Pass the MongoDB ID to the redirect function!
+            handlePaystackSuccessRedirect(mongoOrderId, response.reference); 
+        },
+        
+        onClose: function(){
+            displayMessage('Payment cancelled or abandoned. Please try again.');
+            payBtn.disabled = false;
+            payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
+        }
+    });
+    
+    handler.openIframe();
+    
+    // Restore button state after opening popup
+    payBtn.disabled = false;
+    payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
+}
 
     /**
      * ⭐ CORRECTED: Handles Bank Transfer Receipt Upload and Pending Order Creation.

@@ -236,7 +236,6 @@
     </a>
     
 <script>    
-
 // Function to be called when the user clicks the Profile button
 async function redirectToProfileOrLogin() {
     const token = localStorage.getItem('userAccessToken');
@@ -655,6 +654,7 @@ itemsListEl.innerHTML = `
         priceSummaryEl.innerHTML = '';
     }
 }
+
 /**
  * Parses the URL parameters and displays the appropriate confirmation message.
  * Also handles clearing the local cart and badge count upon successful order creation.

@@ -6338,6 +6338,7 @@ app.delete('/api/users/cart', verifyUserToken, async (req, res) => {
         res.status(500).json({ message: 'Failed to clear shopping bag.' });
     }
 });
+
 // 7. POST /api/paystack/webhook - Handle Paystack Notifications
 app.post('/api/paystack/webhook', async (req, res) => {
     // 1. Verify Webhook Signature (Security Crucial)
