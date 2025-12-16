@@ -614,29 +614,29 @@ const token = localStorage.getItem(AUTH_TOKEN_KEY);
         const formatNaira = (amount) => amount.toLocaleString(undefined, { minimumFractionDigits: 2 });
 
 
-        // 1. Render Collection Details
-        itemsListEl.innerHTML = `
-            ${orderDetails.items.map(item => `
-                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3 border-b border-gray-100 last:border-b-0 transition duration-150 hover:bg-gray-50 rounded-md px-2">
-                    <div class="flex items-start flex-grow">
-                        <img src="${item.imageUrl || 'https://placehold.co/60x60/f8f8f8/999999?text=NO+IMG'}" alt="${item.name}" class="w-16 h-16 rounded-lg border mr-4 object-cover">
-                        <div class="text-sm">
-                            <p class="font-bold text-gray-900">${item.name}</p>
-                            <p class="text-xs text-gray-500 mt-1">
-                                <span class="font-medium">Size:</span> ${item.size} <span class="mx-1 text-gray-300">|</span> 
-                                <span class="font-medium">Color:</span> ${item.color || 'N/A'}
-                            </p>
-                            <p class="text-xs text-gray-500"><span class="font-medium">Qty:</span> ${item.quantity}</p>
-                            
-                        </div>
-                    </div>
-                    <div class="mt-2 sm:mt-0 text-right sm:pl-4 w-full sm:w-auto">
-                        <span class="text-sm font-bold text-gray-900">${CURRENCY_SYMBOL}${formatNaira(item.priceAtTimeOfPurchase * item.quantity)}</span>
-                        <p class="text-xs text-gray-400">@ ${CURRENCY_SYMBOL}${formatNaira(item.priceAtTimeOfPurchase)} each</p>
-                    </div>
-                </div>
-            `).join('')}
-        `;
+     // 1. Render Collection Details
+itemsListEl.innerHTML = `
+    ${orderDetails.items.map(item => `
+        <div class="flex flex-col sm:flex-row justify-between items-start py-4 border-b border-gray-100 last:border-b-0 transition duration-150 hover:bg-gray-50 rounded-md px-2">
+            <div class="flex items-start flex-grow w-full"> 
+                <img src="${item.imageUrl || 'https://placehold.co/80x80/f8f8f8/999999?text=NO+IMG'}" alt="${item.name}" class="w-20 h-20 rounded-lg border mr-4 object-cover flex-shrink-0">
+                <div class="text-sm pt-0.5 flex-grow">
+                    <p class="font-bold text-gray-900">${item.name}</p>
+                    <p class="text-xs text-gray-500 mt-1">
+                        <span class="font-medium">Size:</span> ${item.size} <span class="mx-1 text-gray-300">|</span> 
+                        <span class="font-medium">Color:</span> ${item.color || 'N/A'}
+                    </p>
+                    <p class="text-xs text-gray-500"><span class="font-medium">Qty:</span> ${item.quantity}</p>
+                </div>
+            </div>
+            
+            <div class="mt-2 sm:mt-0 text-right sm:pl-4 w-full sm:w-auto flex-shrink-0">
+                <span class="text-sm sm:text-base font-bold text-gray-900">${CURRENCY_SYMBOL}${formatNaira(item.priceAtTimeOfPurchase * item.quantity)}</span>
+                <p class="text-xs text-gray-400">@ ${CURRENCY_SYMBOL}${formatNaira(item.priceAtTimeOfPurchase)} each</p>
+            </div>
+        </div>
+    `).join('')}
+`;
 
         // 2. Render Price Summary
         priceSummaryEl.innerHTML = `
