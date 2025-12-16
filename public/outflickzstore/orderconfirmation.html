@@ -355,6 +355,18 @@ async function isUserLoggedIn() {
 }
 
 /**
+ * Handles user logout by clearing tokens and redirecting.
+ * Used by secureUserFetch on non-recoverable token failure.
+ */
+function handleLogout() {
+    console.warn("Token refresh failed or expired. User must re-authenticate.");
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    // You should implement a proper redirection here, e.g., to the login page
+    // window.location.href = '/login.html'; 
+    alert("Session expired. Please log in again."); 
+}
+
+/**
  * Helper function for currency formatting (NGN)
  * NOTE: This is not explicitly in your provided code but is needed for display in confirmation.
  */
