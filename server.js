@@ -7038,7 +7038,7 @@ app.get('/api/orders/history', verifyUserToken, async (req, res) => {
 });
 // 6. GET /api/orders/:orderId (Fetch Single Order Details - Protected)
 app.get('/api/orders/:orderId', verifyUserToken, async function (req, res) {
-    const orderId = req.params.orderId;
+    const orderId = req.params.orderId; // This is the user-facing reference (e.g., 'outflickz_1765...')
     const userId = req.userId; // Set by verifyUserToken middleware
 
     if (!orderId) {
@@ -7051,14 +7051,17 @@ app.get('/api/orders/:orderId', verifyUserToken, async function (req, res) {
     try {
         // 1. Fetch the specific order document
         const order = await Order.findOne({ 
+            // 🛑 CRITICAL FIX: Query using the 'orderRef' field, which stores the custom ID 
+            // used by both Paystack and Bank Transfer completion paths.
             orderRef: orderId, 
-            userId: userId,
+            userId: userId, // AND ensure it belongs to the authenticated user
         })
         // ⭐ FIX: Ensure we select the new financial breakdown fields
         .select('+subtotal +shippingFee +tax')
         .lean();
 
         if (!order) {
+            // This handles cases where the orderRef is valid but not found, or doesn't belong to the user.
             return res.status(404).json({ message: 'Order not found or access denied.' });
         }
         
