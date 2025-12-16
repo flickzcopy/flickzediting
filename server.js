@@ -6508,8 +6508,6 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             
             // NOTE: You need to include the item mapping/correction logic here 
             // if you need server-side validation/correction for 'Buy Now' items.
-            // For simplicity in this block, we assume items are correct, but
-            // ideally, you would paste your 'Buy Now' validation code here.
             finalOrderItems = rawItems.map(item => ({
                 ...item,
                 priceAtTimeOfPurchase: item.price,
@@ -6537,9 +6535,6 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
                 variation: item.variation,
                 color: item.color,
             }));
-            
-            // NOTE: You would also include the Cart item validation/correction 
-            // logic here if that was necessary for Paystack flow.
         }
         
         if (finalOrderItems.length === 0) {
@@ -6547,7 +6542,6 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
         }
         
         // 3. Generate the unique Paystack reference (REQUIRED)
-        // This MUST match the reference the client uses for payment initiation.
         const orderRef = `outflickz_${Date.now()}`; 
 
         // 4. Create the new order in a PENDING state
@@ -6561,19 +6555,19 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             tax: tax,
             status: 'Pending', // Initial status before successful payment
             paymentMethod: 'Paystack',
-            orderReference: orderRef, // ⭐ CRITICAL: The Paystack webhook will use this to find the order
+            orderReference: orderRef, // CRITICAL: Saved for the Paystack webhook lookup
             amountPaidKobo: Math.round(totalAmount * 100),
-            paymentTxnId: orderRef, // Use the reference as a temporary txn ID
+            paymentTxnId: orderRef, 
         });
         
         console.log(`Pending Paystack Order created: ${newOrder.orderReference}. Source: ${isBuyNowOrder ? 'Buy Now' : 'Cart'}`);
 
-        // 5. Success Response: Send the Paystack reference back to the client
-        // The client must use this specific reference to initiate payment.
+        // 5. Success Response: Send the MongoDB ID and Paystack Reference
         res.status(201).json({
             message: 'Order placed, awaiting Paystack payment.',
-            orderReference: newOrder.orderReference, // The client needs this to start payment
-            totalAmount: newOrder.totalAmount, // Handy for client Paystack popup
+            orderId: newOrder._id, // ⭐ ADDED: The MongoDB ID for the frontend to use for retrieval!
+            orderReference: newOrder.orderReference, // The client uses this for the Paystack widget
+            totalAmount: newOrder.totalAmount, 
         });
 
     } catch (error) {
