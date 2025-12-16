@@ -655,38 +655,37 @@ const token = localStorage.getItem(AUTH_TOKEN_KEY);
         priceSummaryEl.innerHTML = '';
     }
 }
-
 /**
- * Parses the URL parameters and displays the appropriate confirmation message.
- * Also handles clearing the local cart and badge count upon successful order creation.
- */
+ * Parses the URL parameters and displays the appropriate confirmation message.
+ * Also handles clearing the local cart and badge count upon successful order creation.
+ */
 function displayConfirmationDetails() {
-    console.log('[Confirmation] Starting displayConfirmationDetails.');
-    const urlParams = new URLSearchParams(window.location.search);
-    const orderId = urlParams.get('id') || urlParams.get('ref'); 
-    const method = urlParams.get('method');
-    
-    console.log(`[Confirmation] URL Params - ID/Ref: ${orderId}, Method: ${method}`);
+    console.log('[Confirmation] Starting displayConfirmationDetails.');
+    const urlParams = new URLSearchParams(window.location.search);
+    const orderId = urlParams.get('id') || urlParams.get('ref'); 
+    const method = urlParams.get('method');
+    
+    console.log(`[Confirmation] URL Params - ID/Ref: ${orderId}, Method: ${method}`);
 
-    const orderRefEl = document.getElementById('order-ref-number');
-    const confTitleEl = document.getElementById('confirmation-title');
-    const confMsgEl = document.getElementById('confirmation-message');
-    const confIconEl = document.getElementById('confirmation-icon');
-    const payMethodMsgEl = document.getElementById('payment-method-message');
-    const bankDetailsEl = document.getElementById('bank-transfer-details');
+    const orderRefEl = document.getElementById('order-ref-number');
+    const confTitleEl = document.getElementById('confirmation-title');
+    const confMsgEl = document.getElementById('confirmation-message');
+    const confIconEl = document.getElementById('confirmation-icon');
+    const payMethodMsgEl = document.getElementById('payment-method-message');
+    const bankDetailsEl = document.getElementById('bank-transfer-details');
 
-    if (!orderId || !method) {
-        console.error('[Confirmation] Missing order ID or payment method in URL.');
-        orderRefEl.textContent = 'N/A';
-        // Assuming 'ash-red' is defined in your Tailwind config
-        confIconEl.classList.remove('fa-check-circle', 'text-green-500', 'animate-pulse');
-        confIconEl.classList.add('fa-exclamation-circle', 'text-ash-red');
-        confTitleEl.textContent = 'Confirmation Error';
-        confMsgEl.textContent = 'Order details were not provided in the link. Please check your email or contact support.';
-        return;
-    }
+    if (!orderId || !method) {
+        console.error('[Confirmation] Missing order ID or payment method in URL.');
+        orderRefEl.textContent = 'N/A';
+        // Assuming 'ash-red' is defined in your Tailwind config
+        confIconEl.classList.remove('fa-check-circle', 'text-green-500', 'animate-pulse');
+        confIconEl.classList.add('fa-exclamation-circle', 'text-ash-red');
+        confTitleEl.textContent = 'Confirmation Error';
+        confMsgEl.textContent = 'Order details were not provided in the link. Please check your email or contact support.';
+        return;
+    }
 
-    // Set default successful state
+    // Set default successful state
     confIconEl.classList.remove('fa-clock', 'text-yellow-600', 'fa-exclamation-circle', 'text-ash-red');
     confIconEl.classList.add('fa-check-circle', 'text-green-500', 'animate-pulse');
     confTitleEl.textContent = 'Order Confirmed!';
@@ -696,97 +695,102 @@ function displayConfirmationDetails() {
         bankDetailsEl.classList.add('hidden');
     }
 
-    if (method === 'paystack') {
-        console.log('[Confirmation] Processing successful Paystack payment.');
-        // Successful Paystack/Card Payment
-        
-        // --- 🎯 CRITICAL CART CLEARING FIXES APPLIED HERE ---
-        
-        // 1. Remove ALL temporary checkout data
-        localStorage.removeItem('outflickzShippingData'); 
-        localStorage.removeItem('outflickzOrderTotal');
-        localStorage.removeItem('outflickzOrderSubtotal');
-        localStorage.removeItem('outflickzOrderShipping');
-        localStorage.removeItem('outflickzOrderTax');
-        
-        // 2. Remove the actual cart item array (LOCAL_CART_KEY)
-        localStorage.removeItem(LOCAL_CART_KEY); 
-        
-        // 3. Clear the count storage key to zero
-        localStorage.setItem(CART_STORAGE_KEY, '0');
+    if (method === 'paystack') {
+        console.log('[Confirmation] Processing successful Paystack payment.');
+        // Successful Paystack/Card Payment
         
-        // 4. Clear Buy Now flag from sessionStorage
-        sessionStorage.removeItem('BUY_NOW_KEY');
-        
-        console.log('[Confirmation] Cleared all checkout data, local cart array, and reset cart count.');
-
-        // Update UI elements for successful payment
-        orderRefEl.textContent = `#${orderId}`;
-        payMethodMsgEl.textContent = `Payment was completed successfully via Paystack (Card). Your order will be shipped soon!`;
-
-    } else if (method === 'banktransfer') {
-        console.log('[Confirmation] Processing pending Bank Transfer order.');
-        // Pending Bank Transfer Order
-        
-        // --- 🎯 CRITICAL CART CLEARING FIXES APPLIED HERE ---
-        // Bank transfer finalization on the previous page already did the bulk of this, 
-        // but we ensure all temporary checkout data is scrubbed here too for redundancy.
-        
+        // --- 🎯 CRITICAL CART CLEARING FIXES APPLIED HERE ---
+        
         // 1. Remove ALL temporary checkout data
-        localStorage.removeItem('outflickzShippingData'); 
-        localStorage.removeItem('outflickzOrderTotal');
+        localStorage.removeItem('outflickzShippingData'); 
+        localStorage.removeItem('outflickzOrderTotal');
         localStorage.removeItem('outflickzOrderSubtotal');
         localStorage.removeItem('outflickzOrderShipping');
         localStorage.removeItem('outflickzOrderTax');
         
-        // 2. Remove the actual cart item array (LOCAL_CART_KEY)
-        localStorage.removeItem(LOCAL_CART_KEY); 
-        
-        // 3. Clear the count storage key to zero
-        localStorage.setItem(CART_STORAGE_KEY, '0');
+        // 2. Remove the actual cart item array (LOCAL_CART_KEY)
+        localStorage.removeItem(LOCAL_CART_KEY); 
+        
+        // 3. Clear the count storage key to zero
+        localStorage.setItem(CART_STORAGE_KEY, '0');
         
         // 4. Clear Buy Now flag from sessionStorage
         sessionStorage.removeItem('BUY_NOW_KEY');
-        
-        console.log('[Confirmation] Order created via Bank Transfer. Local checkout data cleared.');
+        
+        console.log('[Confirmation] Cleared all checkout data, local cart array, and reset cart count.');
 
-        // Update UI elements for pending bank transfer
-        orderRefEl.textContent = `#${orderId}`;
-        confIconEl.classList.remove('fa-check-circle', 'text-green-500', 'animate-pulse');
-        confIconEl.classList.add('fa-clock', 'text-yellow-600');
-        confTitleEl.textContent = 'Order Created (Payment Pending)';
-        confMsgEl.textContent = 'Thank you for your order! We are now waiting for your bank transfer confirmation. You will receive an email once payment is verified.';
-        payMethodMsgEl.textContent = `You selected **Bank Transfer**. Please transfer the total amount using the order number above as reference.`;
-        
-        // Display bank transfer instructions
-        if (bankDetailsEl) {
-            bankDetailsEl.classList.remove('hidden');
-            console.log('[Confirmation] Displaying bank transfer instructions.');
-        }
+        // Update UI elements for successful payment
+        orderRefEl.textContent = `#${orderId}`;
+        payMethodMsgEl.textContent = `Payment was completed successfully via Paystack (Card). Your order will be shipped soon!`;
 
-    } else {
-        console.warn(`[Confirmation] Unknown payment method: ${method}`);
-        // Fallback for unknown method, keep successful state but log warning
-        orderRefEl.textContent = `#${orderId}`;
-        payMethodMsgEl.textContent = `Order successfully placed. Payment method: ${method}.`;
-    }
-    
-    // **CRITICAL**: Call function to fetch collection details using the Order ID.
-    fetchOrderCollection(orderId);
+    } else if (method === 'banktransfer') {
+        console.log('[Confirmation] Processing pending Bank Transfer order.');
+        // Pending Bank Transfer Order
+        
+        // --- 🎯 CRITICAL CART CLEARING FIXES APPLIED HERE ---
+        // Bank transfer finalization on the previous page already did the bulk of this, 
+        // but we ensure all temporary checkout data is scrubbed here too for redundancy.
+        
+        // 1. Remove ALL temporary checkout data
+        localStorage.removeItem('outflickzShippingData'); 
+        localStorage.removeItem('outflickzOrderTotal');
+        localStorage.removeItem('outflickzOrderSubtotal');
+        localStorage.removeItem('outflickzOrderShipping');
+        localStorage.removeItem('outflickzOrderTax');
+        
+        // 2. Remove the actual cart item array (LOCAL_CART_KEY)
+        localStorage.removeItem(LOCAL_CART_KEY); 
+        
+        // 3. Clear the count storage key to zero
+        localStorage.setItem(CART_STORAGE_KEY, '0');
+        
+        // 4. Clear Buy Now flag from sessionStorage
+        sessionStorage.removeItem('BUY_NOW_KEY');
+        
+        console.log('[Confirmation] Order created via Bank Transfer. Local checkout data cleared.');
 
-    // Ensure the cart badge is updated (This runs after both payment clearing paths)
-    updateCartBadge();
+        // Update UI elements for pending bank transfer
+        orderRefEl.textContent = `#${orderId}`;
+        confIconEl.classList.remove('fa-check-circle', 'text-green-500', 'animate-pulse');
+        confIconEl.classList.add('fa-clock', 'text-yellow-600');
+        confTitleEl.textContent = 'Order Created (Payment Pending)';
+        confMsgEl.textContent = 'Thank you for your order! We are now waiting for your bank transfer confirmation. You will receive an email once payment is verified.';
+        payMethodMsgEl.textContent = `You selected **Bank Transfer**. Please transfer the total amount using the order number above as reference.`;
+        
+        // Display bank transfer instructions
+        if (bankDetailsEl) {
+            bankDetailsEl.classList.remove('hidden');
+            console.log('[Confirmation] Displaying bank transfer instructions.');
+        }
+
+    } else {
+        console.warn(`[Confirmation] Unknown payment method: ${method}`);
+        // Fallback for unknown method, keep successful state but log warning
+        orderRefEl.textContent = `#${orderId}`;
+        payMethodMsgEl.textContent = `Order successfully placed. Payment method: ${method}.`;
+    }
+    
+    // ⭐ CRITICAL FIX: Wrap the API call in a setTimeout to mitigate the race condition.
+    // This gives the backend a crucial 500ms to finalize the order record in the database.
+    console.log('[Confirmation] Applying 500ms delay before fetching order details...');
+    setTimeout(() => {
+        // **CRITICAL**: Call function to fetch collection details using the Order ID.
+        fetchOrderCollection(orderId);
+    }, 500); // Wait 500 milliseconds before fetching
+
+    // Ensure the cart badge is updated (This runs after both payment clearing paths)
+    updateCartBadge();
 }
 
 // --- Main Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('--- Document Loaded: Initializing Order Confirmation Page ---');
-    // We don't need enforceAuthGate() here since this page is confirmation, 
-    // but we use the new check for the header icon
-    updateCartBadge(); 
-    updateProfileIconStatus(); // Use the new cookie-based check to update the profile icon
-    displayConfirmationDetails(); 
-    console.log('--- Initialization Complete ---');
+    console.log('--- Document Loaded: Initializing Order Confirmation Page ---');
+    // We don't need enforceAuthGate() here since this page is confirmation, 
+    // but we use the new check for the header icon
+    updateCartBadge(); 
+    updateProfileIconStatus(); // Use the new cookie-based check to update the profile icon
+    displayConfirmationDetails(); 
+    console.log('--- Initialization Complete ---');
 });
 </script>
 </body>
