@@ -738,7 +738,6 @@ function updateCartSummary(cartData) {
         clearCartBtn.disabled = true;
     }
 }
-
 /**
  * Handles quantity changes for a cart item via API (plus/minus buttons).
  */
@@ -746,16 +745,20 @@ async function changeCartQuantity(itemId, delta) {
     const input = document.getElementById(`cart-quantity-${itemId}`);
     let currentValue = parseInt(input.value) || 1;
     let newQuantity = currentValue + delta;
+    
+    // --- 🔑 FIX: Read stock limit from data attribute ---
+    const maxStock = parseInt(input.getAttribute('data-max-stock')) || Infinity;
+    const finalLimit = Math.min(5, maxStock); // Use the lesser of 5 or available stock
 
     if (newQuantity < 1) {
-        // If decreasing below 1, remove the item
         removeItemFromCart(itemId);
         return;
     }
     
-    // Check max limit (5)
-    if (newQuantity > 5) {
-        newQuantity = 5;
+    // Check against the more restrictive limit (5 or available stock)
+    if (newQuantity > finalLimit) {
+        newQuantity = finalLimit;
+        // Optionally display a message here: "Maximum quantity reached (5 or stock limit)."
     }
 
     // Optimistically update the UI
@@ -765,8 +768,6 @@ async function changeCartQuantity(itemId, delta) {
     updateItemQuantityAPI(itemId, newQuantity);
 }
 
-// --- CART LOGIC FUNCTIONS (New/Completed) ---
-
 /**
  * Handles direct quantity input changes.
  */
@@ -774,11 +775,16 @@ function updateQuantityInput(itemId, value) {
     let newQuantity = parseInt(value);
     const input = document.getElementById(`cart-quantity-${itemId}`);
     
+    // --- 🔑 FIX: Read stock limit from data attribute ---
+    const maxStock = parseInt(input.getAttribute('data-max-stock')) || Infinity;
+    const finalLimit = Math.min(5, maxStock); // Use the lesser of 5 or available stock
+
     if (isNaN(newQuantity) || newQuantity < 1) {
         newQuantity = 1; 
-    } else if (newQuantity > 5) { 
-        newQuantity = 5;
+    } else if (newQuantity > finalLimit) { // Use the calculated limit
+        newQuantity = finalLimit;
     }
+    
     // Set the sanitized value back into the input field
     input.value = newQuantity; 
     
