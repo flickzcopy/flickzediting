@@ -7050,10 +7050,12 @@ app.get('/api/orders/:orderId', verifyUserToken, async function (req, res) {
 
     try {
         // 1. Fetch the specific order document
-        const order = await Order.findOne({ 
-            _id: orderId, // Find by ID
-            userId: userId // AND ensure it belongs to the authenticated user
-        })
+       // 1. Find the order and ensure ownership and cancellable status
+const order = await Order.findOne({ 
+    // CRITICAL FIX: Query by the field storing the custom reference string, NOT _id
+    orderRef: orderId, 
+    userId: userId,
+});
         // ⭐ FIX: Ensure we select the new financial breakdown fields
         .select('+subtotal +shippingFee +tax')
         .lean();
@@ -7150,12 +7152,13 @@ app.put('/api/orders/:orderId/cancel', verifyUserToken, async (req, res) => {
         // ⭐ FIX: Must use capitalized statuses to match the Mongoose Enum definition
         const cancellableStatuses = ['Pending', 'Processing']; 
 
-        // 1. Find the order and ensure ownership and cancellable status
-        const order = await Order.findOne({ 
-            _id: orderId, 
-            userId: userId,
-            status: { $in: cancellableStatuses } // Order must be in a cancellable state
-        });
+       // 1. Find the order and ensure ownership and cancellable status
+const order = await Order.findOne({ 
+    // CRITICAL FIX: Query by the field storing the custom reference string, NOT _id
+    orderRef: orderId, 
+    userId: userId,
+    status: { $in: cancellableStatuses } 
+});
 
         if (!order) {
             // Check if the order exists but is in a non-cancellable state
