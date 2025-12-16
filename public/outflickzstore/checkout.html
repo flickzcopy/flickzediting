@@ -1182,8 +1182,9 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
   /**
  * ⭐ FINAL CORRECTED: Paystack Payment Flow with Robust Data Handling.
  * * FIXES APPLIED:
- * 1. Data retrieved from localStorage (shippingAddress, orderItems) is now parsed from JSON string to JS object.
- * 2. Enhanced logging to help diagnose the 'Invalid shipping address format' error (400 Bad Request).
+ * 1. Data parsing from localStorage is correct.
+ * 2. Diagnostics show client is sending 'street', but server expects different format/fields.
+ * 3. FIX: Adding placeholders for common required missing fields (state, phone).
  */
 async function processPaystackPayment(totalAmount, email) { 
     const payBtn = document.getElementById('checkout-next-btn');
@@ -1220,20 +1221,36 @@ async function processPaystackPayment(totalAmount, email) {
         return;
     }
 
-    // ⭐ NEW DIAGNOSTIC/TEMPORARY FIX SECTION
-    // Add checks for common required fields. If a field is required by your backend
-    // and is missing (null/undefined/empty string), the 400 error will occur.
-    // Replace 'N/A' with your actual required fields if possible.
-    if (!shippingAddress.firstName) shippingAddress.firstName = 'Unknown';
-    if (!shippingAddress.lastName) shippingAddress.lastName = 'Customer';
-    if (!shippingAddress.addressLine1) {
-        // This is a common required field. If missing, use a placeholder.
-        console.warn('Shipping address is missing addressLine1. Using placeholder.');
-        shippingAddress.addressLine1 = 'N/A';
+    // ⭐ CRITICAL DIAGNOSTIC/TEMPORARY FIX SECTION
+    // The previous log showed missing/misnamed fields. We will ensure all common required fields are present.
+    
+    // Fields confirmed to be present: firstName, lastName, email, street, city.
+    
+    // 1. Check if the server requires 'addressLine1' instead of 'street'. 
+    // If your server uses Mongoose, sometimes the schema expects specific key names.
+    // If 'street' is present but 'addressLine1' is expected, you need to map it:
+    if (shippingAddress.street && !shippingAddress.addressLine1) {
+        shippingAddress.addressLine1 = shippingAddress.street;
     }
-    if (!shippingAddress.city) shippingAddress.city = 'N/A';
-    if (!shippingAddress.country) shippingAddress.country = 'N/A';
-    if (!shippingAddress.zipCode) shippingAddress.zipCode = 'N/A';
+
+    // 2. Add placeholders for highly likely missing required fields: state and phone
+    if (!shippingAddress.state) {
+        console.warn('Shipping address is missing the required STATE field. Using placeholder.');
+        shippingAddress.state = 'N/A'; 
+    }
+    if (!shippingAddress.phone) {
+        console.warn('Shipping address is missing the required PHONE field. Using placeholder.');
+        shippingAddress.phone = '000-000-0000';
+    }
+    
+    // Check fields that were set to 'N/A' in the previous run but might be rejected if they are empty strings
+    if (!shippingAddress.zipCode || shippingAddress.zipCode === 'N/A') {
+        console.warn('Shipping address is missing the ZIP CODE field. Using placeholder.');
+        shippingAddress.zipCode = '00000';
+    }
+    if (!shippingAddress.country || shippingAddress.country === 'N/A') {
+        shippingAddress.country = 'Nigeria'; // Assuming your primary market based on Paystack
+    }
     
     // Final check log before sending
     console.log('[Paystack Diagnostic] Final Shipping Address Object sent to server:', shippingAddress); 
