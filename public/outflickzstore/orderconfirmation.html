@@ -236,6 +236,14 @@
     </a>
     
 <script>    
+
+/**
+ * Retrieves the JWT token from localStorage.
+ */
+function getAuthToken() {
+    return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
 // Function to be called when the user clicks the Profile button
 async function redirectToProfileOrLogin() {
     const token = localStorage.getItem('userAccessToken');
@@ -300,6 +308,24 @@ function enforceAuthGate() {
         console.error('Initial Auth Check Failed (Network Error):', error);
         window.location.replace('useraccount.html');
     });
+}
+/**
+ * Checks if the user is logged in by attempting to validate the session cookie 
+ * against the server's status endpoint.
+ */
+async function isUserLoggedIn() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
+            method: 'GET',
+            credentials: 'include' // Must send the cookie
+        });
+        // 200 OK means the session cookie is valid
+        return response.status === 200;
+    } catch (error) {
+        // Network error, assume logged out or session cannot be verified
+        console.error("Auth status check failed:", error);
+        return false; 
+    }
 }
 
 /**
