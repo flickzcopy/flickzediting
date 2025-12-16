@@ -236,74 +236,97 @@
     </a>
     
 <script>
+
+    
+// Function to be called when the user clicks the Profile button
+async function redirectToProfileOrLogin() {
+    const token = localStorage.getItem('userAccessToken');
+    const headers = token 
+        ? { 'Authorization': `Bearer ${token}` } 
+        : {}; // If no token, headers is empty
+    
+    // NOTE: This approach requires your /api/auth/status endpoint to 
+    // accept the Authorization: Bearer header.
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
+            method: 'GET',
+            headers: headers, // <-- NEW: Sends the Access Token
+            credentials: 'include' // Still sends the cookie if the browser allows it
+        });
+
+        // If the Access Token is valid, we get 200 immediately.
+        if (response.status === 200) {
+            console.log("Profile click: Auth check successful via Token/Cookie. Redirecting to userprofile.html");
+            window.location.href = 'userprofile.html'; 
+            
+        } else if (response.status === 401 || response.status === 403) {
+            // The Access Token or Cookie Session is invalid/missing.
+            console.warn(`Profile click: Auth check failed (Status ${response.status}). Redirecting to useraccount.html`);
+            
+            // Note: Since this fetch is simple, it doesn't auto-refresh the token like secureUserFetch.
+            // If the 401 is due to an expired Access Token, the subsequent fetchUserData on the profile page
+            // will catch the 401 and attempt the secure cookie refresh.
+            
+            window.location.href = 'useraccount.html';
+        } else {
+            console.error(`Profile click: Unexpected status ${response.status}. Redirecting to useraccount.html`);
+            window.location.href = 'useraccount.html';
+        }
+
+    } catch (error) {
+        // Network failure
+        console.error('Authentication status check failed (Network Error):', error);
+        window.location.href = 'useraccount.html';
+    }
+}
+
+// 2. **CRITICAL SECURITY GATE**: Enforces redirect immediately on page load
+//    if the user is not authenticated.
+function enforceAuthGate() {
+    fetch(`${API_BASE_URL}/api/auth/status`, { 
+        method: 'GET',
+        credentials: 'include' // <-- CRITICAL FIX: Ensures the secure cookie is sent.
+    })
+    .then(response => {
+        if (response.status !== 200) {
+            // If not authenticated, redirect to login page (use replace to disable back button)
+            console.warn(`Auth gate failed (Status ${response.status}). Redirecting.`);
+            window.location.replace('useraccount.html');
+        } else {
+             console.log("Auth gate passed (Status 200). User session confirmed.");
+        }
+    })
+    .catch(error => {
+        // Treat network failure as unauthenticated/unverified
+        console.error('Initial Auth Check Failed (Network Error):', error);
+        window.location.replace('useraccount.html');
+    });
+}
+
+/**
+ * CONCEPTUAL: This function should be called ONLY after a successful login API response 
+ * from your server (in useraccount.html). It sets the login flag and redirects 
+ * to the homepage (or profile).
+ */
+function onSuccessfulLogin() {
+    // Save the login state to the browser's storage
+    localStorage.setItem('isLoggedIn', 'true');
+    console.log("Login successful! isLoggedIn set to true.");
+
+    // Redirect the user to the homepage after login
+    window.location.href = 'homepage.html'; 
+}
+
+
 // Global constants
 const LOCAL_TAX_RATE = 0.00; 
 const LOCAL_CART_KEY = 'outflickzLocalCart'; 
 const CART_STORAGE_KEY = 'outflickzCartCount';
+const AUTH_TOKEN_KEY = 'userAccessToken';
+const REFRESH_ENDPOINT = `${API_BASE_URL}/api/auth/refresh`;
 const CURRENCY_SYMBOL = '₦'; 
 const API_BASE_URL = 'https://outflickzz.netlify.app';
-
-// =================================================================
-// 🚀 AUTHENTICATION & UTILITY FUNCTIONS
-// =================================================================
-
-/**
- * Retrieves the user's JWT token from local storage (used for specific data APIs like orders).
- * @returns {string | null} The JWT token or null if not found.
- */
-function getAuthToken() {
-    const token = localStorage.getItem('outflickzAuthToken');
-    console.log(`[Auth] Retrieved token: ${token ? 'Present (***' + token.substring(token.length - 4) + ')' : 'Missing'}`);
-    return token ? token.trim() : null; 
-}
-
-/**
- * Checks the user's authentication status via the API (/api/auth/status) 
- * which relies on the HTTP-only cookie for proof of session.
- * @returns {boolean} True if the API returns 200, false otherwise.
- */
-async function isUserLoggedIn() {
-    try {
-        console.log('[Auth] Checking login status via /api/auth/status (Cookie check)...');
-        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
-            method: 'GET'
-        });
-        const status = response.status === 200;
-        console.log(`[Auth] Status check complete. Response status: ${response.status}. Logged in: ${status}`);
-        return status;
-    } catch (error) {
-        // Treat network errors as logged out
-        console.error('[Auth] isUserLoggedIn check failed:', error);
-        return false;
-    }
-}
-
-/**
- * Checks the user's authentication status and redirects to the appropriate page.
- * Uses the new HTTP-only cookie check.
- */
-async function redirectToProfileOrLogin() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
-            method: 'GET'
-        });
-
-        if (response.status === 200) {
-            console.log('[Redirect] User is logged in (Cookie valid). Redirecting to userprofile.html.');
-            // Server confirms user is authenticated (Cookie is valid)
-            window.location.href = 'userprofile.html'; 
-        } else {
-            console.log('[Redirect] User is NOT logged in (Cookie invalid/missing). Redirecting to useraccount.html.');
-            // Server returned 401/403 (Cookie is missing or expired)
-            window.location.href = 'useraccount.html';
-        }
-
-    } catch (error) {
-        // Handle network errors
-        console.error('[Redirect] Authentication status check failed:', error);
-        window.location.href = 'useraccount.html';
-    }
-}
 
 
 /**
