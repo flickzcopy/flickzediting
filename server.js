@@ -7038,103 +7038,103 @@ app.get('/api/orders/history', verifyUserToken, async (req, res) => {
 });
 // 6. GET /api/orders/:orderId (Fetch Single Order Details - Protected)
 app.get('/api/orders/:orderId', verifyUserToken, async function (req, res) {
-    const orderId = req.params.orderId; // This is the user-facing reference (e.g., 'outflickz_1765...')
-    const userId = req.userId; // Set by verifyUserToken middleware
+    const orderId = req.params.orderId; // This is the user-facing reference (e.g., 'outflickz_1765...')
+    const userId = req.userId; // Set by verifyUserToken middleware
 
-    if (!orderId) {
-        return res.status(400).json({ message: 'Order ID is required.' });
-    }
-    if (!userId) {
-        return res.status(401).json({ message: 'Authentication required.' });
-    }
+    if (!orderId) {
+        return res.status(400).json({ message: 'Order ID is required.' });
+    }
+    if (!userId) {
+        return res.status(401).json({ message: 'Authentication required.' });
+    }
 
-    try {
-        // 1. Fetch the specific order document
-        const order = await Order.findOne({ 
-            // 🛑 CRITICAL FIX: Query using the 'orderRef' field, which stores the custom ID 
-            // used by both Paystack and Bank Transfer completion paths.
-            orderRef: orderId, 
-            userId: userId, // AND ensure it belongs to the authenticated user
-        })
-        // ⭐ FIX: Ensure we select the new financial breakdown fields
-        .select('+subtotal +shippingFee +tax')
-        .lean();
+    try {
+        // 1. Fetch the specific order document
+        const order = await Order.findOne({ 
+            // 🛑 CRITICAL FIX: CHANGED FIELD NAME from 'orderRef' to 'orderReference' 
+            // to match what is saved in the database by the POST route.
+            orderReference: orderId, 
+            userId: userId, // AND ensure it belongs to the authenticated user
+        })
+        // ⭐ FIX: Ensure we select the new financial breakdown fields
+        .select('+subtotal +shippingFee +tax')
+        .lean();
 
-        if (!order) {
-            // This handles cases where the orderRef is valid but not found, or doesn't belong to the user.
-            return res.status(404).json({ message: 'Order not found or access denied.' });
-        }
-        
-        // 🛑 CRITICAL FIX: Prevent 500 error if 'items' array is missing or corrupted
-        if (!order.items || !Array.isArray(order.items)) {
-            console.error(`[OrderDetails Error] Order ID ${orderId} found but is missing the 'items' array. Returning 422.`);
-            // Returning 422 (Unprocessable Entity) indicates the data structure is corrupt.
-            return res.status(422).json({ message: 'Order data is incomplete or corrupted.' });
-        }
+        if (!order) {
+            // This handles cases where the orderReference is valid but not found, or doesn't belong to the user.
+            return res.status(404).json({ message: 'Order not found or access denied.' });
+        }
+        
+        // 🛑 CRITICAL FIX: Prevent 500 error if 'items' array is missing or corrupted
+        if (!order.items || !Array.isArray(order.items)) {
+            console.error(`[OrderDetails Error] Order ID ${orderId} found but is missing the 'items' array. Returning 422.`);
+            // Returning 422 (Unprocessable Entity) indicates the data structure is corrupt.
+            return res.status(422).json({ message: 'Order data is incomplete or corrupted.' });
+        }
 
-        // 2. Fetch Display Details for each item (Product Name, Image, etc.)
-        const productDetailsPromises = order.items.map(async (item) => {
-            // Use a copy of the item object for mutation
-            let displayItem = { ...item };
-            
-            // Prioritize saved data for name/image consistency at time of purchase
-            if (item.name && item.imageUrl) {
-                // If the order item already contains the name and image (which it should now)
-                displayItem.sku = `SKU-${item.productType.substring(0,3).toUpperCase()}-${item.size || 'UNK'}`;
-                delete displayItem._id; 
-                return displayItem;
-            }
-            
-            // Fallback to fetching product details if necessary (e.g., for old orders)
-            const Model = productModels[item.productType];
-            
-            if (!Model) {
-                console.warn(`[OrderDetails] Unknown product type: ${item.productType}`);
-                displayItem.name = item.name || 'Product Not Found';
-                displayItem.imageUrl = item.imageUrl || 'https://via.placeholder.com/150/CCCCCC/FFFFFF?text=Error';
-                displayItem.sku = 'N/A';
-            } else {
-                // Find the original product to get the display details
-                const product = await Model.findById(item.productId)
-                    .select('name imageUrls') // Only need display data
-                    .lean();
+        // 2. Fetch Display Details for each item (Product Name, Image, etc.)
+        const productDetailsPromises = order.items.map(async (item) => {
+            // Use a copy of the item object for mutation
+            let displayItem = { ...item };
+            
+            // Prioritize saved data for name/image consistency at time of purchase
+            if (item.name && item.imageUrl) {
+                // If the order item already contains the name and image (which it should now)
+                displayItem.sku = `SKU-${item.productType.substring(0,3).toUpperCase()}-${item.size || 'UNK'}`;
+                delete displayItem._id; 
+                return displayItem;
+            }
+            
+            // Fallback to fetching product details if necessary (e.g., for old orders)
+            const Model = productModels[item.productType];
+            
+            if (!Model) {
+                console.warn(`[OrderDetails] Unknown product type: ${item.productType}`);
+                displayItem.name = item.name || 'Product Not Found';
+                displayItem.imageUrl = item.imageUrl || 'https://via.placeholder.com/150/CCCCCC/FFFFFF?text=Error';
+                displayItem.sku = 'N/A';
+            } else {
+                // Find the original product to get the display details
+                const product = await Model.findById(item.productId)
+                    .select('name imageUrls') // Only need display data
+                    .lean();
 
-                displayItem.name = item.name || (product ? product.name : 'Product Deleted');
-                // Use the saved imageUrl if available, otherwise fallback to the first product image
-                displayItem.imageUrl = item.imageUrl || (product && product.imageUrls && product.imageUrls.length > 0 ? product.imageUrls[0] : 'https://via.placeholder.com/150/CCCCCC/FFFFFF?text=No+Image');
-                displayItem.sku = `SKU-${item.productType.substring(0,3).toUpperCase()}-${item.size || 'UNK'}`;
-            }
-            
-            // Clean up the Mongoose virtual _id field before sending
-            delete displayItem._id; 
-            
-            return displayItem;
-        });
+                displayItem.name = item.name || (product ? product.name : 'Product Deleted');
+                // Use the saved imageUrl if available, otherwise fallback to the first product image
+                displayItem.imageUrl = item.imageUrl || (product && product.imageUrls && product.imageUrls.length > 0 ? product.imageUrls[0] : 'https://via.placeholder.com/150/CCCCCC/FFFFFF?text=No+Image');
+                displayItem.sku = `SKU-${item.productType.substring(0,3).toUpperCase()}-${item.size || 'UNK'}`;
+            }
+            
+            // Clean up the Mongoose virtual _id field before sending
+            delete displayItem._id; 
+            
+            return displayItem;
+        });
 
-        // Resolve all concurrent product detail fetches
-        const populatedItems = await Promise.all(productDetailsPromises);
-        
-        // 3. Construct the final response object, now correctly reading the financial breakdown
-        const finalOrderDetails = {
-            ...order,
-            items: populatedItems,
-            // ⭐ FIX/UPDATE: Read the actual stored financial breakdown, falling back to stored data/zero if undefined
-            // If subtotal is undefined, approximate it by subtracting fees from the total amount.
-            subtotal: order.subtotal !== undefined 
-                ? order.subtotal 
-                : (order.totalAmount - (order.shippingFee || 0.00) - (order.tax || 0.00)), 
-            shippingFee: order.shippingFee || 0.00, 
-            tax: order.tax || 0.00 
-        };
+        // Resolve all concurrent product detail fetches
+        const populatedItems = await Promise.all(productDetailsPromises);
+        
+        // 3. Construct the final response object, now correctly reading the financial breakdown
+        const finalOrderDetails = {
+            ...order,
+            items: populatedItems,
+            // ⭐ FIX/UPDATE: Read the actual stored financial breakdown, falling back to stored data/zero if undefined
+            // If subtotal is undefined, approximate it by subtracting fees from the total amount.
+            subtotal: order.subtotal !== undefined 
+                ? order.subtotal 
+                : (order.totalAmount - (order.shippingFee || 0.00) - (order.tax || 0.00)), 
+            shippingFee: order.shippingFee || 0.00, 
+            tax: order.tax || 0.00 
+        };
 
-        // 4. Send the populated details to the frontend
-        res.status(200).json(finalOrderDetails);
+        // 4. Send the populated details to the frontend
+        res.status(200).json(finalOrderDetails);
 
-    } catch (error) {
-        console.error('Error fetching order details:', error);
-        // This catch block now handles database connection errors, timeouts, etc.
-        res.status(500).json({ message: 'Failed to retrieve order details due to a server error.' });
-    }
+    } catch (error) {
+        console.error('Error fetching order details:', error);
+        // This catch block now handles database connection errors, timeouts, etc.
+        res.status(500).json({ message: 'Failed to retrieve order details due to a server error.' });
+    }
 });
 
 // =========================================================
