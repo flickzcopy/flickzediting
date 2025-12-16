@@ -7036,7 +7036,6 @@ app.get('/api/orders/history', verifyUserToken, async (req, res) => {
         });
     }
 });
-
 // 6. GET /api/orders/:orderId (Fetch Single Order Details - Protected)
 app.get('/api/orders/:orderId', verifyUserToken, async function (req, res) {
     const orderId = req.params.orderId;
@@ -7061,6 +7060,13 @@ app.get('/api/orders/:orderId', verifyUserToken, async function (req, res) {
 
         if (!order) {
             return res.status(404).json({ message: 'Order not found or access denied.' });
+        }
+        
+        // 🛑 CRITICAL FIX: Prevent 500 error if 'items' array is missing or corrupted
+        if (!order.items || !Array.isArray(order.items)) {
+            console.error(`[OrderDetails Error] Order ID ${orderId} found but is missing the 'items' array. Returning 422.`);
+            // Returning 422 (Unprocessable Entity) indicates the data structure is corrupt.
+            return res.status(422).json({ message: 'Order data is incomplete or corrupted.' });
         }
 
         // 2. Fetch Display Details for each item (Product Name, Image, etc.)
@@ -7123,6 +7129,7 @@ app.get('/api/orders/:orderId', verifyUserToken, async function (req, res) {
 
     } catch (error) {
         console.error('Error fetching order details:', error);
+        // This catch block now handles database connection errors, timeouts, etc.
         res.status(500).json({ message: 'Failed to retrieve order details due to a server error.' });
     }
 });
