@@ -237,7 +237,6 @@
     
 <script>    
 
-
 // Function to be called when the user clicks the Profile button
 async function redirectToProfileOrLogin() {
     const token = localStorage.getItem('userAccessToken');
@@ -516,7 +515,7 @@ async function fetchOrderCollection(orderId) {
     const priceSummaryEl = document.getElementById('price-summary');
     
     // Get the Local Storage JWT token
-    const token = getAuthToken();
+const token = localStorage.getItem(AUTH_TOKEN_KEY);
     
     // Helper function to render login prompt
     const renderLoginPrompt = (isExpired = false) => {
