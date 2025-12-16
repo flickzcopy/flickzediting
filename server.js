@@ -334,18 +334,22 @@ async function generateHashAndSaveVerificationCode(user) {
 }
 
 /**
- * Utility function to format a number as Naira (NGN) currency.
- * @param {number} amount The amount in NGN (base currency).
+ * Helper function for currency formatting (NGN)
+ * NOTE: This function needs to be available in the scope where generateOrderEmailHtml is used.
+ * @param {number} amount - The amount in Naira (NGN).
  * @returns {string} The formatted currency string.
  */
 function formatCurrency(amount) {
     if (typeof amount !== 'number' || isNaN(amount)) {
-        return '₦0.00';
+        // Handle null, undefined, or non-numeric inputs gracefully
+        return '₦ 0.00'; 
     }
-    // Using Intl.NumberFormat for robust currency display
-    return new Intl.NumberFormat('en-NG', {
-        style: 'currency',
-        currency: 'NGN'
+    // Formats as Naira (₦), using the 'en-NG' locale for Nigerian currency representation
+    return new Intl.NumberFormat('en-NG', { 
+        style: 'currency', 
+        currency: 'NGN',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
     }).format(amount);
 }
 
@@ -1117,6 +1121,7 @@ const OrderSchema = new mongoose.Schema({
             'Delivered',
             'Cancelled',
             'Confirmed',
+            'Completed',
             'Refunded',
             'Verification Failed', 
             'Amount Mismatch (Manual Review)',
@@ -1591,6 +1596,131 @@ async function processOrderCompletion(orderId, adminId) {
     }
 }
 
+// ====================================================================================
+// NEW: DEDUCT INVENTORY AND MARK ORDER AS COMPLETED (For Webhooks/Automation)
+// ====================================================================================
+/**
+ * Executes the inventory deduction and sets the order status to 'Completed'.
+ * This is designed to be called by automated systems like webhooks.
+ * @param {string} orderId The ID of the order to complete.
+ * @returns {Promise<Object>} The completed order object.
+ * @throws {Error} Throws an error if stock is insufficient or a race condition is detected.
+ */
+async function deductInventoryAtomic(orderId) {
+    // 1. Start a Mongoose session for atomicity (crucial for inventory)
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    let order = null;
+    let OrderModel;
+
+    try {
+        OrderModel = mongoose.models.Order || mongoose.model('Order');
+        order = await OrderModel.findById(orderId).session(session);
+
+        // CRITICAL CHECK: Only process orders in 'Pending' or 'Processing' state
+        if (!order || order.status === 'Completed' || order.status === 'Confirmed') {
+            await session.abortTransaction();
+            const raceError = new Error(`Order ${orderId} status is ${order?.status || 'N/A'}. Inventory deduction skipped.`);
+            raceError.isRaceCondition = true;
+            throw raceError;
+        }
+
+        // --- 2. LOOP THROUGH ITEMS AND DEDUCT STOCK (Paste your existing loop logic here) ---
+        for (const item of order.items) {
+             // ... (The entire stock deduction logic from processOrderCompletion) ...
+             const ProductModel = getProductModel(item.productType); 
+             const quantityOrdered = item.quantity;
+             let updatedProduct;
+             let errorMsg;
+             
+             // --- Group 1: Items with nested 'sizes' array (Wears, NewArrivals, PreOrder) ---
+             if (item.productType === 'WearsCollection' || item.productType === 'NewArrivals' || item.productType === 'PreOrderCollection') {
+                 if (!item.size) { 
+                     errorMsg = `Missing size information for size-based product ${item.productId} in ${item.productType}.`;
+                     throw new Error(errorMsg);
+                 }
+                 updatedProduct = await ProductModel.findOneAndUpdate(
+                     {
+                         _id: item.productId,
+                         'variations.variationIndex': item.variationIndex 
+                     },
+                     {
+                         $inc: {
+                             'variations.$[var].sizes.$[size].stock': -quantityOrdered, 
+                             'totalStock': -quantityOrdered 
+                         }
+                     },
+                     {
+                         new: true,
+                         session: session, 
+                         arrayFilters: [
+                             { 'var.variationIndex': item.variationIndex }, 
+                             { 'size.size': item.size, 'size.stock': { $gte: quantityOrdered } } 
+                         ]
+                     }
+                 );
+             // --- Group 2: Items with direct 'stock' on variation (CapCollection) ---
+             } else if (item.productType === 'CapCollection') {
+                 updatedProduct = await ProductModel.findOneAndUpdate(
+                     {
+                         _id: item.productId,
+                         'variations': {
+                             $elemMatch: {
+                                 variationIndex: item.variationIndex,
+                                 stock: { $gte: quantityOrdered } 
+                             }
+                         }
+                     },
+                     {
+                         $inc: {
+                             'variations.$[var].stock': -quantityOrdered, 
+                             'totalStock': -quantityOrdered 
+                         }
+                     },
+                     {
+                         new: true,
+                         session: session, 
+                         arrayFilters: [
+                             { 'var.variationIndex': item.variationIndex } 
+                         ]
+                     }
+                 );
+             } else {
+                 errorMsg = `Unsupported product type found: ${item.productType}. Inventory deduction aborted.`;
+                 throw new Error(errorMsg);
+             }
+
+             if (!updatedProduct) {
+                 const sizeLabel = item.productType === 'CapCollection' ? 'N/A (Direct Stock)' : item.size;
+                 const finalErrorMsg = `Insufficient stock or product data mismatch for item: ${sizeLabel} of product ${item.productId} in ${item.productType}. Transaction aborted.`;
+                 throw new Error(finalErrorMsg);
+             }
+        }
+        // --- END STOCK DEDUCTION LOOP ---
+
+        // 3. Update order status to a final state (e.g., 'Completed')
+        order.status = 'Completed'; // Use 'Completed' to distinguish from Admin 'Confirmed'
+        order.completedAt = new Date(); 
+        await order.save({ session });
+
+        // 4. Finalize transaction
+        await session.commitTransaction();
+        return order.toObject({ getters: true });
+
+    } catch (error) {
+        if (session.inTransaction()) {
+            await session.abortTransaction();
+        }
+        if (!error.isRaceCondition && order) { 
+            // Reuse the rollback function for failures
+            await inventoryRollback(orderId, error.message);
+        }
+        throw error;
+    } finally {
+        session.endSession();
+    }
+}
+
 /**
  * Retrieves all orders for the admin sales log.
  * Populates the userId field to get customer information.
@@ -1615,6 +1745,135 @@ async function getAllOrders() {
     } catch (error) {
         console.error('Error in getAllOrders:', error);
         throw new Error('Database query failed for sales log.');
+    }
+}
+
+/**
+ * Executes the inventory deduction atomically and sets the order status to 'Completed'.
+ * This is designed to be called by automated systems like webhooks.
+ * @param {string} orderId The ID of the order to complete.
+ * @param {object} transactionData The transaction data from Paystack (for logging TXN ID).
+ * @returns {Promise<Object>} The completed order object.
+ * @throws {Error} Throws an error if stock is insufficient or a race condition is detected.
+ */
+async function deductInventoryAndCompleteOrder(orderId, transactionData) {
+    // 1. Start a Mongoose session for atomicity (crucial for inventory)
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    let order = null;
+    let OrderModel;
+
+    try {
+        OrderModel = mongoose.models.Order || mongoose.model('Order');
+        // Fetch the order within the transaction
+        order = await OrderModel.findById(orderId).session(session);
+
+        // CRITICAL CHECK: Only process orders in 'Pending' or 'Processing' state
+        const isReadyForInventory = order && 
+            (order.status === 'Pending' || order.status === 'Processing');
+
+        if (!isReadyForInventory) {
+            await session.abortTransaction();
+            const currentStatus = order?.status || 'N/A';
+            const raceError = new Error(`Order ${orderId} is already finalized (Status: ${currentStatus}). Inventory deduction skipped.`);
+            raceError.isRaceCondition = true;
+            throw raceError;
+        }
+
+        // --- 2. LOOP THROUGH ITEMS AND DEDUCT STOCK (Atomic Update Logic) ---
+        for (const item of order.items) {
+             const ProductModel = getProductModel(item.productType); 
+             const quantityOrdered = item.quantity;
+             let updatedProduct;
+             let errorMsg;
+             
+             // --- Group 1: Size-based items (Wears, NewArrivals, PreOrder) ---
+             if (item.productType === 'WearsCollection' || item.productType === 'NewArrivals' || item.productType === 'PreOrderCollection') {
+                 if (!item.size) { 
+                     errorMsg = `Missing size for product ${item.productId} in ${item.productType}.`;
+                     throw new Error(errorMsg);
+                 }
+                 updatedProduct = await ProductModel.findOneAndUpdate(
+                     {
+                         _id: item.productId,
+                         'variations.variationIndex': item.variationIndex 
+                     },
+                     {
+                         $inc: {
+                             'variations.$[var].sizes.$[size].stock': -quantityOrdered, 
+                             'totalStock': -quantityOrdered 
+                         }
+                     },
+                     {
+                         new: true,
+                         session: session, 
+                         arrayFilters: [
+                             { 'var.variationIndex': item.variationIndex }, 
+                             { 'size.size': item.size, 'size.stock': { $gte: quantityOrdered } } 
+                         ]
+                     }
+                 );
+             // --- Group 2: Direct-stock items (CapCollection) ---
+             } else if (item.productType === 'CapCollection') {
+                 updatedProduct = await ProductModel.findOneAndUpdate(
+                     {
+                         _id: item.productId,
+                         'variations': {
+                             $elemMatch: {
+                                 variationIndex: item.variationIndex,
+                                 stock: { $gte: quantityOrdered } 
+                             }
+                         }
+                     },
+                     {
+                         $inc: {
+                             'variations.$[var].stock': -quantityOrdered, 
+                             'totalStock': -quantityOrdered 
+                         }
+                     },
+                     {
+                         new: true,
+                         session: session, 
+                         arrayFilters: [
+                             { 'var.variationIndex': item.variationIndex } 
+                         ]
+                     }
+                 );
+             } else {
+                 errorMsg = `Unsupported product type: ${item.productType}.`;
+                 throw new Error(errorMsg);
+             }
+
+             if (!updatedProduct) {
+                 const sizeLabel = item.productType === 'CapCollection' ? 'N/A (Direct Stock)' : item.size;
+                 const finalErrorMsg = `Insufficient stock or product mismatch for item: ${sizeLabel} of product ${item.productId}.`;
+                 throw new Error(finalErrorMsg);
+             }
+        }
+        // --- END STOCK DEDUCTION LOOP ---
+
+        // 3. Update order status to final 'Completed' state (the webhook final status)
+        order.status = 'Completed'; 
+        order.completedAt = new Date();
+        order.paymentTxnId = transactionData.id; // Log TXN ID
+        order.paidAt = new Date(); // Log paid time
+        await order.save({ session });
+
+        // 4. Finalize transaction
+        await session.commitTransaction();
+        return order.toObject({ getters: true });
+
+    } catch (error) {
+        if (session.inTransaction()) {
+            await session.abortTransaction();
+        }
+        if (!error.isRaceCondition && order) { 
+            // Call rollback for genuine stock/data failures
+            await inventoryRollback(orderId, error.message);
+        }
+        throw error;
+    } finally {
+        session.endSession();
     }
 }
 
@@ -2872,52 +3131,97 @@ app.get('/api/admin/users/:userId/orders', verifyToken, async (req, res) => {
     }
 });
 
-
 // =========================================================
 // 8. GET /api/admin/orders/pending - Fetch All Pending Orders (Admin Protected)
+//    (For Bank Transfers or Orders that require Manual Review)
 // =========================================================
 app.get('/api/admin/orders/pending', verifyToken, async (req, res) => {
-    try {
-        // Find all orders where the status is 'Pending'
-        const pendingOrders = await Order.find({ status: 'Pending' })
-            .select('_id userId totalAmount createdAt status paymentMethod paymentReceiptUrl subtotal shippingFee tax')
-            .sort({ createdAt: 1 })
-            .lean();
+    try {
+        // Find all orders where the status is 'Pending'
+        // These are typically Bank Transfer orders waiting for manual confirmation.
+        const pendingOrders = await Order.find({ status: 'Pending' })
+            .select('_id userId totalAmount createdAt status paymentMethod paymentReceiptUrl subtotal shippingFee tax')
+            .sort({ createdAt: 1 })
+            .lean();
 
-        // 1. Get User Details for each pending order (for 'Customer' column)
-        const populatedOrders = await Promise.all(
-            pendingOrders.map(async (order) => {
-                const user = await User.findById(order.userId)
-                    // ✅ FIX 1: Select nested fields from the 'profile' subdocument
-                    .select('profile.firstName profile.lastName email') 
-                    .lean();
+        // 1. Get User Details for each pending order (for 'Customer' column)
+        const populatedOrders = await Promise.all(
+            pendingOrders.map(async (order) => {
+                const user = await User.findById(order.userId)
+                    .select('profile.firstName profile.lastName email') 
+                    .lean();
 
-                // ✅ FIX 2: Access nested fields safely
-                const firstName = user?.profile?.firstName;
-                const lastName = user?.profile?.lastName;
-                
-                // Construct userName: Use full name if both exist, otherwise fall back to email
-                const userName = (firstName && lastName) 
-                    ? `${firstName} ${lastName}` 
-                    : user?.email || 'N/A'; // Final fallback to email or 'N/A'
-                
-                const email = user ? user.email : 'Unknown User';
-                
-                return {
-                    ...order,
-                    userName: userName, // Added for the Admin table
-                    email: email,       // Added for the Admin table
-                };
-            })
-        );
+                const firstName = user?.profile?.firstName;
+                const lastName = user?.profile?.lastName;
+                
+                const userName = (firstName && lastName) 
+                    ? `${firstName} ${lastName}` 
+                    : user?.email || 'N/A';
+                
+                const email = user ? user.email : 'Unknown User';
+                
+                return {
+                    ...order,
+                    userName: userName,
+                    email: email,
+                };
+            })
+        );
 
-        // Send the complete list of pending orders
-        res.status(200).json(populatedOrders);
+        // Send the complete list of pending orders
+        res.status(200).json(populatedOrders);
 
-    } catch (error) {
-        console.error('Error fetching pending orders:', error);
-        res.status(500).json({ message: 'Failed to retrieve pending orders.' });
-    }
+    } catch (error) {
+        console.error('Error fetching pending orders:', error);
+        res.status(500).json({ message: 'Failed to retrieve pending orders.' });
+    }
+});
+
+// =========================================================
+// 8c. GET /api/admin/orders/confirmed - Fetch Confirmed/Processing Orders (Admin Protected)
+// =========================================================
+app.get('/api/admin/orders/confirmed', verifyToken, async (req, res) => {
+    try {
+        // Find orders that are ready for fulfillment (Confirmed or Processing)
+        // Processing status might exist briefly before Confirmed.
+        const confirmedOrders = await Order.find({ 
+                status: { $in: ['Confirmed', 'Shipped', 'Delivered'] } // View all fulfilled/in-process
+            })
+            .select('_id userId totalAmount createdAt status paymentMethod orderReference subtotal shippingFee tax')
+            .sort({ createdAt: -1 }) // Show most recent first
+            .lean();
+
+        // 1. Get User Details for each confirmed order
+        const populatedOrders = await Promise.all(
+            confirmedOrders.map(async (order) => {
+                const user = await User.findById(order.userId)
+                    .select('profile.firstName profile.lastName email') 
+                    .lean();
+
+                const firstName = user?.profile?.firstName;
+                const lastName = user?.profile?.lastName;
+                
+                const userName = (firstName && lastName) 
+                    ? `${firstName} ${lastName}` 
+                    : user?.email || 'N/A';
+                
+                const email = user ? user.email : 'Unknown User';
+                
+                return {
+                    ...order,
+                    userName: userName,
+                    email: email,
+                };
+            })
+        );
+
+        // Send the complete list of confirmed orders
+        res.status(200).json(populatedOrders);
+
+    } catch (error) {
+        console.error('Error fetching confirmed orders:', error);
+        res.status(500).json({ message: 'Failed to retrieve confirmed orders.' });
+    }
 });
 
 // =========================================================
@@ -6033,7 +6337,6 @@ app.delete('/api/users/cart', verifyUserToken, async (req, res) => {
 // 7. POST /api/paystack/webhook - Handle Paystack Notifications
 app.post('/api/paystack/webhook', async (req, res) => {
     // 1. Verify Webhook Signature (Security Crucial)
-    // NOTE: req.body must be the raw buffer for signature calculation!
     const secret = PAYSTACK_SECRET_KEY;
     const hash = crypto.createHmac('sha512', secret)
         .update(req.body) 
@@ -6045,7 +6348,6 @@ app.post('/api/paystack/webhook', async (req, res) => {
     }
 
     // Convert raw body buffer to JSON object for processing
-    // NOTE: If using Express, ensure you have middleware to handle the raw body buffer for verification
     const event = JSON.parse(req.body.toString());
 
     // 2. Check Event Type
@@ -6069,6 +6371,7 @@ app.post('/api/paystack/webhook', async (req, res) => {
 
         if (verificationData.status !== true || verificationData.data.status !== 'success') {
             console.error('Transaction verification failed via API:', verificationData);
+            // Non-blocking status update
             await Order.findOne({ orderReference })
                 .then(order => order && Order.findByIdAndUpdate(order._id, { status: 'Verification Failed' }));
             return res.status(200).send('Transaction status not success upon verification.');
@@ -6091,45 +6394,53 @@ app.post('/api/paystack/webhook', async (req, res) => {
             return res.status(200).send('Amount mismatch, requires manual review.');
         }
 
-        if (order.status === 'Paid') {
-            return res.status(200).send('Order already processed.');
+        // CRITICAL FIX: Check for any final state before proceeding to atomic inventory deduction
+        if (order.status === 'Completed' || order.status === 'Confirmed') {
+            return res.status(200).send('Order already successfully processed.');
         }
 
-        // 6. Update Order Status and Clear Cart
-        // Perform the update first to persist the crucial status change
-        await Order.findByIdAndUpdate(order._id, {
-            status: 'Paid',
-            paymentTxnId: transactionData.id,
-            paidAt: new Date(),
-        });
-
-        // Clear the user's cart after successful payment
+        // 6. CRITICAL FIX: ATOMIC INVENTORY DEDUCTION AND STATUS UPDATE
+        let completedOrder;
+        try {
+            // Call the new atomic function to deduct inventory and set status to 'Completed'
+            completedOrder = await deductInventoryAndCompleteOrder(order._id, transactionData);
+            
+        } catch (error) {
+            if (error.isRaceCondition) {
+                console.warn(`Webhook ignored: ${error.message}`);
+                return res.status(200).send('Order already finalized by a concurrent process.');
+            }
+            console.error(`🔴 CRITICAL INVENTORY ERROR for order ${order._id}:`, error.message);
+            // If this fails, the order status has been set to 'Inventory Failure (Manual Review)' by the atomic function.
+            // Return 200 to Paystack so they stop retrying a failing business logic.
+            return res.status(200).send('Webhook received but inventory deduction failed. Requires manual review.');
+        }
+        
+        // 7. Clear the user's cart after successful atomic completion
         await Cart.findOneAndUpdate(
             { userId: order.userId },
             { items: [], updatedAt: Date.now() }
         );
         
-        // 7. CRITICAL: SEND CONFIRMATION EMAIL
-        // We need the full order object for the email template
-        const updatedOrder = await Order.findById(order._id); 
-        if (updatedOrder) {
-            await sendOrderConfirmationEmail(updatedOrder, 'paid'); 
+        // 8. SEND CONFIRMATION EMAIL
+        if (completedOrder) {
+            await sendOrderConfirmationEmail(completedOrder, 'completed'); 
         } else {
-            console.error(`Could not re-fetch order ${order._id} for email.`);
+            console.error(`Could not re-fetch completed order object for email.`);
         }
 
-        console.log(`Order ${order._id} successfully marked as Paid, cart cleared, and confirmation email triggered.`);
+        console.log(`Order ${order._id} successfully marked as Completed, inventory deducted, cart cleared, and confirmation email triggered.`);
         
-        // 8. Success response to Paystack
+        // 9. Success response to Paystack
         res.status(200).send('Webhook received and order processed successfully.');
 
     } catch (error) {
         console.error('Internal error processing webhook:', error);
-        // It is generally safe to return 200 to the webhook provider even on failure
-        // so they stop retrying, provided you log the failure for manual review.
+        // Return 500 only for unrecoverable errors not handled above
         res.status(500).send('Internal Server Error.'); 
     }
 });
+
 // =========================================================
 // 8. POST /api/notifications/admin-order-email - Send Notification to Admin
 // This is typically called by the client AFTER a successful payment/order creation.

@@ -543,85 +543,103 @@ async function secureFetch(url, options = {}) {
         return Math.floor(seconds) + " seconds ago";
     }
 
-   /**
-      * Dynamically renders the recent activity log on the dashboard.
-      * @param {Array<Object>} activities - Array of recent activity objects.
-      */
-    function renderActivityLog(activities) {
-        const logList = document.querySelector('#content-dashboard .mt-8 ul');
-        if (!logList) return; 
+  /**
+ * Dynamically renders the recent activity log on the dashboard.
+ * @param {Array<Object>} activities - Array of recent activity objects.
+ */
+function renderActivityLog(activities) {
+    const logList = document.querySelector('#content-dashboard .mt-8 ul');
+    if (!logList) return; 
 
-        logList.innerHTML = '';
-        
-        if (activities.length === 0) {
-            logList.innerHTML = '<li class="p-3 text-center text-gray-400">No recent activity recorded.</li>';
-            return;
-        }
-        
-        activities.forEach(activity => {
-            const li = document.createElement('li');
-            
-            // ⭐️ NEW LOGIC: Determine the user's name for display 
-            const user = activity.userId; // This is the populated object now
-            const displayUser = user 
-                ? (user.username || user.email || 'Customer')
-                : 'System User';
-
-            // Determine colors and icon based on event type
-            let borderColor = 'border-gray-200';
-            let bgColor = 'bg-white';
-            let icon = '➡️';
-            let eventText = activity.description;
-
-            switch (activity.eventType) {
-                case 'ORDER_PLACED':
-                    borderColor = 'border-emerald-400';
-                    bgColor = 'bg-emerald-50';
-                    icon = '💰';
-                    // Rephrase description to highlight the user
-                    eventText = `placed new order (Order #${activity.context.orderId || 'N/A'})`; 
-                    break;
-                case 'REGISTERED':
-                    borderColor = 'border-cyan-400';
-                    bgColor = 'bg-cyan-50';
-                    icon = '✨';
-                    eventText = 'just created a new account.';
-                    break;
-                case 'LOGIN': 
-                    borderColor = 'border-purple-400';
-                    bgColor = 'bg-purple-50';
-                    icon = '🔑';
-                    eventText = 'logged in successfully.';
-                    break;
-                case 'MEMBERSHIP_SUBSCRIBED': 
-                    borderColor = 'border-red-400';
-                    bgColor = 'bg-red-50';
-                    icon = '💳';
-                    eventText = 'subscribed to a membership.';
-                    break;
-                // Add cases for FORGOT_PASSWORD and others as needed
-            }
-
-            li.classList.add(borderColor, bgColor, 'hover:shadow-sm', 
-                                 'p-3', 'border-l-4', 'rounded-md', 'flex', 
-                                 'justify-between', 'items-center', 'space-y-2');
-
-            const timeAgo = formatTimeAgo(activity.timestamp);
-            
-            li.innerHTML = `
-                <div class="flex items-center space-x-3 w-4/5">
-                    <span class="text-lg">${icon}</span>
-                    <p class="truncate">
-                        <span class="font-semibold text-gray-800">${displayUser}</span>
-                        ${eventText}
-                    </p>
-                </div>
-                <span class="text-xs text-gray-400 whitespace-nowrap">${timeAgo}</span>
-            `;
-            
-            logList.appendChild(li);
-        });
+    logList.innerHTML = '';
+    
+    if (activities.length === 0) {
+        logList.innerHTML = '<li class="p-3 text-center text-gray-400">No recent activity recorded.</li>';
+        return;
     }
+    
+    activities.forEach(activity => {
+        const li = document.createElement('li');
+        
+        // ⭐️ NEW LOGIC: Determine the user's name for display 
+        const user = activity.userId; // This is the populated object now
+        const displayUser = user 
+            ? (user.username || user.email || 'Customer')
+            : 'System User';
+
+        // Determine colors and icon based on event type
+        let borderColor = 'border-gray-200';
+        let bgColor = 'bg-white';
+        let icon = '➡️';
+        let eventText = activity.description;
+
+        switch (activity.eventType) {
+            case 'ORDER_PLACED':
+                borderColor = 'border-emerald-400';
+                bgColor = 'bg-emerald-50';
+                icon = '💰';
+                // Rephrase description to highlight the user
+                eventText = `placed new order (Order #${activity.context.orderId || 'N/A'})`; 
+                break;
+            
+            // --- NEW: Handle system completion for better logs ---
+            case 'ORDER_COMPLETED': // Paystack/Webhook Finalization
+                borderColor = 'border-green-600';
+                bgColor = 'bg-green-50';
+                icon = '✅';
+                eventText = `Order #${activity.context.orderId || 'N/A'} successfully COMPLETED (Inventory deducted).`;
+                break;
+
+            case 'REGISTERED':
+                borderColor = 'border-cyan-400';
+                bgColor = 'bg-cyan-50';
+                icon = '✨';
+                eventText = 'just created a new account.';
+                break;
+            case 'LOGIN': 
+                borderColor = 'border-purple-400';
+                bgColor = 'bg-purple-50';
+                icon = '🔑';
+                eventText = 'logged in successfully.';
+                break;
+            case 'MEMBERSHIP_SUBSCRIBED': 
+                borderColor = 'border-red-400';
+                bgColor = 'bg-red-50';
+                icon = '💳';
+                eventText = 'subscribed to a membership.';
+                break;
+            // Add cases for FORGOT_PASSWORD and others as needed
+            // If you have a log for manual confirmation:
+            // case 'ORDER_CONFIRMED': ...
+        }
+
+        li.classList.add(borderColor, bgColor, 'hover:shadow-sm', 
+                            'p-3', 'border-l-4', 'rounded-md', 'flex', 
+                            'justify-between', 'items-center', 'space-y-2');
+
+        const timeAgo = formatTimeAgo(activity.timestamp);
+        
+        // Determine the main content display based on event type
+        let mainContent = `<span class="font-semibold text-gray-800">${displayUser}</span> ${eventText}`;
+        
+        // For system events, we might not want to display 'System User' as the subject
+        if (activity.eventType === 'ORDER_COMPLETED' || activity.eventType === 'ORDER_CONFIRMED') {
+            mainContent = eventText;
+        }
+
+        li.innerHTML = `
+            <div class="flex items-center space-x-3 w-4/5">
+                <span class="text-lg">${icon}</span>
+                <p class="truncate">
+                    ${mainContent}
+                </p>
+            </div>
+            <span class="text-xs text-gray-400 whitespace-nowrap">${timeAgo}</span>
+        `;
+        
+        logList.appendChild(li);
+    });
+}
     }
     </script>
 </body>

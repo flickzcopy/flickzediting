@@ -407,34 +407,42 @@
     }
 
     // Helper function to determine status badge classes for Orders
-    function getStatusBadge(status) {
-        let className = '';
-        let text = status || 'N/A';
+function getStatusBadge(status) {
+    let className = '';
+    let text = status || 'N/A';
+    
+    switch (status) {
+        case 'Delivered':
+            className = 'bg-green-100 text-green-800';
+            break;
+        case 'Shipped':
+            className = 'bg-blue-100 text-blue-800';
+            break;
+        case 'Confirmed': // Manually confirmed/Ready for Shipping
+        case 'Processing':
+            className = 'bg-yellow-100 text-yellow-800';
+            break;
+        case 'Pending':
+            className = 'bg-gray-100 text-gray-800';
+            break;
         
-        switch (status) {
-            case 'Delivered':
-                className = 'bg-green-100 text-green-800';
-                break;
-            case 'Shipped':
-                className = 'bg-blue-100 text-blue-800';
-                break;
-            case 'Processing':
-            case 'Confirmed': // Added Confirmed for UI consistency
-                className = 'bg-yellow-100 text-yellow-800';
-                break;
-            case 'Cancelled':
-            case 'Inventory Failure (Manual Review)':
-                className = 'bg-red-100 text-red-800';
-                break;
-            default:
-                className = 'bg-gray-100 text-gray-800';
-                break;
-        }
-        
-        return `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${className}">${text}</span>`;
+        // ⭐ NEW STATUSES: Completed (System Finalized) and Manual Review Cases
+        case 'Completed': // System Finalized (Paid, Inventory Checked)
+            className = 'bg-emerald-100 text-emerald-800';
+            text = 'Completed (Auto)'; // Explicitly mark it as system-finalized
+            break;
+        case 'Cancelled':
+        case 'Inventory Failure (Manual Review)':
+        case 'Amount Mismatch (Manual Review)':
+            className = 'bg-red-100 text-red-800';
+            break;
+        default:
+            className = 'bg-gray-100 text-gray-800';
+            break;
     }
     
-    // --- View Switching Functions ---
+    return `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${className}">${text}</span>`;
+}
     
     /** Shows the main user list table and hides the details views. */
     function showMembershipList() {
@@ -812,85 +820,109 @@
         }
     }
     
-    /**
-     * Switches view and loads the full order details for status update. (NEW - FIXED DROPDOWN)
-     * @param {string} orderId - The ID of the order to view.
-     */
-    async function viewOrderDetails(orderId, userId) {
-        currentViewingOrderId = orderId; // Store for update function
-        currentViewingUserId = userId; // Ensure we retain the user ID for the back button
-        showOrderDetailsUpdateView();
-        
-        orderDetailsLoadingIndicator.classList.remove('hidden');
-        orderUpdateForm.classList.add('hidden');
-        orderUpdateMessage.classList.add('hidden');
-        
-        orderDetailsHeaderId.textContent = orderId;
-        
-        const order = await fetchOrderDetails(orderId);
-        
-        orderDetailsLoadingIndicator.classList.add('hidden');
+   /**
+ * Switches view and loads the full order details for status update. (FIXED DROPDOWN)
+ * @param {string} orderId - The ID of the order to view.
+ */
+async function viewOrderDetails(orderId, userId) {
+    currentViewingOrderId = orderId; 
+    currentViewingUserId = userId; 
+    showOrderDetailsUpdateView();
+    
+    orderDetailsLoadingIndicator.classList.remove('hidden');
+    orderUpdateForm.classList.add('hidden');
+    orderUpdateMessage.classList.add('hidden');
+    
+    orderDetailsHeaderId.textContent = orderId;
+    
+    const order = await fetchOrderDetails(orderId);
+    
+    orderDetailsLoadingIndicator.classList.add('hidden');
 
-        if (order) {
-            // Set initial form values and details
-            orderDetailCustomerName.textContent = order.customerName || 'N/A';
-            orderDetailDate.textContent = formatDate(order.createdAt);
-            
-            const currentStatus = order.status || 'Pending'; // Default to Pending if status is missing
-            orderDetailCurrentStatus.textContent = currentStatus;
-            
-            // ⭐ CRITICAL FIX: The next status transition must follow the server's logic:
-            // Confirmed -> Shipped -> Delivered
-            newOrderStatusSelect.innerHTML = ''; // Clear existing options
-            
-            let nextStatus = null;
-            if (currentStatus === 'Confirmed') { // Check for 'Confirmed' status
-                nextStatus = 'Shipped';
-            } else if (currentStatus === 'Shipped') {
-                nextStatus = 'Delivered';
-            }
-            
-            // Add current status as default, disabled option
-            const currentOption = new Option(`Current: ${currentStatus}`, currentStatus, true, true);
-            currentOption.disabled = true;
-            newOrderStatusSelect.add(currentOption);
-            
-            if (nextStatus) {
-                // Add the single, valid next transition status
+    if (order) {
+        // ... (Render Customer Name, Date, Address unchanged) ...
+
+        orderDetailCustomerName.textContent = order.customerName || 'N/A';
+        orderDetailDate.textContent = formatDate(order.createdAt);
+
+        const currentStatus = order.status || 'Pending';
+        orderDetailCurrentStatus.textContent = currentStatus;
+        
+        // Render Shipping Address (unchanged)
+        if (order.shippingAddress && order.shippingAddress.street) {
+             const address = order.shippingAddress;
+             orderDetailAddress.innerHTML = `
+                 ${address.street}<br>
+                 ${address.city}, ${address.state}<br>
+                 ${address.zipCode || ''} ${address.country || ''}
+             `;
+         } else {
+             orderDetailAddress.textContent = 'No Shipping Address Available';
+         }
+        
+        // --- ⭐ CRITICAL NEW STATUS TRANSITION LOGIC ---
+        newOrderStatusSelect.innerHTML = ''; // Clear existing options
+        
+        let validNextStatuses = [];
+        
+        switch (currentStatus) {
+            case 'Pending':
+            case 'Inventory Failure (Manual Review)':
+            case 'Amount Mismatch (Manual Review)':
+                // Admin must confirm the order (manual path)
+                validNextStatuses.push('Confirmed'); 
+                break;
+            case 'Confirmed':
+                // Confirmed is the step before shipping (manual path)
+                validNextStatuses.push('Shipped');
+                break;
+            case 'Completed':
+                // Completed means it's paid and inventoried (system path). Next step is shipping.
+                validNextStatuses.push('Shipped');
+                break;
+            case 'Shipped':
+                validNextStatuses.push('Delivered');
+                break;
+            case 'Delivered':
+            case 'Cancelled':
+            default:
+                // Final statuses, no further transitions via this form.
+                break;
+        }
+
+        // Add current status as default, disabled option
+        const currentOption = new Option(`Current: ${currentStatus}`, currentStatus, true, true);
+        currentOption.disabled = true;
+        newOrderStatusSelect.add(currentOption);
+        
+        if (validNextStatuses.length > 0) {
+            validNextStatuses.forEach(nextStatus => {
                 const nextOption = new Option(`Change to: ${nextStatus}`, nextStatus);
                 newOrderStatusSelect.add(nextOption);
-                newOrderStatusSelect.disabled = false;
-                updateStatusButton.disabled = false; // Use the globally defined button variable
-            } else {
-                // Order is Delivered, Cancelled, Pending, Processing, or Manual Review - no update possible via this form
-                newOrderStatusSelect.disabled = true;
-                updateStatusButton.disabled = true;
-            }
-            // End LOGIC FIX
-            
-            // Render Shipping Address
-            if (order.shippingAddress && order.shippingAddress.street) {
-                const address = order.shippingAddress;
-                orderDetailAddress.innerHTML = `
-                    ${address.street}<br>
-                    ${address.city}, ${address.state}<br>
-                    ${address.zipCode || ''} ${address.country || ''}
-                `;
-            } else {
-                orderDetailAddress.textContent = 'No Shipping Address Available';
-            }
-
-            // Render Order Items
-            renderOrderItems(order.items);
-            
-            orderUpdateForm.classList.remove('hidden');
+            });
+            newOrderStatusSelect.disabled = false;
+            updateStatusButton.disabled = false; 
         } else {
-             orderUpdateForm.classList.add('hidden');
-             orderUpdateMessage.classList.remove('hidden');
-             orderUpdateMessage.className = 'p-3 rounded-lg text-white bg-red-500 font-medium';
-             orderUpdateMessage.textContent = 'Failed to load order details for updating.';
+            newOrderStatusSelect.disabled = true;
+            updateStatusButton.disabled = true;
+            orderUpdateMessage.classList.remove('hidden');
+            orderUpdateMessage.className = 'p-3 rounded-lg text-white bg-gray-500 font-medium';
+            orderUpdateMessage.textContent = `Order status is final (${currentStatus}) or pending system completion.`;
         }
+        // --- END CRITICAL NEW STATUS TRANSITION LOGIC ---
+
+        // Render Order Items (unchanged)
+        renderOrderItems(order.items);
+        
+        orderUpdateForm.classList.remove('hidden');
+    } else {
+         orderUpdateForm.classList.add('hidden');
+         orderUpdateMessage.classList.remove('hidden');
+         orderUpdateMessage.className = 'p-3 rounded-lg text-white bg-red-500 font-medium';
+         orderUpdateMessage.textContent = 'Failed to load order details for updating.';
     }
+}
+
     
     /**
      * Handles the order status update process. (NEW)
