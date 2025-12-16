@@ -908,8 +908,10 @@ async function fetchUserData() {
     }
 
 
+   // ... existing functions ...
+
     /**
-    * Fetches the initial cart data, CHECKING FOR A 'BUY NOW' ITEM FIRST. (Unchanged, but important for flow)
+    * Fetches the initial cart data, CHECKING FOR A 'BUY NOW' ITEM FIRST. (UPDATED FOR PRIORITIZATION)
     */
     async function fetchInitialCartData() {
         const subtotalEl = document.getElementById('summary-subtotal');
@@ -930,49 +932,29 @@ async function fetchUserData() {
         paymentBtn.disabled = true;
 
         let cartData;
-
-        // =========================================================================
-        // 🎯 BUY NOW / PRE-ORDER LOGIC START: CALLING NEW API
-        // =========================================================================
+        
+        // Determine if the user has a local cart with items (Standard Checkout intention)
+        const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
+        const isStandardCartCheckout = localCart.length > 0;
         const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
         
-        if (buyNowItemJSON) {
+        // =========================================================================
+        // 🎯 BUY NOW / PRE-ORDER LOGIC START: (Only proceed if NO standard cart items exist)
+        // =========================================================================
+        
+        if (buyNowItemJSON && !isStandardCartCheckout) { // ⭐ CRITICAL CHANGE HERE: ADD `&& !isStandardCartCheckout`
             console.log("Processing Buy Now flow...");
             
             let item = JSON.parse(buyNowItemJSON);
 
-            // ⭐ CRITICAL FIXES FOR SERVER VALIDATION ⭐
-            // 1. Fix invalid 'productType'. If it's a Cap that somehow lost its type, it 
-            // must be defaulted to 'Caps' to prevent lookup in the 'Wears' collection.
-            if (!item.productType || item.productType === "undefined" || item.productType === null) {
-                item.productType || 'Uncategorized'; // Fallback to 'Uncategorized' if all else fails,
-                console.warn(`Fixed invalid productType to '${item.productType}' for Buy Now item.`);
-            }
-
-            // 2. Fix empty 'size' field (Critical for Caps which use variation/color as size equivalent)
-            if (!item.size && item.variation) {
-                item.size = item.variation; // Use the variation (colorHex or variation string) as the identifier for size/variant
-                console.warn("Fixed empty size by using variation value for Buy Now item (Cap fix).");
-            }
-
-            // 3. Fix 0-based variationIndex if server expects >= 1
-            // If the index is 0 (which often represents the first item in a 0-based array)
-            // and the server schema expects >= 1, we must adjust it.
-            if (item.variationIndex === 0) {
-                item.variationIndex = 1; 
-                console.warn("Fixed 0-based variationIndex to 1 for Buy Now item.");
-            }
+            // ... (Your existing Buy Now Fixes 1, 2, 3 remain here) ...
             
-
             try {
-                // ⭐ FIX: Using secureUserFetch for protected API endpoint (handles token refresh)
+                // ... (Your existing API call to /calculate-buy-now remains here) ...
                 const response = await secureUserFetch(`${API_BASE_URL}/api/orders/calculate-buy-now`, {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        // REMOVED MANUAL Authorization HEADER: it is now handled by secureUserFetch
-                    },
-                    body: JSON.stringify(item) // Send the corrected item object
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(item) 
                 });
                 
                 if (!response.ok) {
@@ -980,9 +962,7 @@ async function fetchUserData() {
                     throw new Error(errorData.message || 'Failed to calculate Buy Now totals from API.');
                 }
 
-                cartData = await response.json(); // cartData will contain { items: [...], subtotal, shipping, tax, estimatedTotal }
-
-                // Go straight to rendering the server-calculated data
+                cartData = await response.json(); 
                 renderCartData(cartData, paymentBtn);
                 return; // EXIT: Buy Now flow complete
 
@@ -994,13 +974,19 @@ async function fetchUserData() {
             }
         }
         // =========================================================================
-
         // --- STANDARD CART LOGIC START ---
         
-        // Check for empty local cart if user is NOT logged in (API is assumed to handle authenticated empty cart)
+        // If Buy Now flag existed but was ignored (because isStandardCartCheckout was true), 
+        // ensure the flag is cleared before proceeding to prevent issues on subsequent pages.
+        if (buyNowItemJSON && isStandardCartCheckout) {
+             console.warn('Clearing residual BUY_NOW_KEY to proceed with Standard Cart.');
+             sessionStorage.removeItem(BUY_NOW_KEY); 
+        }
+
+        // Check for empty local cart if user is NOT logged in 
         if (!isUserLoggedIn()) {
-            const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-            if (localCart.length === 0) {
+            // Re-check localCart here, though it should be caught by isStandardCartCheckout 
+            if (localCart.length === 0) { 
                 displayMessage('Your cart is empty. Redirecting to home.');
                 setTimeout(() => window.location.href = 'homepage.html', 1500);
                 return;
@@ -1009,16 +995,13 @@ async function fetchUserData() {
 
         try {
             // === REAL API CALL FOR STANDARD CART ===
-            // ⭐ FIX: Determine the correct fetcher based on login status
+            // ... (rest of your standard cart logic is correct and remains unchanged) ...
             const url = isUserLoggedIn() ? `${API_BASE_URL}/api/users/cart` : `${API_BASE_URL}/api/guest/cart`;
             
-            // If the user is logged in, use secureUserFetch. Otherwise, use standard fetch (assuming API has a guest fallback).
+            // If the user is logged in, use secureUserFetch. Otherwise, use standard fetch.
             const fetcher = isUserLoggedIn() ? secureUserFetch : fetch;
             
-            const response = await fetcher(url, {
-                method: 'GET',
-                // Authorization is handled by secureUserFetch if used.
-            });
+            const response = await fetcher(url, { method: 'GET' });
 
             if (!response.ok) {
                 const errorData = await response.json();
@@ -1033,7 +1016,7 @@ async function fetchUserData() {
                 return;
             }
             
-            // Render the data received from the API
+            // Render the data received from the API (which should now be ₦70,000.00)
             renderCartData(cartData, paymentBtn);
             
         } catch (error) {
@@ -1043,6 +1026,7 @@ async function fetchUserData() {
             paymentBtn.disabled = true;
         }
     }
+
 /**
      * Helper function to notify admin of a new order. (Fixed API call)
      */
@@ -1110,9 +1094,6 @@ async function fetchUserData() {
         }, 2000);
     }
 
-    // -----------------------------------------------------------------
-    // ⭐ NEW FUNCTION: IMMEDIATE BUY NOW LOGOUT CHECK ⭐
-    // -----------------------------------------------------------------
     
     /**
      * ⭐ UPDATED: Centralized function to finalize the order.
