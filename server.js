@@ -6477,30 +6477,52 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             rawItems = cart.items;
         }
 
-        // 2. CRITICAL FIX: Map items to match OrderItemSchema Enums and Requirements
-        const finalOrderItems = rawItems.map(item => {
-            // Logic to ensure productType is one of the allowed Enums
-            const allowedCollections = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
-            
-            // If the incoming type is not in the allowed list, default it to 'NewArrivals' 
-            // (Or whichever collection makes the most sense as a fallback)
-            let validatedType = allowedCollections.includes(item.productType) 
-                ? item.productType 
-                : 'NewArrivals'; 'PreOrderCollection'; 'Capcollecion';  'WearsCollection';
+       // ⭐ IMPROVED MAPPING: Ensuring Admin-inputted names match the correct collections
+const finalOrderItems = await Promise.all(rawItems.map(async (item) => {
+    const allowedCollections = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
+    
+    let validatedType = item.productType;
+    let productName = (item.name || "").toLowerCase();
 
-            return {
-                productId: item.productId,
-                name: item.name || "Product Name",
-                imageUrl: item.imageUrl,
-                productType: validatedType, // Now valid for Mongoose Enum
-                quantity: parseInt(item.quantity),
-                priceAtTimeOfPurchase: parseFloat(item.price || item.priceAtTimeOfPurchase),
-                variationIndex: parseInt(item.variationIndex) || 1, 
-                size: item.size,
-                color: item.color,
-                variation: item.variation
-            };
-        });
+    // 1. If the type sent is ALREADY one of the 4 valid ones, we are good.
+    if (allowedCollections.includes(validatedType)) {
+        // No action needed, validatedType is correct
+    } 
+    // 2. If it's NOT a valid type, check the name keywords
+    else {
+        // Priority 1: PreOrder (Jerseys)
+        if (productName.includes('jersey') || productName.includes('preorder')) {
+            validatedType = 'PreOrderCollection';
+        } 
+        // Priority 2: Caps
+        else if (productName.includes('cap') || productName.includes('hat') || productName.includes('beanie')) {
+            validatedType = 'CapCollection';
+        } 
+        // Priority 3: Wears
+        else if (productName.includes('hoodie') || productName.includes('shirt') || productName.includes('short') || productName.includes('wear')) {
+            validatedType = 'WearsCollection';
+        } 
+        // Priority 4: Default to NewArrivals
+        else {
+            validatedType = 'NewArrivals';
+        }
+    }
+
+    console.log(`[Order Placement] Item "${item.name}" mapped to DB Collection: ${validatedType}`);
+
+    return {
+        productId: item.productId,
+        name: item.name,
+        imageUrl: item.imageUrl,
+        productType: validatedType, 
+        quantity: parseInt(item.quantity) || 1,
+        priceAtTimeOfPurchase: parseFloat(item.price || item.priceAtTimeOfPurchase),
+        variationIndex: parseInt(item.variationIndex) || 1, 
+        size: item.size,
+        color: item.color,
+        variation: item.variation
+    };
+}));
 
         // 3. Generate Reference
         const orderRef = `outflickz_${Date.now()}`; 
