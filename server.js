@@ -6486,7 +6486,7 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             // (Or whichever collection makes the most sense as a fallback)
             let validatedType = allowedCollections.includes(item.productType) 
                 ? item.productType 
-                : 'undefined';
+                : 'NewArrivals'; 'PreOrderCollection'; 'Capcollecion';  'WearsCollection';
 
             return {
                 productId: item.productId,
