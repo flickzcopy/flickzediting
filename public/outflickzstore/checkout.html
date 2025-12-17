@@ -1233,10 +1233,7 @@ async function processPaystackPayment(totalAmount, email) {
     // 3. CONFIGURE CHANNELS
     // Even at NGN 75,000, if Transfer fails, it is a Paystack Dashboard setting issue.
     // However, we exclude it for very low amounts to avoid the 400 error.
-    let allowedChannels = ['card', 'qr', 'mobile_money']; 
-    if (totalAmount >= 500) {
-        allowedChannels.push('bank_transfer', 'ussd', 'bank');
-    }
+    let allowedChannels = ['card', 'qr', 'mobile_money','bank_transfer', 'ussd', 'bank']; 
 
     // 4. LAUNCH PAYSTACK
     const handler = PaystackPop.setup({
