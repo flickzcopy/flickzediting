@@ -6477,31 +6477,45 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             rawItems = cart.items;
         }
 
-        // 2. CRITICAL FIX: Map items to match OrderItemSchema Enums and Requirements
-        const finalOrderItems = rawItems.map(item => {
-            // Logic to ensure productType is one of the allowed Enums
-            const allowedCollections = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
-            
-            // If the incoming type is not in the allowed list, default it to 'NewArrivals' 
-            // (Or whichever collection makes the most sense as a fallback)
-            let validatedType = allowedCollections.includes(item.productType) 
-                ? item.productType 
-                : 'NewArrivals';
+     // 2. CRITICAL FIX: Map items to match OrderItemSchema Enums and Requirements
+const finalOrderItems = rawItems.map(item => {
+    const allowedCollections = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
+    
+    // ⭐ STRICT VALIDATION: Check if the productType is valid
+    let validatedType = item.productType;
 
-            return {
-                productId: item.productId,
-                name: item.name || "Product Name",
-                imageUrl: item.imageUrl,
-                productType: validatedType, // Now valid for Mongoose Enum
-                quantity: parseInt(item.quantity),
-                priceAtTimeOfPurchase: parseFloat(item.price || item.priceAtTimeOfPurchase),
-                // variationIndex is REQUIRED by your schema and must be >= 1
-                variationIndex: parseInt(item.variationIndex) || 1, 
-                size: item.size,
-                color: item.color,
-                variation: item.variation
-            };
-        });
+    // If the frontend sent a product name instead of the collection name:
+    if (!allowedCollections.includes(validatedType)) {
+        // Option A: Check for keywords if the frontend sent the product name
+        const lowerName = (item.name || "").toLowerCase();
+        const lowerType = (item.productType || "").toLowerCase();
+
+        if (lowerType.includes('preorder') || lowerName.includes('preorder')) {
+            validatedType = 'PreOrderCollection';
+        } else if (lowerType.includes('cap') || lowerName.includes('cap')) {
+            validatedType = 'CapCollection';
+        } else if (lowerType.includes('wear') || lowerName.includes('wear')) {
+            validatedType = 'WearsCollection';
+        } else {
+            // If we still can't find it, we MUST throw an error here 
+            // so we don't save bad data that breaks inventory later.
+            throw new Error(`Invalid Collection Type: "${item.productType}". Must be one of: ${allowedCollections.join(', ')}`);
+        }
+    }
+
+    return {
+        productId: item.productId,
+        name: item.name || "Product Name",
+        imageUrl: item.imageUrl,
+        productType: validatedType, // This is now guaranteed to be in your Enum
+        quantity: parseInt(item.quantity),
+        priceAtTimeOfPurchase: parseFloat(item.price || item.priceAtTimeOfPurchase),
+        variationIndex: parseInt(item.variationIndex), // Removed || 1 to ensure we see errors if index is missing
+        size: item.size,
+        color: item.color,
+        variation: item.variation
+    };
+});
 
         // 3. Generate Reference
         const orderRef = `outflickz_${Date.now()}`; 
