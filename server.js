@@ -6451,10 +6451,6 @@ app.post('/api/paystack/webhook', async (req, res) => {
 
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
     const userId = req.userId;
-    
-    // 1. DATA EXTRACTION
-    // Since you use express.json() middleware and 'application/json' header,
-    // these fields are already correctly typed (objects are objects, numbers are numbers).
     const { 
         shippingAddress, 
         totalAmount, 
@@ -6464,75 +6460,70 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
         orderItems 
     } = req.body;
 
-    // 2. ROBUST VALIDATION
-    // We no longer need to JSON.parse() here because shippingAddress is already an object.
+    // 1. Basic Validation
     if (!shippingAddress || typeof shippingAddress !== 'object') {
         return res.status(400).json({ message: 'Invalid shipping address format.' });
     }
 
-    const parsedTotal = parseFloat(totalAmount);
-    if (isNaN(parsedTotal) || parsedTotal <= 0) {
-        return res.status(400).json({ message: 'Invalid total amount.' });
-    }
-
     try {
-        // 3. RETRIEVE ORDER ITEMS
-        let finalOrderItems = [];
-        let isBuyNowOrder = false;
-        
-        // Check if orderItems was passed (Buy Now flow)
+        let rawItems = [];
         if (orderItems && Array.isArray(orderItems) && orderItems.length > 0) {
-            isBuyNowOrder = true;
-            finalOrderItems = orderItems.map(item => ({
-                ...item,
-                priceAtTimeOfPurchase: item.price,
-            }));
+            rawItems = orderItems;
         } else {
-            // Standard Cart Checkout
             const cart = await Cart.findOne({ userId }).lean();
             if (!cart || cart.items.length === 0) {
-                return res.status(400).json({ message: 'Cannot place order: Shopping bag is empty.' });
+                return res.status(400).json({ message: 'Shopping bag is empty.' });
             }
+            rawItems = cart.items;
+        }
+
+        // 2. CRITICAL FIX: Map items to match OrderItemSchema Enums and Requirements
+        const finalOrderItems = rawItems.map(item => {
+            // Logic to ensure productType is one of the allowed Enums
+            const allowedCollections = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
             
-            finalOrderItems = cart.items.map(item => ({
+            // If the incoming type is not in the allowed list, default it to 'NewArrivals' 
+            // (Or whichever collection makes the most sense as a fallback)
+            let validatedType = allowedCollections.includes(item.productType) 
+                ? item.productType 
+                : 'NewArrivals';
+
+            return {
                 productId: item.productId,
-                name: item.name, 
+                name: item.name || "Product Name",
                 imageUrl: item.imageUrl,
-                productType: item.productType, 
-                quantity: item.quantity,
-                priceAtTimeOfPurchase: item.price, 
-                variationIndex: item.variationIndex,
+                productType: validatedType, // Now valid for Mongoose Enum
+                quantity: parseInt(item.quantity),
+                priceAtTimeOfPurchase: parseFloat(item.price || item.priceAtTimeOfPurchase),
+                // variationIndex is REQUIRED by your schema and must be >= 1
+                variationIndex: parseInt(item.variationIndex) || 1, 
                 size: item.size,
-                variation: item.variation,
                 color: item.color,
-            }));
-        }
-        
-        if (finalOrderItems.length === 0) {
-            return res.status(400).json({ message: 'Order item list is empty.' });
-        }
-        
-        // 4. GENERATE REFERENCE & CREATE ORDER
+                variation: item.variation
+            };
+        });
+
+        // 3. Generate Reference
         const orderRef = `outflickz_${Date.now()}`; 
 
+        // 4. Create Order
         const newOrder = await Order.create({
             userId: userId,
             items: finalOrderItems, 
-            shippingAddress: shippingAddress, // Saved directly as an object
-            totalAmount: parsedTotal,
+            shippingAddress: shippingAddress,
+            totalAmount: parseFloat(totalAmount),
             subtotal: parseFloat(subtotal || 0),
             shippingFee: parseFloat(shippingFee || 0),
             tax: parseFloat(tax || 0),
             status: 'Pending',
             paymentMethod: 'Paystack',
             orderReference: orderRef,
-            amountPaidKobo: Math.round(parsedTotal * 100),
+            amountPaidKobo: Math.round(parseFloat(totalAmount) * 100),
             paymentTxnId: orderRef, 
         });
-        
-        console.log(`[Backend] Pending Order created: ${newOrder.orderReference}`);
 
-        // 5. SUCCESS RESPONSE
+        console.log(`[Paystack] Order Created in DB: ${newOrder.orderReference}`);
+
         res.status(201).json({
             message: 'Order placed, awaiting Paystack payment.',
             orderId: newOrder._id,
@@ -6541,8 +6532,14 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error placing pending Paystack order:', error);
-        res.status(500).json({ message: 'Internal server error during order creation.' });
+        console.error('🔴 ERROR creating order:', error.message);
+        
+        // Return specific Mongoose validation error messages to the frontend
+        const errorMessage = error.name === 'ValidationError' 
+            ? Object.values(error.errors).map(val => val.message).join(', ')
+            : 'Internal server error during order creation.';
+
+        res.status(500).json({ message: errorMessage });
     }
 });
 
