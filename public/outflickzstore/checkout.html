@@ -567,10 +567,7 @@ function enforceAuthGate() {
     const BUY_NOW_KEY = 'buyNowItem'; 
     const AUTH_TOKEN_KEY = 'userAccessToken';
     const REFRESH_ENDPOINT = `${API_BASE_URL}/api/auth/refresh`;
- 
     const DEFAULT_ADMIN_EMAIL = "outflickzlimited@gmail.com"; 
-
-    // --- PAYSTACK CONSTANTS --- (Unchanged - **REMINDER: REPLACE KEY**)
     const PAYSTACK_PUBLIC_KEY = 'pk_live_914b068e58d4ff0d8c50e5a035cae86b1142da35'; 
     const CURRENCY_CODE = 'NGN'; 
     const CURRENCY_SYMBOL = '₦';
@@ -1179,114 +1176,93 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
         }
     }
 
-   /**
- * ⭐ CORRECTED: Paystack Payment Flow.
- * * Flow:
- * 1. Collect cart/shipping data.
- * 2. Call backend to create PENDING order (GETS MongoDB _id).
- * 3. Initialize Paystack widget using the reference from the server.
- * 4. On success, redirect using the MongoDB _id.
- */
-async function processPaystackPayment(totalAmount, email) { // Make this async
+   async function processPaystackPayment(totalAmount, email) {
     const payBtn = document.getElementById('checkout-next-btn');
-    // const paymentMethod = 'Paystack/Card'; // Unused in this scope
     
     // =======================================================
-    // 1. COLLECT DATA FOR SERVER CALL
+    // 1. COLLECT & PARSE DATA FOR SERVER CALL
     // =======================================================
-    const shippingAddress = localStorage.getItem('outflickzShippingData');
-    const orderItems = localStorage.getItem('outflickzLocalCart');
+    // IMPORTANT: Parsing strings into Objects so the Backend receives valid JSON
+    const shippingAddress = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
+    const orderItems = JSON.parse(localStorage.getItem('outflickzLocalCart') || "[]");
+    
     const subtotal = localStorage.getItem('outflickzOrderSubtotal') || '0';
     const shippingFee = localStorage.getItem('outflickzOrderShipping') || '0';
     const tax = localStorage.getItem('outflickzOrderTax') || '0';
     
-    // Ensure button state is set for loading
     payBtn.disabled = true;
     payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Creating Order...';
 
-
     // =======================================================
-    // 2. CALL API TO CREATE PENDING ORDER AND GET MONGODB ID
+    // 2. CALL API TO CREATE PENDING ORDER
     // =======================================================
     let mongoOrderId;
-    let paystackReference; // Use reference returned by server
+    let paystackReference; 
     
     try {
         const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/paystack`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json', // Using JSON body now
-            },
-            body: JSON.stringify({ // Send required data as JSON
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
                 shippingAddress: shippingAddress, 
                 totalAmount: totalAmount, 
                 subtotal: subtotal,
                 shippingFee: shippingFee,
                 tax: tax,
-                // Pass orderItems only if Buy Now flow requires it, otherwise backend uses cart.
+                // Pass parsed items only if Buy Now flow requires it
                 orderItems: sessionStorage.getItem(BUY_NOW_KEY) ? orderItems : null 
             })
         });
 
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: 'Server error during order creation.' }));
+            const errorData = await response.json().catch(() => ({ message: 'Server error.' }));
             displayMessage(`Order setup failed: ${errorData.message}`);
             throw new Error(errorData.message);
         }
 
         const data = await response.json();
-        
-        // ⭐ CRITICAL CAPTURE: Store the MongoDB ID and the Paystack reference from the server
         mongoOrderId = data.orderId; 
         paystackReference = data.orderReference;
 
-        console.log(`[Paystack] Pending order created. Mongo ID: ${mongoOrderId}, Ref: ${paystackReference}`);
+        console.log(`[Paystack] Pending order created. Mongo ID: ${mongoOrderId}`);
 
     } catch (error) {
-        console.error('Error creating pending order:', error);
+        console.error('Error:', error);
         payBtn.disabled = false;
-        payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
-        return; // Stop the process if order creation failed
+        payBtn.innerHTML = 'Confirm & Pay Now';
+        return;
     }
     
-    // Check if Paystack script is loaded (same as before)
     if (typeof PaystackPop === 'undefined') {
-        displayMessage('Paystack script not loaded.');
+        displayMessage('Payment gateway unavailable.');
         payBtn.disabled = false;
-        payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
         return;
     }
 
     // =======================================================
     // 3. LAUNCH PAYSTACK POPUP
     // =======================================================
-    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Opening Payment Gateway...';
+    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Opening Gateway...';
     
     const handler = PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
         email: email,
-        amount: totalAmount * 100, // Paystack expects amount in Kobo
-        ref: paystackReference, // USE THE REFERENCE RETURNED BY THE SERVER
-        currency: CURRENCY_CODE,
+        amount: Math.round(totalAmount * 100), // Ensuring 100.00 becomes 10000 kobo
+        ref: paystackReference,
+        currency: 'NGN',
+        channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'],
         
         callback: function(response){
-            console.log('[Paystack] Payment successful. Redirecting...');
-            // ⭐ CRITICAL FIX: Pass the MongoDB ID to the redirect function!
             handlePaystackSuccessRedirect(mongoOrderId, response.reference); 
         },
-        
         onClose: function(){
-            displayMessage('Payment cancelled or abandoned. Please try again.');
+            displayMessage('Payment cancelled.');
             payBtn.disabled = false;
-            payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
+            payBtn.innerHTML = 'Confirm & Pay Now';
         }
     });
     
     handler.openIframe();
-    
-    // Restore button state after opening popup
-    payBtn.disabled = false;
-    payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
 }
 
     /**

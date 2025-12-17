@@ -6341,177 +6341,156 @@ app.delete('/api/users/cart', verifyUserToken, async (req, res) => {
 
 // 7. POST /api/paystack/webhook - Handle Paystack Notifications
 app.post('/api/paystack/webhook', async (req, res) => {
-    // 1. Verify Webhook Signature (Security Crucial)
-    const secret = PAYSTACK_SECRET_KEY;
-    const hash = crypto.createHmac('sha512', secret)
-        .update(req.body) 
-        .digest('hex');
-    
-    if (hash !== req.headers['x-paystack-signature']) {
-        console.error('Webhook verification failed: Invalid signature.');
-        return res.status(401).send('Unauthorized access.');
-    }
+    // 1. Verify Webhook Signature
+    // Ensure you are using the raw body for hash calculation
+    const secret = process.env.PAYSTACK_SECRET_KEY; 
+    const hash = crypto.createHmac('sha512', secret)
+        .update(JSON.stringify(req.body)) 
+        .digest('hex');
+    
+    if (hash !== req.headers['x-paystack-signature']) {
+        console.error('Webhook verification failed: Invalid signature.');
+        return res.status(401).send('Unauthorized');
+    }
 
-    // Convert raw body buffer to JSON object for processing
-    const event = JSON.parse(req.body.toString());
+    const event = req.body;
 
-    // 2. Check Event Type
-    if (event.event !== 'charge.success') {
-        return res.status(200).send(`Event type ${event.event} received but ignored.`);
-    }
+    // 2. Filter for successful charges only
+    if (event.event !== 'charge.success') {
+        return res.status(200).send('Event ignored.');
+    }
 
-    const transactionData = event.data;
-    const orderReference = transactionData.reference;
+    const transactionData = event.data;
+    const orderReference = transactionData.reference;
 
-    try {
-        // 3. Verify Transaction Status with Paystack (Double Check Security)
-        const verificationResponse = await fetch(`${PAYSTACK_API_BASE_URL}/transaction/verify/${orderReference}`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${PAYSTACK_SECRET_KEY}`,
-            }
-        });
+    try {
+        // 3. Independent Verification with Paystack API
+        const verificationResponse = await fetch(`https://api.paystack.co/transaction/verify/${orderReference}`, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${secret}` }
+        });
 
-        const verificationData = await verificationResponse.json();
+        const verificationData = await verificationResponse.json();
 
-        if (verificationData.status !== true || verificationData.data.status !== 'success') {
-            console.error('Transaction verification failed via API:', verificationData);
-            // Non-blocking status update
-            await Order.findOne({ orderReference })
-                .then(order => order && Order.findByIdAndUpdate(order._id, { status: 'Verification Failed' }));
-            return res.status(200).send('Transaction status not success upon verification.');
-        }
+        if (!verificationData.status || verificationData.data.status !== 'success') {
+            await Order.findOneAndUpdate({ orderReference }, { status: 'Verification Failed' });
+            return res.status(200).send('Transaction verification failed.');
+        }
 
-        const verifiedAmountKobo = verificationData.data.amount; // amount in kobo
-        
-        // 4. Find the corresponding Order using the reference
-        const order = await Order.findOne({ orderReference });
+        const verifiedAmountKobo = verificationData.data.amount;
+        
+        // 4. Find and Validate Order
+        const order = await Order.findOne({ orderReference });
 
-        if (!order) {
-            console.error('Order not found for reference:', orderReference);
-            // ⭐ FIX: Change 404 to 200. The webhook was received successfully, 
-            // but the business entity was missing (likely due to race condition or improper flow).
-            // Returning 200 prevents Paystack from retrying indefinitely.
-            return res.status(200).send('Order not found, verification ignored.');
-        }
+        if (!order) {
+            console.error('Order not found for reference:', orderReference);
+            return res.status(200).send('Order not found.');
+        }
 
-        // 5. Final Checks (Amount and Status Check)
-        if (order.amountPaidKobo !== verifiedAmountKobo) {
-            console.error(`Amount mismatch for order ${order._id}. Expected: ${order.amountPaidKobo}, Received: ${verifiedAmountKobo}`);
-            await Order.findByIdAndUpdate(order._id, { status: 'Amount Mismatch (Manual Review)' });
-            return res.status(200).send('Amount mismatch, requires manual review.');
-        }
+        // Validate amount (prevents price manipulation)
+        if (order.amountPaidKobo !== verifiedAmountKobo) {
+            await Order.findByIdAndUpdate(order._id, { status: 'Amount Mismatch (Review Required)' });
+            return res.status(200).send('Amount mismatch.');
+        }
 
-        // CRITICAL FIX: Check for any final state before proceeding to atomic inventory deduction
-        if (order.status === 'Completed' || order.status === 'Confirmed') {
-            return res.status(200).send('Order already successfully processed.');
-        }
+        // Prevent duplicate processing
+        if (order.status === 'Completed' || order.status === 'Confirmed') {
+            return res.status(200).send('Order already processed.');
+        }
 
-        // 6. CRITICAL FIX: ATOMIC INVENTORY DEDUCTION AND STATUS UPDATE
-        let completedOrder;
-        try {
-            // Call the new atomic function to deduct inventory and set status to 'Completed'
-            completedOrder = await deductInventoryAndCompleteOrder(order._id, transactionData);
-            
-        } catch (error) {
-            if (error.isRaceCondition) {
-                console.warn(`Webhook ignored: ${error.message}`);
-                return res.status(200).send('Order already finalized by a concurrent process.');
-            }
-            console.error(`🔴 CRITICAL INVENTORY ERROR for order ${order._id}:`, error.message);
-            // If this fails, the order status has been set to 'Inventory Failure (Manual Review)' by the atomic function.
-            // Return 200 to Paystack so they stop retrying a failing business logic.
-            return res.status(200).send('Webhook received but inventory deduction failed. Requires manual review.');
-        }
-        
-        // 7. Clear the user's cart after successful atomic completion
-        await Cart.findOneAndUpdate(
-            { userId: order.userId },
-            { items: [], updatedAt: Date.now() }
-        );
-        
-        // 8. SEND CONFIRMATION EMAIL
-        if (completedOrder) {
-            await sendOrderConfirmationEmail(completedOrder, 'completed'); 
-        } else {
-            console.error(`Could not re-fetch completed order object for email.`);
-        }
+        // 5. ATOMIC INVENTORY DEDUCTION
+        let completedOrder;
+        try {
+            completedOrder = await deductInventoryAndCompleteOrder(order._id, transactionData);
+        } catch (error) {
+            if (error.isRaceCondition) {
+                return res.status(200).send('Race condition handled.');
+            }
+            console.error(`🔴 Inventory Error for Order ${order._id}:`, error.message);
+            return res.status(200).send('Inventory failure, requires manual review.');
+        }
+        
+        // 6. Clear Cart & Send Confirmation
+        await Cart.findOneAndUpdate({ userId: order.userId }, { items: [], updatedAt: Date.now() });
+        
+        if (completedOrder) {
+            await sendOrderConfirmationEmail(completedOrder, 'completed'); 
+        }
 
-        console.log(`Order ${order._id} successfully marked as Completed, inventory deducted, cart cleared, and confirmation email triggered.`);
-        
-        // 9. Success response to Paystack
-        res.status(200).send('Webhook received and order processed successfully.');
+        console.log(`Order ${order._id} finalized successfully.`);
+        res.status(200).send('Webhook processed successfully.');
 
-    } catch (error) {
-        console.error('Internal error processing webhook:', error);
-        // Return 500 only for unrecoverable errors not handled above
-        res.status(500).send('Internal Server Error.'); 
-    }
+    } catch (error) {
+        console.error('Internal Webhook Error:', error);
+        res.status(500).send('Internal Server Error.'); 
+    }
 });
 
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
     const userId = req.userId;
-    const { shippingAddress, totalAmount, subtotal, shippingFee, tax, orderItems } = req.body;
+    // Extract data from request body
+    let { shippingAddress, totalAmount, subtotal, shippingFee, tax, orderItems } = req.body;
 
     try {
-        let rawItems = orderItems && Array.isArray(orderItems) && orderItems.length > 0 
-            ? orderItems 
-            : (await Cart.findOne({ userId }).lean())?.items || [];
+        // --- DATA SANITIZATION ---
+        // Ensure shippingAddress is an object (parses if it arrived as a string from localStorage)
+        const sanitizedShipping = typeof shippingAddress === 'string' ? JSON.parse(shippingAddress) : shippingAddress;
+        
+        // Ensure orderItems is an array (parses if it arrived as a string)
+        let rawItems = typeof orderItems === 'string' ? JSON.parse(orderItems) : orderItems;
 
-        if (rawItems.length === 0) return res.status(400).json({ message: 'Cart is empty.' });
+        // If no items provided (Standard Cart Flow), fetch from DB Cart
+        if (!rawItems || (Array.isArray(rawItems) && rawItems.length === 0)) {
+            const userCart = await Cart.findOne({ userId }).lean();
+            rawItems = userCart?.items || [];
+        }
 
-        // --- CRITICAL FIX: DYNAMIC COLLECTION LOOKUP ---
+        if (rawItems.length === 0) {
+            return res.status(400).json({ message: 'Cart is empty.' });
+        }
+
+        // --- DYNAMIC COLLECTION LOOKUP ---
         const finalOrderItems = await Promise.all(rawItems.map(async (item) => {
             const allowedCollections = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
-            
-            // Check if the current productType is actually correct
             let validatedType = item.productType;
             let typeIsCorrect = false;
 
-            if (validatedType && allowedCollections.includes(validatedType)) {
-                const Model = getProductModel(validatedType);
+            // Search for the product in allowed collections to ensure productType is 100% accurate
+            for (const collectionName of allowedCollections) {
+                const Model = getProductModel(collectionName);
                 const exists = await Model.exists({ _id: item.productId });
-                if (exists) typeIsCorrect = true;
-            }
-
-            // If type is missing or wrong, loop through collections to find the real home
-            if (!typeIsCorrect) {
-                console.log(`[Paystack] Searching for correct collection for Product: ${item.productId}`);
-                for (const collectionName of allowedCollections) {
-                    const Model = getProductModel(collectionName);
-                    const found = await Model.exists({ _id: item.productId });
-                    if (found) {
-                        validatedType = collectionName;
-                        typeIsCorrect = true;
-                        break;
-                    }
+                if (exists) {
+                    validatedType = collectionName;
+                    typeIsCorrect = true;
+                    break;
                 }
             }
 
             if (!typeIsCorrect) {
-                throw new Error(`Product ${item.productId} not found in any valid collection.`);
+                throw new Error(`Product ${item.productId} not found in valid collections.`);
             }
 
             return {
                 productId: item.productId,
                 name: item.name,
                 imageUrl: item.imageUrl,
-                productType: validatedType, // This is now 100% accurate
+                productType: validatedType,
                 quantity: parseInt(item.quantity),
                 priceAtTimeOfPurchase: parseFloat(item.price || item.priceAtTimeOfPurchase),
-                variationIndex: parseInt(item.variationIndex) || 1, 
+                variationIndex: parseInt(item.variationIndex) || 0, 
                 size: item.size,
                 color: item.color,
                 variation: item.variation
             };
         }));
 
-        const orderRef = `outflickz_${Date.now()}`; 
+        // Generate a unique reference
+        const orderRef = `outflickz_${Date.now()}_${Math.floor(Math.random() * 1000)}`; 
 
         const newOrder = await Order.create({
             userId,
             items: finalOrderItems, 
-            shippingAddress,
+            shippingAddress: sanitizedShipping,
             totalAmount: parseFloat(totalAmount),
             subtotal: parseFloat(subtotal || 0),
             shippingFee: parseFloat(shippingFee || 0),
@@ -6519,15 +6498,14 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             status: 'Pending',
             paymentMethod: 'Paystack',
             orderReference: orderRef,
-            amountPaidKobo: Math.round(parseFloat(totalAmount) * 100),
+            amountPaidKobo: Math.round(parseFloat(totalAmount) * 100), // 100.00 becomes 10000 kobo
             paymentTxnId: orderRef, 
         });
 
-        // Fetch user email for Paystack frontend initialization
         const user = await User.findById(userId).select('email');
 
         res.status(201).json({
-            message: 'Order placed, awaiting Paystack payment.',
+            message: 'Order created successfully.',
             orderId: newOrder._id,
             orderReference: newOrder.orderReference,
             totalAmount: newOrder.totalAmount,
@@ -6539,6 +6517,7 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 });
+
 // =========================================================
 // 8. POST /api/notifications/admin-order-email - Send Notification to Admin
 // This is typically called by the client AFTER a successful payment/order creation.
