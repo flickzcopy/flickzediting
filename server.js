@@ -1427,64 +1427,74 @@ async function inventoryRollback(orderId, reason) {
     }
 }
 
+/**
+ * ====================================================================================
+ * INVENTORY PROCESSING FUNCTION (ATOMIC & TRANSACTIONAL)
+ * ====================================================================================
+ * Processes an order confirmation by atomically deducting stock for all items
+ * across different product collections (Wears, Caps, NewArrivals, PreOrder).
+ * @param {string} orderId The ID of the order to confirm.
+ * @param {string} adminId The ID of the admin confirming the order.
+ * @returns {Promise<Object>} The confirmed order object.
+ * @throws {Error} Throws an error if stock is insufficient or a race condition is detected.
+ */
 async function processOrderCompletion(orderId, adminId) {
+    // 1. Start a Mongoose session for atomicity (crucial for inventory)
     const session = await mongoose.startSession();
     session.startTransaction();
     let order = null;
+    let OrderModel;
 
     try {
-        const OrderModel = mongoose.models.Order || mongoose.model('Order');
+        // Fetch the order within the transaction
+        OrderModel = mongoose.models.Order || mongoose.model('Order');
         order = await OrderModel.findById(orderId).session(session);
 
-        const isReadyForInventory = order && (order.status === 'Pending' || order.status === 'Processing');
+        // 1.1 Initial check
+        const isReadyForInventory = order && 
+            (order.status === 'Pending' || order.status === 'Processing');
 
         if (!isReadyForInventory) {
             await session.abortTransaction();
+            
+            // 409 Conflict logic: If the order is already in a confirmed state, throw the race error.
             if (order?.status === 'Confirmed' || order?.status === 'Completed') {
-                const raceError = new Error("Order already processed.");
+                console.warn(`Order ${orderId} is already confirmed (${order.status}). Inventory deduction skipped.`);
+                const raceError = new Error("Order already processed or is being processed.");
                 raceError.isRaceCondition = true;
                 throw raceError; 
             }
-            return order;
+            
+            console.warn(`Order ${orderId} skipped: not found or status is ${order?.status}. Inventory deduction aborted.`);
+            return order; // Return the current state of the order
         }
 
+        // 2. Loop through each item to deduct stock...
         for (const item of order.items) {
             const ProductModel = getProductModel(item.productType); 
-            const quantityOrdered = parseInt(item.quantity);
-            
-            // 🔍 1. PRE-FLIGHT CHECK: Fetch the product to see why the update might fail
-            const existingProduct = await ProductModel.findById(item.productId).lean();
-            if (!existingProduct) {
-                throw new Error(`Product ${item.productId} not found in collection ${item.productType}. It may have been deleted.`);
-            }
-
+            const quantityOrdered = item.quantity;
             let updatedProduct;
+            let errorMsg;
 
+            // =============================================================================
+            // ⭐ CORE FIX: CONDITIONAL INVENTORY DEDUCTION LOGIC ⭐
+            // =============================================================================
+            
             // --- Group 1: Items with nested 'sizes' array (Wears, NewArrivals, PreOrder) ---
-            if (['WearsCollection', 'NewArrivals', 'PreOrderCollection'].includes(item.productType)) {
+            if (item.productType === 'WearsCollection' || 
+                item.productType === 'NewArrivals' || 
+                item.productType === 'PreOrderCollection') {
                 
-                if (!item.size) {
-                    throw new Error(`Missing size for product ${item.productId}.`);
-                }
-
-                // Verify Variation and Size existence before attempting atomic update
-                const targetVar = existingProduct.variations.find(v => v.variationIndex === item.variationIndex);
-                if (!targetVar) {
-                    throw new Error(`Variation Index ${item.variationIndex} not found for product ${existingProduct.name}.`);
-                }
-
-                const targetSize = targetVar.sizes.find(s => s.size.trim().toUpperCase() === item.size.trim().toUpperCase());
-                if (!targetSize) {
-                    throw new Error(`Size "${item.size}" not found in ${existingProduct.name}. Available: ${targetVar.sizes.map(s => s.size).join(',')}`);
-                }
-
-                if (targetSize.stock < quantityOrdered) {
-                    throw new Error(`Insufficient stock for ${existingProduct.name} (${item.size}). Requested: ${quantityOrdered}, Available: ${targetSize.stock}`);
+                if (!item.size) { // Add a check for size-required products
+                    errorMsg = `Missing size information for size-based product ${item.productId} in ${item.productType}.`;
+                    throw new Error(errorMsg);
                 }
 
                 updatedProduct = await ProductModel.findOneAndUpdate(
                     {
                         _id: item.productId,
+                        // 🔑 FIX: Only match the product ID and the variation index in the top-level filter.
+                        // The critical size and stock check is now solely handled by the arrayFilters.
                         'variations.variationIndex': item.variationIndex 
                     },
                     {
@@ -1497,9 +1507,10 @@ async function processOrderCompletion(orderId, adminId) {
                         new: true,
                         session: session, 
                         arrayFilters: [
+                            // Filter 1: Match the correct outer Variation ('var')
                             { 'var.variationIndex': item.variationIndex }, 
-                            // Use the specific size string from the database to avoid case-mismatch
-                            { 'size.size': targetSize.size, 'size.stock': { $gte: quantityOrdered } } 
+                            // Filter 2: Match the correct inner Size ('size') AND the atomic stock check
+                            { 'size.size': item.size, 'size.stock': { $gte: quantityOrdered } } 
                         ]
                     }
                 );
@@ -1507,23 +1518,20 @@ async function processOrderCompletion(orderId, adminId) {
             // --- Group 2: Items with direct 'stock' on variation (CapCollection) ---
             } else if (item.productType === 'CapCollection') {
                 
-                const targetVar = existingProduct.variations.find(v => v.variationIndex === item.variationIndex);
-                if (!targetVar || targetVar.stock < quantityOrdered) {
-                    throw new Error(`Insufficient stock or invalid variation for ${existingProduct.name}.`);
-                }
-
                 updatedProduct = await ProductModel.findOneAndUpdate(
                     {
                         _id: item.productId,
                         'variations': {
+                            // 🔑 FIX: Use $elemMatch in the main query to perform the atomic stock check
                             $elemMatch: {
-                                variationIndex: item.variationIndex,
-                                stock: { $gte: quantityOrdered }
+                                variationIndex: item.variationIndex, // Find the correct variation
+                                stock: { $gte: quantityOrdered }      // Check stock directly on variation
                             }
                         }
                     },
                     {
                         $inc: {
+                            // Decrement stock directly on the variation found by the filter
                             'variations.$[var].stock': -quantityOrdered, 
                             'totalStock': -quantityOrdered 
                         }
@@ -1531,36 +1539,54 @@ async function processOrderCompletion(orderId, adminId) {
                     {
                         new: true,
                         session: session, 
-                        arrayFilters: [ { 'var.variationIndex': item.variationIndex } ]
+                        arrayFilters: [
+                            // Filter by variation index to ensure only the matched element is updated
+                            { 'var.variationIndex': item.variationIndex } 
+                        ]
                     }
                 );
             
+            // --- Fallback for unsupported types ---
             } else {
-                throw new Error(`Unsupported product type: ${item.productType}`);
+                errorMsg = `Unsupported product type found: ${item.productType}. Inventory deduction aborted.`;
+                throw new Error(errorMsg);
             }
+            // =============================================================================
             
+            // Check if the update was successful (product found and stock condition met)
             if (!updatedProduct) {
-                throw new Error(`Atomic update failed for ${item.productId}. Possible concurrent update or data mismatch.`);
+                // Determine the size label for the error message
+                const sizeLabel = item.productType === 'CapCollection' ? 'N/A (Direct Stock)' : item.size;
+                
+                const finalErrorMsg = `Insufficient stock or product data mismatch for item: ${sizeLabel} of product ${item.productId} in ${item.productType}. Transaction aborted.`;
+                throw new Error(finalErrorMsg);
             }
             
-            console.log(`✅ Stock Deducted: ${item.productId} (${item.size || 'Cap'})`);
+            console.log(`Inventory deducted for Product ID: ${item.productId}, Type: ${item.productType}, Qty: ${quantityOrdered}`);
         }
 
-        // 5. Finalize Order
+        // 5. Update order status and confirmation details atomically
         order.status = 'Confirmed';
         order.confirmedAt = new Date(); 
         order.confirmedBy = adminId; 
         await order.save({ session });
 
+        // 6. Finalize transaction
         await session.commitTransaction();
+        console.log(`Order ${orderId} successfully confirmed and inventory fully deducted. Status: Confirmed.`);
         return order.toObject({ getters: true });
 
     } catch (error) {
-        if (session.inTransaction()) await session.abortTransaction();
+        // Rollback on any failure
+        if (session.inTransaction()) {
+            await session.abortTransaction();
+        }
         
-        console.error(`❌ Inventory Error [Order ${orderId}]:`, error.message);
-
-        if (!error.isRaceCondition && order) { 
+        if (error.isRaceCondition) {
+            console.warn(`Race condition handled for order ${orderId}. No rollback status update needed.`);
+        }
+        else if (order) { 
+            // Call inventoryRollback for genuine failures (like Insufficient Stock)
             await inventoryRollback(orderId, error.message);
         }
 
@@ -6513,7 +6539,6 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 });
-
 // =========================================================
 // 8. POST /api/notifications/admin-order-email - Send Notification to Admin
 // This is typically called by the client AFTER a successful payment/order creation.

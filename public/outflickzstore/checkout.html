@@ -1179,49 +1179,27 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
         }
     }
 
-  /**
- * ⭐ FINAL CORRECTED: Paystack Payment Flow with Robust Data Handling.
- * * FIXES APPLIED:
- * 1. Data retrieved from localStorage (shippingAddress, orderItems) is now parsed from JSON string to JS object.
- * 2. More informative error logging on the client side to help debug the 500 server error.
+   /**
+ * ⭐ CORRECTED: Paystack Payment Flow.
+ * * Flow:
+ * 1. Collect cart/shipping data.
+ * 2. Call backend to create PENDING order (GETS MongoDB _id).
+ * 3. Initialize Paystack widget using the reference from the server.
+ * 4. On success, redirect using the MongoDB _id.
  */
-async function processPaystackPayment(totalAmount, email) { 
+async function processPaystackPayment(totalAmount, email) { // Make this async
     const payBtn = document.getElementById('checkout-next-btn');
+    // const paymentMethod = 'Paystack/Card'; // Unused in this scope
     
     // =======================================================
-    // 1. COLLECT & PARSE DATA FOR SERVER CALL (CRITICAL FIX)
+    // 1. COLLECT DATA FOR SERVER CALL
     // =======================================================
-    let shippingAddress, orderItems;
-    
-    try {
-        // ⭐ CRITICAL FIX: Parse JSON strings from localStorage into JS objects
-        const shippingAddressString = localStorage.getItem('outflickzShippingData');
-        shippingAddress = shippingAddressString ? JSON.parse(shippingAddressString) : null;
-        
-        const orderItemsString = localStorage.getItem('outflickzLocalCart');
-        // Only parse if Buy Now flow is active AND cart items are present
-        orderItems = (sessionStorage.getItem(BUY_NOW_KEY) && orderItemsString) ? JSON.parse(orderItemsString) : null;
-        
-    } catch (e) {
-        console.error('Error reading/parsing cart data from localStorage:', e);
-        displayMessage('Critical data is corrupted. Please clear cache/cookies and try again.');
-        payBtn.disabled = false;
-        payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
-        return;
-    }
-    
+    const shippingAddress = localStorage.getItem('outflickzShippingData');
+    const orderItems = localStorage.getItem('outflickzLocalCart');
     const subtotal = localStorage.getItem('outflickzOrderSubtotal') || '0';
     const shippingFee = localStorage.getItem('outflickzOrderShipping') || '0';
     const tax = localStorage.getItem('outflickzOrderTax') || '0';
     
-    // Validate essential data before continuing
-    if (!shippingAddress) {
-        displayMessage('Shipping address is missing. Please complete the previous step.');
-        payBtn.disabled = false;
-        payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
-        return;
-    }
-
     // Ensure button state is set for loading
     payBtn.disabled = true;
     payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Creating Order...';
@@ -1231,46 +1209,29 @@ async function processPaystackPayment(totalAmount, email) {
     // 2. CALL API TO CREATE PENDING ORDER AND GET MONGODB ID
     // =======================================================
     let mongoOrderId;
-    let paystackReference; 
+    let paystackReference; // Use reference returned by server
     
     try {
-        const payload = {
-            // These are now JS objects, which will be correctly stringified by JSON.stringify
-            shippingAddress: shippingAddress, 
-            totalAmount: totalAmount, 
-            subtotal: subtotal,
-            shippingFee: shippingFee,
-            tax: tax,
-            // Pass orderItems object only if Buy Now flow requires it
-            orderItems: orderItems
-        };
-        
-        // Log the payload being sent to help debug the 500 error
-        console.log('[Paystack] Sending payload to server:', payload); 
-
         const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/paystack`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/json', // Using JSON body now
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({ // Send required data as JSON
+                shippingAddress: shippingAddress, 
+                totalAmount: totalAmount, 
+                subtotal: subtotal,
+                shippingFee: shippingFee,
+                tax: tax,
+                // Pass orderItems only if Buy Now flow requires it, otherwise backend uses cart.
+                orderItems: sessionStorage.getItem(BUY_NOW_KEY) ? orderItems : null 
+            })
         });
 
         if (!response.ok) {
-            // Attempt to read the server's error message
-            const errorText = await response.text(); 
-            let errorMessage = 'Server error during order creation (Status 500).';
-            try {
-                const errorData = JSON.parse(errorText);
-                errorMessage = errorData.message || errorMessage;
-            } catch {
-                errorMessage = `Server responded with status ${response.status}. Raw response: ${errorText.substring(0, 100)}...`;
-            }
-            
-            console.error('Server API Call Failed:', errorMessage);
-            displayMessage(`Order setup failed: ${errorMessage}`);
-            // Throw to jump to catch block and reset button
-            throw new Error(errorMessage); 
+            const errorData = await response.json().catch(() => ({ message: 'Server error during order creation.' }));
+            displayMessage(`Order setup failed: ${errorData.message}`);
+            throw new Error(errorData.message);
         }
 
         const data = await response.json();
@@ -1288,9 +1249,7 @@ async function processPaystackPayment(totalAmount, email) {
         return; // Stop the process if order creation failed
     }
     
-    // ... (rest of the function for launching Paystack popup remains the same) ...
-
-    // Check if Paystack script is loaded 
+    // Check if Paystack script is loaded (same as before)
     if (typeof PaystackPop === 'undefined') {
         displayMessage('Paystack script not loaded.');
         payBtn.disabled = false;
@@ -1306,13 +1265,13 @@ async function processPaystackPayment(totalAmount, email) {
     const handler = PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
         email: email,
-        amount: totalAmount * 100, 
+        amount: totalAmount * 100, // Paystack expects amount in Kobo
         ref: paystackReference, // USE THE REFERENCE RETURNED BY THE SERVER
         currency: CURRENCY_CODE,
         
         callback: function(response){
             console.log('[Paystack] Payment successful. Redirecting...');
-            // PASS THE MONGO DB ID
+            // ⭐ CRITICAL FIX: Pass the MongoDB ID to the redirect function!
             handlePaystackSuccessRedirect(mongoOrderId, response.reference); 
         },
         
