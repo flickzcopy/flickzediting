@@ -336,9 +336,9 @@
     }
 
     /**
-* Sends a request to the API to confirm (complete) an order.
-* @param {string} orderId - The ID of the order to confirm.
-*/
+ * Sends a request to the API to confirm (complete) an order.
+ * @param {string} orderId - The ID of the order to confirm.
+ */
 async function confirmOrder(orderId) {
     const token = localStorage.getItem('adminToken');
     if (!token) {
@@ -346,14 +346,20 @@ async function confirmOrder(orderId) {
         return;
     }
     
+    // Select the button based on whether we are in the Table or Detail view
     const button = document.getElementById(`detail-confirm-btn`) || document.getElementById(`confirm-btn-${orderId}`);
+    
     if (button) {
         button.disabled = true;
-        button.textContent = 'Confirming...';
-        button.classList.add('opacity-50');
+        const originalText = button.textContent;
+        button.textContent = 'Processing Stock...';
+        button.classList.add('opacity-50', 'cursor-not-allowed');
     }
 
     try {
+        console.log(`[AdminAction] Attempting to confirm Order: ${orderId}`);
+        
+        // Ensure the URL matches your backend route (check if it's /confirm or /confirm-order)
         const response = await fetch(`/api/admin/orders/${orderId}/confirm`, {
             method: 'PUT',
             headers: {
@@ -363,52 +369,46 @@ async function confirmOrder(orderId) {
         });
 
         let responseData = {};
-
-        // 💡 CRITICAL CLIENT FIX: Check if the response is JSON before parsing.
-        // This prevents the SyntaxError when a non-JSON error page (like a 503) is returned.
         const contentType = response.headers.get("content-type");
+        
         if (contentType && contentType.includes("application/json")) {
             responseData = await response.json();
-        } else {
-            // Read as text if not JSON (likely a server/gateway error page)
-            const errorText = await response.text();
-            
-            // Handle 503 specifically
-            if (response.status === 503) {
-                throw new Error('Server Unavailable (503). The function likely timed out. Please check Netlify function logs.');
-            }
-            // Use the text as the error message if the status is bad
-            if (!response.ok) {
-                throw new Error(errorText || `Network Error: Status ${response.status}`);
-            }
         }
 
         if (!response.ok) {
-             // Use the server's error message if available, otherwise fall back to a generic message.
-            throw new Error(responseData.error || responseData.message || `Failed to confirm order: Status ${response.status}`);
+            // Check for the specific "Product Mismatch" error from the backend
+            const errorMessage = responseData.message || responseData.error || `Error ${response.status}`;
+            
+            console.error(`[AdminAction] Confirmation failed:`, errorMessage);
+            
+            // If it's the stock mismatch error, we show a distinct toast
+            if (errorMessage.includes("mismatch") || errorMessage.includes("stock")) {
+                showToast(`Stock Error: ${errorMessage}`, 'bg-orange-600');
+            } else {
+                throw new Error(errorMessage);
+            }
+            return; // Stop execution
         }
         
-        showToast(`Order #${orderId.substring(0, 8)} confirmed and processed successfully!`, 'bg-emerald-500');
+        showToast(`Order #${orderId.substring(0, 8)} confirmed! Stock levels updated.`, 'bg-emerald-500');
         
+        // Refresh the list to remove the now-confirmed order
         await loadUserOrders();
+        
+        // If in detail view, go back to list
+        if (currentDetailOrderId === orderId) {
+            showContent('userorders');
+        }
 
     } catch (error) {
         console.error('Confirmation error:', error);
-        
-        if (currentDetailOrderId === orderId) {
-            const actionCard = document.getElementById('detail-actions-card');
-            actionCard.classList.remove('border-yellow-300');
-            actionCard.classList.add('border-red-500');
-            showToast(error.message || `Failed to confirm order #${orderId.substring(0, 8)}.`, 'bg-red-500');
-        } else {
-            showToast(error.message || `Failed to confirm order #${orderId.substring(0, 8)}.`, 'bg-red-500');
-        }
+        showToast(error.message || `Failed to confirm order.`, 'bg-red-500');
         
         // Re-enable button on failure
         if (button) {
             button.disabled = false;
             button.textContent = '✅ Confirm Payment & Process Order';
-            button.classList.remove('opacity-50');
+            button.classList.remove('opacity-50', 'cursor-not-allowed');
         }
     }
 }
