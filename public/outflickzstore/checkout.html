@@ -1182,9 +1182,8 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
   /**
  * ⭐ FINAL CORRECTED: Paystack Payment Flow with Robust Data Handling.
  * * FIXES APPLIED:
- * 1. Data parsing from localStorage is correct.
- * 2. Diagnostics show client is sending 'street', but server expects different format/fields.
- * 3. FIX: Adding placeholders for common required missing fields (state, phone).
+ * 1. Data retrieved from localStorage (shippingAddress, orderItems) is now parsed from JSON string to JS object.
+ * 2. More informative error logging on the client side to help debug the 500 server error.
  */
 async function processPaystackPayment(totalAmount, email) { 
     const payBtn = document.getElementById('checkout-next-btn');
@@ -1195,10 +1194,12 @@ async function processPaystackPayment(totalAmount, email) {
     let shippingAddress, orderItems;
     
     try {
+        // ⭐ CRITICAL FIX: Parse JSON strings from localStorage into JS objects
         const shippingAddressString = localStorage.getItem('outflickzShippingData');
         shippingAddress = shippingAddressString ? JSON.parse(shippingAddressString) : null;
         
         const orderItemsString = localStorage.getItem('outflickzLocalCart');
+        // Only parse if Buy Now flow is active AND cart items are present
         orderItems = (sessionStorage.getItem(BUY_NOW_KEY) && orderItemsString) ? JSON.parse(orderItemsString) : null;
         
     } catch (e) {
@@ -1221,40 +1222,6 @@ async function processPaystackPayment(totalAmount, email) {
         return;
     }
 
-    // ⭐ CRITICAL DIAGNOSTIC/TEMPORARY FIX SECTION
-    // The previous log showed missing/misnamed fields. We will ensure all common required fields are present.
-    
-    // Fields confirmed to be present: firstName, lastName, email, street, city.
-    
-    // 1. Check if the server requires 'addressLine1' instead of 'street'. 
-    // If your server uses Mongoose, sometimes the schema expects specific key names.
-    // If 'street' is present but 'addressLine1' is expected, you need to map it:
-    if (shippingAddress.street && !shippingAddress.addressLine1) {
-        shippingAddress.addressLine1 = shippingAddress.street;
-    }
-
-    // 2. Add placeholders for highly likely missing required fields: state and phone
-    if (!shippingAddress.state) {
-        console.warn('Shipping address is missing the required STATE field. Using placeholder.');
-        shippingAddress.state = 'N/A'; 
-    }
-    if (!shippingAddress.phone) {
-        console.warn('Shipping address is missing the required PHONE field. Using placeholder.');
-        shippingAddress.phone = '000-000-0000';
-    }
-    
-    // Check fields that were set to 'N/A' in the previous run but might be rejected if they are empty strings
-    if (!shippingAddress.zipCode || shippingAddress.zipCode === 'N/A') {
-        console.warn('Shipping address is missing the ZIP CODE field. Using placeholder.');
-        shippingAddress.zipCode = '00000';
-    }
-    if (!shippingAddress.country || shippingAddress.country === 'N/A') {
-        shippingAddress.country = 'Nigeria'; // Assuming your primary market based on Paystack
-    }
-    
-    // Final check log before sending
-    console.log('[Paystack Diagnostic] Final Shipping Address Object sent to server:', shippingAddress); 
-
     // Ensure button state is set for loading
     payBtn.disabled = true;
     payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Creating Order...';
@@ -1268,14 +1235,17 @@ async function processPaystackPayment(totalAmount, email) {
     
     try {
         const payload = {
+            // These are now JS objects, which will be correctly stringified by JSON.stringify
             shippingAddress: shippingAddress, 
             totalAmount: totalAmount, 
             subtotal: subtotal,
             shippingFee: shippingFee,
             tax: tax,
+            // Pass orderItems object only if Buy Now flow requires it
             orderItems: orderItems
         };
         
+        // Log the payload being sent to help debug the 500 error
         console.log('[Paystack] Sending payload to server:', payload); 
 
         const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/paystack`, {
@@ -1287,6 +1257,7 @@ async function processPaystackPayment(totalAmount, email) {
         });
 
         if (!response.ok) {
+            // Attempt to read the server's error message
             const errorText = await response.text(); 
             let errorMessage = 'Server error during order creation (Status 500).';
             try {
@@ -1298,11 +1269,13 @@ async function processPaystackPayment(totalAmount, email) {
             
             console.error('Server API Call Failed:', errorMessage);
             displayMessage(`Order setup failed: ${errorMessage}`);
+            // Throw to jump to catch block and reset button
             throw new Error(errorMessage); 
         }
 
         const data = await response.json();
         
+        // ⭐ CRITICAL CAPTURE: Store the MongoDB ID and the Paystack reference from the server
         mongoOrderId = data.orderId; 
         paystackReference = data.orderReference;
 
@@ -1312,11 +1285,12 @@ async function processPaystackPayment(totalAmount, email) {
         console.error('Error creating pending order:', error);
         payBtn.disabled = false;
         payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
-        return; 
+        return; // Stop the process if order creation failed
     }
     
     // ... (rest of the function for launching Paystack popup remains the same) ...
 
+    // Check if Paystack script is loaded 
     if (typeof PaystackPop === 'undefined') {
         displayMessage('Paystack script not loaded.');
         payBtn.disabled = false;
@@ -1333,11 +1307,12 @@ async function processPaystackPayment(totalAmount, email) {
         key: PAYSTACK_PUBLIC_KEY,
         email: email,
         amount: totalAmount * 100, 
-        ref: paystackReference, 
+        ref: paystackReference, // USE THE REFERENCE RETURNED BY THE SERVER
         currency: CURRENCY_CODE,
         
         callback: function(response){
             console.log('[Paystack] Payment successful. Redirecting...');
+            // PASS THE MONGO DB ID
             handlePaystackSuccessRedirect(mongoOrderId, response.reference); 
         },
         
@@ -1350,6 +1325,7 @@ async function processPaystackPayment(totalAmount, email) {
     
     handler.openIframe();
     
+    // Restore button state after opening popup
     payBtn.disabled = false;
     payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
 }
