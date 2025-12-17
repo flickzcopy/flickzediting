@@ -506,154 +506,145 @@ async function updateProfileIconStatus() {
 }
     
 /**
- * Fetches the full order details (items, final amount) from the server.
- * @param {string} orderId - The MongoDB _id or reference of the order.
- */
+ * Fetches the full order details (items, final amount) from the server.
+ * @param {string} orderId - The MongoDB _id or reference of the order.
+ */
 async function fetchOrderCollection(orderId) {
-    console.log(`[OrderFetch] Starting fetch for Order ID: ${orderId}`);
-    const itemsListEl = document.getElementById('order-items-list');
-    const priceSummaryEl = document.getElementById('price-summary');
-    
-    // Get the Local Storage JWT token
-const token = localStorage.getItem(AUTH_TOKEN_KEY);
-    
-    // Helper function to render login prompt
-    const renderLoginPrompt = (isExpired = false) => {
-         // Construct the full URL for redirection
-        const currentUrl = window.location.pathname + window.location.search;
-        const redirectUrl = `useraccount.html?redirect=${encodeURIComponent(currentUrl)}`;
-        const message = isExpired 
-            ? 'Your session has expired or you do not have permission.' 
-            : 'You must be logged in to view detailed order history.';
-        
-        return `<div class="text-center py-4 text-red-500">
-            <i class="fas fa-exclamation-triangle mr-2"></i> ${message} 
-            <a href="${redirectUrl}" class="font-semibold underline text-primary-indigo hover:text-indigo-800">Click here to log in.</a>
-        </div>`;
-    };
+    console.log(`[OrderFetch] Starting fetch for Order ID: ${orderId}`);
+    const itemsListEl = document.getElementById('order-items-list');
+    const priceSummaryEl = document.getElementById('price-summary');
+    
+    // 1. Get the token using the defined CONSTANT
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    
+    // Helper function to render login prompt
+    const renderLoginPrompt = (isExpired = false) => {
+        const currentUrl = window.location.pathname + window.location.search;
+        const redirectUrl = `useraccount.html?redirect=${encodeURIComponent(currentUrl)}`;
+        const message = isExpired 
+            ? 'Your session has expired or you do not have permission.' 
+            : 'You must be logged in to view detailed order history.';
+        
+        return `<div class="text-center py-4 text-red-500">
+            <i class="fas fa-exclamation-triangle mr-2"></i> ${message} 
+            <a href="${redirectUrl}" class="font-semibold underline text-primary-indigo hover:text-indigo-800">Click here to log in.</a>
+        </div>`;
+    };
 
-    // 🆕 FIX: Use the reliable cookie check first to prevent login prompt when session is active.
-    const isLoggedIn = await isUserLoggedIn();
+    // 2. Auth Check: Verify cookie status via server-side authority
+    const isLoggedIn = await isUserLoggedIn();
 
-    if (!isLoggedIn) {
-        console.warn('[OrderFetch] User is NOT logged in (Cookie invalid). Displaying login prompt.');
-        // If the cookie session is NOT valid (server says logged out), show the login prompt.
-        itemsListEl.innerHTML = renderLoginPrompt(false);
-        priceSummaryEl.innerHTML = '';
-        return;
-    }
+    if (!isLoggedIn) {
+        console.warn('[OrderFetch] User is NOT logged in. Displaying login prompt.');
+        itemsListEl.innerHTML = renderLoginPrompt(false);
+        priceSummaryEl.innerHTML = '';
+        return;
+    }
 
-    if (isLoggedIn && !token) {
-        console.error('[OrderFetch] 🛑 Session Mismatch Detected: Cookie is valid, but JWT token is missing.');
-        // If the cookie is valid but the JWT (needed for the order API call) is missing, 
-        // display a specific error and guide the user to re-authenticate.
-        itemsListEl.innerHTML = `<div class="text-center py-4 text-orange-500">
-            <i class="fas fa-exclamation-circle mr-2"></i> **Session Mismatch:** Your login status is confirmed, but the token required to fetch order data is missing. Please **log out and log back in** to resolve this.
-        </div>`;
-        priceSummaryEl.innerHTML = '';
-        // We stop here because the API call (which requires the JWT token) will fail anyway.
-        return;
-    }
-    
-    // Log the successful pre-check before the API call
-    console.log('[OrderFetch] Pre-check passed: Logged in (Cookie valid) and JWT token present. Proceeding to API call.');
+    if (!token) {
+        console.error('[OrderFetch] 🛑 Session Mismatch: Cookie valid, but JWT token missing.');
+        itemsListEl.innerHTML = `<div class="text-center py-4 text-orange-500">
+            <i class="fas fa-exclamation-circle mr-2"></i> **Session Mismatch:** Your session is active, but the access token is missing. Please <a href="useraccount.html" class="underline">log in again</a>.
+        </div>`;
+        priceSummaryEl.innerHTML = '';
+        return;
+    }
+    
+    console.log('[OrderFetch] Pre-check passed. Proceeding to API call.');
 
-    try {
-        // We proceed because isLoggedIn is true AND token is present.
-        // CALLING BACKEND ENDPOINT: GET /api/orders/:orderId
-        const fetchUrl = `${API_BASE_URL}/api/orders/${orderId}`;
-        console.log(`[OrderFetch] Calling API: ${fetchUrl}`);
-        
-        const response = await fetch(fetchUrl, {
-            method: 'GET',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`, // Pass the JWT token
-            },
-        });
+    try {
+        const fetchUrl = `${API_BASE_URL}/api/orders/${orderId}`;
+        
+        const response = await fetch(fetchUrl, {
+            method: 'GET',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`, 
+            },
+            // ⭐ CRITICAL: Ensure secure cookies are sent for cross-site verification
+            credentials: 'include' 
+        });
 
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: 'Server error' }));
-            
-            // 🛑 SECONDARY CHECK: If the JWT token is invalid or expired
-            if (response.status === 401 || response.status === 403) {
-                console.error(`[OrderFetch] API call failed with status ${response.status}: JWT Token expired/invalid. Clearing token.`);
-                 // Clear the invalid JWT token immediately
-                 localStorage.removeItem('outflickzAuthToken');
-                 // Also ensure the header icon updates based on cookie status if it was relying on the JWT
-                 updateProfileIconStatus(); 
-                 
-                 itemsListEl.innerHTML = renderLoginPrompt(true);
-                 priceSummaryEl.innerHTML = '';
-                 return;
-            }
+        if (!response.ok) {
+            // 3. Handle Unauthorized/Expired Tokens
+            if (response.status === 401 || response.status === 403) {
+                console.error(`[OrderFetch] API failed (${response.status}). Clearing invalid token key: ${AUTH_TOKEN_KEY}`);
+                
+                // FIX: Use the constant to remove the token
+                localStorage.removeItem(AUTH_TOKEN_KEY);
+                localStorage.removeItem('outflickzAuthStatus'); 
+                
+                updateProfileIconStatus(); 
+                itemsListEl.innerHTML = renderLoginPrompt(true);
+                priceSummaryEl.innerHTML = '';
+                return;
+            }
 
-            // Other errors (e.g., 404 order not found)
-            console.error(`[OrderFetch] Other API error (Status: ${response.status}):`, errorData.message);
-            throw new Error(errorData.message || `Failed to retrieve order details (Status: ${response.status}).`);
-        }
+            const errorData = await response.json().catch(() => ({ message: 'Server error' }));
+            throw new Error(errorData.message || `Error ${response.status}`);
+        }
 
-        // The backend endpoint GET /api/orders/:orderId returns the populated order object
-        const orderDetails = await response.json(); 
-        console.log('[OrderFetch] Order details successfully retrieved:', orderDetails);
-        
-        if (!orderDetails.items || orderDetails.items.length === 0) {
-            console.warn('[OrderFetch] Order contains no items.');
-            itemsListEl.innerHTML = `<div class="text-center py-4 text-gray-500">No items found for this order.</div>`;
-            return;
-        }
+        const orderDetails = await response.json(); 
+        console.log('[OrderFetch] Success:', orderDetails);
+        
+        if (!orderDetails.items || orderDetails.items.length === 0) {
+            itemsListEl.innerHTML = `<div class="text-center py-4 text-gray-500">No items found for this order.</div>`;
+            return;
+        }
 
-        // Price calculations (amounts are already fetched from the backend, use them)
-        const subtotal = orderDetails.subtotal || 0.00;
-        const shippingFee = orderDetails.shippingFee || 0.00;
-        const tax = orderDetails.tax || 0.00; 
-        const total = orderDetails.totalAmount || (subtotal + shippingFee + tax); 
-        console.log(`[OrderFetch] Calculated Total: ${CURRENCY_SYMBOL}${total.toFixed(2)}`);
+        // 4. Data Parsing
+        const subtotal = orderDetails.subtotal || 0.00;
+        const shippingFee = orderDetails.shippingFee || 0.00;
+        const tax = orderDetails.tax || 0.00; 
+        const total = orderDetails.totalAmount || (subtotal + shippingFee + tax); 
 
-        // Helper function to format currency for display
-        const formatNaira = (amount) => amount.toLocaleString(undefined, { minimumFractionDigits: 2 });
+        // 5. Render Items
+        itemsListEl.innerHTML = orderDetails.items.map(item => `
+            <div class="flex flex-col sm:flex-row justify-between items-start py-4 border-b border-gray-100 last:border-b-0 transition duration-150 hover:bg-gray-50 rounded-md px-2">
+                <div class="flex items-start flex-grow w-full"> 
+                    <img src="${item.imageUrl || 'https://placehold.co/80x80?text=No+Image'}" alt="${item.name}" class="w-20 h-20 rounded-lg border mr-4 object-cover flex-shrink-0">
+                    <div class="text-sm pt-0.5 flex-grow">
+                        <p class="font-bold text-gray-900">${item.name}</p>
+                        <p class="text-xs text-gray-500 mt-1">
+                            <span class="font-medium">Size:</span> ${item.size || 'N/A'} <span class="mx-1 text-gray-300">|</span> 
+                            <span class="font-medium">Color:</span> ${item.color || 'N/A'}
+                        </p>
+                        <p class="text-xs text-gray-500"><span class="font-medium">Qty:</span> ${item.quantity}</p>
+                    </div>
+                </div>
+                <div class="mt-2 sm:mt-0 text-right sm:pl-4 w-full sm:w-auto">
+                    <span class="text-sm sm:text-base font-bold text-gray-900">${CURRENCY_SYMBOL}${formatNaira(item.priceAtTimeOfPurchase * item.quantity)}</span>
+                    <p class="text-xs text-gray-400">@ ${CURRENCY_SYMBOL}${formatNaira(item.priceAtTimeOfPurchase)} each</p>
+                </div>
+            </div>
+        `).join('');
 
+        // 6. Render Price Summary
+        priceSummaryEl.innerHTML = `
+            <div class="space-y-2">
+                <div class="flex justify-between text-sm text-gray-700">
+                    <span>Subtotal:</span>
+                    <span class="font-semibold">${CURRENCY_SYMBOL}${formatNaira(subtotal)}</span>
+                </div>
+                <div class="flex justify-between text-sm text-gray-700">
+                    <span>Shipping:</span>
+                    <span class="font-semibold">${CURRENCY_SYMBOL}${formatNaira(shippingFee)}</span>
+                </div>
+                <div class="flex justify-between text-sm text-gray-700">
+                    <span>Tax:</span>
+                    <span class="font-semibold">${CURRENCY_SYMBOL}${formatNaira(tax)}</span>
+                </div>
+                <div class="flex justify-between text-xl font-extrabold text-primary-indigo border-t pt-4 mt-2">
+                    <span>Order Total:</span>
+                    <span>${CURRENCY_SYMBOL}${formatNaira(total)}</span>
+                </div>
+            </div>
+        `;
 
-     // 1. Render Collection Details
-itemsListEl.innerHTML = `
-    ${orderDetails.items.map(item => `
-        <div class="flex flex-col sm:flex-row justify-between items-start py-4 border-b border-gray-100 last:border-b-0 transition duration-150 hover:bg-gray-50 rounded-md px-2">
-            <div class="flex items-start flex-grow w-full"> 
-                <img src="${item.imageUrl || 'https://placehold.co/80x80/f8f8f8/999999?text=NO+IMG'}" alt="${item.name}" class="w-20 h-20 rounded-lg border mr-4 object-cover flex-shrink-0">
-                <div class="text-sm pt-0.5 flex-grow">
-                    <p class="font-bold text-gray-900">${item.name}</p>
-                    <p class="text-xs text-gray-500 mt-1">
-                        <span class="font-medium">Size:</span> ${item.size} <span class="mx-1 text-gray-300">|</span> 
-                        <span class="font-medium">Color:</span> ${item.color || 'N/A'}
-                    </p>
-                    <p class="text-xs text-gray-500"><span class="font-medium">Qty:</span> ${item.quantity}</p>
-                </div>
-            </div>
-            
-            <div class="mt-2 sm:mt-0 text-right sm:pl-4 w-full sm:w-auto flex-shrink-0">
-                <span class="text-sm sm:text-base font-bold text-gray-900">${CURRENCY_SYMBOL}${formatNaira(item.priceAtTimeOfPurchase * item.quantity)}</span>
-                <p class="text-xs text-gray-400">@ ${CURRENCY_SYMBOL}${formatNaira(item.priceAtTimeOfPurchase)} each</p>
-            </div>
-        </div>
-    `).join('')}
-`;
-
-        // 2. Render Price Summary
-        priceSummaryEl.innerHTML = `
-            <p class="text-sm text-gray-700">Subtotal: <span class="font-semibold">${CURRENCY_SYMBOL}${formatNaira(subtotal)}</span></p>
-            <p class="text-sm text-gray-700">Shipping: <span class="font-semibold">${CURRENCY_SYMBOL}${formatNaira(shippingFee)}</span></p>
-            <p class="text-sm text-gray-700">Tax (${(LOCAL_TAX_RATE * 100).toFixed(0)}%): <span class="font-semibold">${CURRENCY_SYMBOL}${formatNaira(tax)}</span></p>
-            <p class="text-xl font-extrabold text-primary-indigo border-t pt-2 mt-4">Order Total: ${CURRENCY_SYMBOL}${formatNaira(total)}</p>
-        `;
-
-        // Log confirmation of email send
-        console.log(`[OrderFetch] Order details loaded successfully.`);
-
-    } catch (error) {
-        console.error('[OrderFetch] General Error during order fetch:', error);
-        itemsListEl.innerHTML = `<div class="text-center py-4 text-red-500"><i class="fas fa-exclamation-triangle mr-2"></i> Failed to load order items. Please verify your internet connection or login status.</div>`;
-        priceSummaryEl.innerHTML = '';
-    }
+    } catch (error) {
+        console.error('[OrderFetch] Fatal Error:', error);
+        itemsListEl.innerHTML = `<div class="text-center py-4 text-red-500"><i class="fas fa-exclamation-triangle mr-2"></i> Error loading order details. Please try refreshing.</div>`;
+    }
 }
 
 /**

@@ -6460,17 +6460,15 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
         orderItems 
     } = req.body;
 
+    // 1. Basic Validation
     if (!shippingAddress || typeof shippingAddress !== 'object') {
         return res.status(400).json({ message: 'Invalid shipping address format.' });
     }
 
     try {
         let rawItems = [];
-        let isBuyNowOrder = false;
-
         if (orderItems && Array.isArray(orderItems) && orderItems.length > 0) {
             rawItems = orderItems;
-            isBuyNowOrder = true;
         } else {
             const cart = await Cart.findOne({ userId }).lean();
             if (!cart || cart.items.length === 0) {
@@ -6479,49 +6477,36 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             rawItems = cart.items;
         }
 
-        const finalOrderItems = await Promise.all(rawItems.map(async (item) => {
-            let correctedType = item.productType;
-            let isTypeValid = !!PRODUCT_MODEL_MAP[item.productType];
-
-            if (!isTypeValid) {
-                console.log(`[Paystack] Correcting productType: ${item.productType} for ${item.productId}`);
-                let foundType = null;
-                for (const type of Object.keys(PRODUCT_MODEL_MAP)) {
-                    try {
-                        const CollectionModel = getProductModel(type);
-                        const productExists = await CollectionModel.exists({ _id: item.productId });
-                        if (productExists) { foundType = type; break; }
-                    } catch (err) {
-                        console.warn(`Model check failed for type ${type}: ${err.message}`);
-                    }
-                }
-                if (!foundType) throw new Error(`Product ID ${item.productId} not found.`);
-                correctedType = foundType;
-
-                if (!isBuyNowOrder) {
-                    await Cart.findOneAndUpdate(
-                        { userId, 'items.productId': item.productId },
-                        { '$set': { 'items.$.productType': correctedType } }
-                    );
-                }
-            }
+        // 2. CRITICAL FIX: Map items to match OrderItemSchema Enums and Requirements
+        const finalOrderItems = rawItems.map(item => {
+            // Logic to ensure productType is one of the allowed Enums
+            const allowedCollections = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
+            
+            // If the incoming type is not in the allowed list, default it to 'NewArrivals' 
+            // (Or whichever collection makes the most sense as a fallback)
+            let validatedType = allowedCollections.includes(item.productType) 
+                ? item.productType
+                : 'PreOrderCollection';
 
             return {
                 productId: item.productId,
                 name: item.name || "Product Name",
                 imageUrl: item.imageUrl,
-                productType: correctedType, 
+                productType: validatedType, // Now valid for Mongoose Enum
                 quantity: parseInt(item.quantity),
                 priceAtTimeOfPurchase: parseFloat(item.price || item.priceAtTimeOfPurchase),
-                variationIndex: parseInt(item.variationIndex) || 0, 
+                // variationIndex is REQUIRED by your schema and must be >= 1
+                variationIndex: parseInt(item.variationIndex) || 1, 
                 size: item.size,
                 color: item.color,
                 variation: item.variation
             };
-        }));
+        });
 
+        // 3. Generate Reference
         const orderRef = `outflickz_${Date.now()}`; 
 
+        // 4. Create Order
         const newOrder = await Order.create({
             userId: userId,
             items: finalOrderItems, 
@@ -6537,26 +6522,23 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             paymentTxnId: orderRef, 
         });
 
-        // ⭐ NEW: Fetch User email for frontend Paystack initialization
-        const user = await User.findById(userId).select('email');
-
-        console.log(`[Paystack] Order Created: ${newOrder.orderReference}`);
+        console.log(`[Paystack] Order Created in DB: ${newOrder.orderReference}`);
 
         res.status(201).json({
             message: 'Order placed, awaiting Paystack payment.',
             orderId: newOrder._id,
             orderReference: newOrder.orderReference,
             totalAmount: newOrder.totalAmount, 
-            amountKobo: newOrder.amountPaidKobo, // Frontend uses this
-            email: user.email,                   // Frontend uses this
-            publicKey: process.env.PAYSTACK_PUBLIC_KEY 
         });
 
     } catch (error) {
-        console.error('🔴 ERROR creating Paystack order:', error.message);
+        console.error('🔴 ERROR creating order:', error.message);
+        
+        // Return specific Mongoose validation error messages to the frontend
         const errorMessage = error.name === 'ValidationError' 
             ? Object.values(error.errors).map(val => val.message).join(', ')
-            : error.message || 'Internal server error during order creation.';
+            : 'Internal server error during order creation.';
+
         res.status(500).json({ message: errorMessage });
     }
 });
@@ -7152,117 +7134,82 @@ app.get('/api/orders/history', verifyUserToken, async (req, res) => {
     }
 });
 
-// 6. GET /api/orders/:orderId (Fetch Single Order Details - Protected)
+
 app.get('/api/orders/:orderId', verifyUserToken, async function (req, res) {
-    const orderId = req.params.orderId; // Can be custom ref (Paystack) OR ObjectId (Bank Transfer)
-    const userId = req.userId; // Set by verifyUserToken middleware
+    const orderId = req.params.orderId;
+    const userId = req.userId;
 
-    if (!orderId) {
-        return res.status(400).json({ message: 'Order ID is required.' });
-    }
-    if (!userId) {
-        return res.status(401).json({ message: 'Authentication required.' });
-    }
-
-    try {
-        // ⭐ CRITICAL HYBRID FIX: Build a flexible query to find the order by EITHER 
-        // the custom reference ID OR the MongoDB ObjectId, ensuring it belongs to the user.
-        
+    try {
+        // 1. Build Hybrid Query
         const queryConditions = {
-            userId: userId, // Always ensure ownership
-            $or: [
-                // 1. Check the custom reference field (used by Paystack/Custom Refs)
-                { orderReference: orderId },
-            ]
+            userId: userId,
+            $or: [{ orderReference: orderId }]
         };
 
-        // Check if the ID *could* be a MongoDB ObjectId (24 hex characters)
-        // If it is, we add it to the $or query to allow lookup by internal ID.
+        // Add ObjectId lookup if the string format is valid
         if (orderId.length === 24 && /^[0-9a-fA-F]+$/.test(orderId)) {
              queryConditions.$or.push({ _id: orderId });
         }
 
-        // 1. Fetch the specific order document using the hybrid query
-        const order = await Order.findOne(queryConditions) // <-- USES THE NEW $OR LOGIC
-        // ⭐ FIX: Ensure we select the new financial breakdown fields
-        .select('+subtotal +shippingFee +tax')
-        .lean();
+        // 2. Execute Query
+        const order = await Order.findOne(queryConditions)
+            .select('subtotal shippingFee tax items totalAmount orderReference status paymentMethod') // Explicitly include financial fields
+            .lean();
 
-        if (!order) {
-            // This handles cases where the orderReference/ObjectId is valid but not found, or doesn't belong to the user.
-            return res.status(404).json({ message: 'Order not found or access denied.' });
-        }
-        
-        // 🛑 CRITICAL FIX: Prevent 500 error if 'items' array is missing or corrupted
-        if (!order.items || !Array.isArray(order.items)) {
-            console.error(`[OrderDetails Error] Order ID ${orderId} found but is missing the 'items' array. Returning 422.`);
-            // Returning 422 (Unprocessable Entity) indicates the data structure is corrupt.
-            return res.status(422).json({ message: 'Order data is incomplete or corrupted.' });
-        }
+        if (!order) {
+            console.warn(`[OrderFetch] No order found for ID: ${orderId} and User: ${userId}`);
+            return res.status(404).json({ message: 'Order not found.' });
+        }
+        
+        if (!order.items || !Array.isArray(order.items)) {
+            return res.status(422).json({ message: 'Order data is incomplete.' });
+        }
 
-        // 2. Fetch Display Details for each item (Product Name, Image, etc.)
-        const productDetailsPromises = order.items.map(async (item) => {
-            // Use a copy of the item object for mutation
-            let displayItem = { ...item };
-            
-            // Prioritize saved data for name/image consistency at time of purchase
-            if (item.name && item.imageUrl) {
-                // If the order item already contains the name and image (which it should now)
-                displayItem.sku = `SKU-${item.productType.substring(0,3).toUpperCase()}-${item.size || 'UNK'}`;
-                delete displayItem._id; 
-                return displayItem;
-            }
-            
-            // Fallback to fetching product details if necessary (e.g., for old orders)
-            const Model = productModels[item.productType];
-            
-            if (!Model) {
-                console.warn(`[OrderDetails] Unknown product type: ${item.productType}`);
-                displayItem.name = item.name || 'Product Not Found';
-                displayItem.imageUrl = item.imageUrl || 'https://via.placeholder.com/150/CCCCCC/FFFFFF?text=Error';
-                displayItem.sku = 'N/A';
-            } else {
-                // Find the original product to get the display details
-                const product = await Model.findById(item.productId)
-                    .select('name imageUrls') // Only need display data
-                    .lean();
+        // 3. Populate Display Details
+        const populatedItems = await Promise.all(order.items.map(async (item) => {
+            let displayItem = { ...item };
+            
+            // If the data was already saved during checkout, use it directly (FASTEST)
+            if (displayItem.name && displayItem.imageUrl) {
+                return displayItem;
+            }
+            
+            // Fallback for legacy orders
+            try {
+                // Use the helper you defined elsewhere in your server.js
+                const Model = typeof getProductModel === 'function' 
+                    ? getProductModel(item.productType) 
+                    : productModels[item.productType];
 
-                displayItem.name = item.name || (product ? product.name : 'Product Deleted');
-                // Use the saved imageUrl if available, otherwise fallback to the first product image
-                displayItem.imageUrl = item.imageUrl || (product && product.imageUrls && product.imageUrls.length > 0 ? product.imageUrls[0] : 'https://via.placeholder.com/150/CCCCCC/FFFFFF?text=No+Image');
-                displayItem.sku = `SKU-${item.productType.substring(0,3).toUpperCase()}-${item.size || 'UNK'}`;
-            }
-            
-            // Clean up the Mongoose virtual _id field before sending
-            delete displayItem._id; 
-            
-            return displayItem;
-        });
+                if (Model) {
+                    const product = await Model.findById(item.productId).select('name imageUrls').lean();
+                    if (product) {
+                        displayItem.name = product.name;
+                        displayItem.imageUrl = product.imageUrls?.[0] || displayItem.imageUrl;
+                    }
+                }
+            } catch (err) {
+                console.error(`[OrderFetch] Fallback lookup failed for ${item.productId}`);
+            }
 
-        // Resolve all concurrent product detail fetches
-        const populatedItems = await Promise.all(productDetailsPromises);
-        
-        // 3. Construct the final response object, now correctly reading the financial breakdown
-        const finalOrderDetails = {
-            ...order,
-            items: populatedItems,
-            // ⭐ FIX/UPDATE: Read the actual stored financial breakdown, falling back to stored data/zero if undefined
-            // If subtotal is undefined, approximate it by subtracting fees from the total amount.
-            subtotal: order.subtotal !== undefined 
-                ? order.subtotal 
-                : (order.totalAmount - (order.shippingFee || 0.00) - (order.tax || 0.00)), 
-            shippingFee: order.shippingFee || 0.00, 
-            tax: order.tax || 0.00 
-        };
+            return displayItem;
+        }));
 
-        // 4. Send the populated details to the frontend
-        res.status(200).json(finalOrderDetails);
+        // 4. Final Financial Calculations
+        const finalOrderDetails = {
+            ...order,
+            items: populatedItems,
+            subtotal: order.subtotal ?? (order.totalAmount - (order.shippingFee || 0) - (order.tax || 0)),
+            shippingFee: order.shippingFee || 0,
+            tax: order.tax || 0
+        };
 
-    } catch (error) {
-        console.error('Error fetching order details:', error);
-        // This catch block now handles database connection errors, timeouts, etc.
-        res.status(500).json({ message: 'Failed to retrieve order details due to a server error.' });
-    }
+        res.status(200).json(finalOrderDetails);
+
+    } catch (error) {
+        console.error('🔴 [OrderFetch] Server Error:', error.message);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
 });
 
 // =========================================================
