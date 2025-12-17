@@ -6477,57 +6477,51 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             rawItems = cart.items;
         }
 
-       // ⭐ IMPROVED MAPPING: Ensuring Admin-inputted names match the correct collections
-const finalOrderItems = await Promise.all(rawItems.map(async (item) => {
-    const allowedCollections = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
-    
-    let validatedType = item.productType;
-    let productName = (item.name || "").toLowerCase();
+        // 2. ⭐ CRITICAL FIX: The mapping must match your OrderItemSchema Enum exactly
+        const finalOrderItems = await Promise.all(rawItems.map(async (item) => {
+            const allowedCollections = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
+            
+            let validatedType = item.productType;
+            const productName = (item.name || "").toLowerCase();
 
-    // 1. If the type sent is ALREADY one of the 4 valid ones, we are good.
-    if (allowedCollections.includes(validatedType)) {
-        // No action needed, validatedType is correct
-    } 
-    // 2. If it's NOT a valid type, check the name keywords
-    else {
-        // Priority 1: PreOrder (Jerseys)
-        if (productName.includes('jersey') || productName.includes('preorder')) {
-            validatedType = 'PreOrderCollection';
-        } 
-        // Priority 2: Caps
-        else if (productName.includes('cap') || productName.includes('hat') || productName.includes('beanie')) {
-            validatedType = 'CapCollection';
-        } 
-        // Priority 3: Wears
-        else if (productName.includes('hoodie') || productName.includes('shirt') || productName.includes('short') || productName.includes('wear')) {
-            validatedType = 'WearsCollection';
-        } 
-        // Priority 4: Default to NewArrivals
-        else {
-            validatedType = 'NewArrivals';
-        }
-    }
+            // If the type sent isn't valid, we use a more aggressive keyword check
+            if (!allowedCollections.includes(validatedType)) {
+                // Priority 1: PreOrder (JERSEYS and BRAND SPECIFIC)
+                if (productName.includes('jersey') || productName.includes('preorder') || productName.includes('blue')) {
+                    validatedType = 'PreOrderCollection';
+                } 
+                // Priority 2: Caps
+                else if (productName.includes('cap') || productName.includes('hat') || productName.includes('beanie')) {
+                    validatedType = 'CapCollection';
+                } 
+                // Priority 3: Wears
+                else if (productName.includes('hoodie') || productName.includes('shirt') || productName.includes('wear')) {
+                    validatedType = 'WearsCollection';
+                } 
+                // Priority 4: Default
+                else {
+                    validatedType = 'NewArrivals';
+                }
+            }
 
-    console.log(`[Order Placement] Item "${item.name}" mapped to DB Collection: ${validatedType}`);
+            return {
+                productId: item.productId,
+                name: item.name,
+                imageUrl: item.imageUrl,
+                productType: validatedType, 
+                quantity: parseInt(item.quantity) || 1,
+                priceAtTimeOfPurchase: parseFloat(item.price || item.priceAtTimeOfPurchase),
+                variationIndex: parseInt(item.variationIndex) || 1, 
+                size: item.size,
+                color: item.color,
+                variation: item.variation
+            };
+        }));
 
-    return {
-        productId: item.productId,
-        name: item.name,
-        imageUrl: item.imageUrl,
-        productType: validatedType, 
-        quantity: parseInt(item.quantity) || 1,
-        priceAtTimeOfPurchase: parseFloat(item.price || item.priceAtTimeOfPurchase),
-        variationIndex: parseInt(item.variationIndex) || 1, 
-        size: item.size,
-        color: item.color,
-        variation: item.variation
-    };
-}));
-
-        // 3. Generate Reference
+        // 3. Generate Unique Reference
         const orderRef = `outflickz_${Date.now()}`; 
 
-        // 4. Create Order
+        // 4. Create the Order in PENDING state
         const newOrder = await Order.create({
             userId: userId,
             items: finalOrderItems, 
@@ -6543,8 +6537,9 @@ const finalOrderItems = await Promise.all(rawItems.map(async (item) => {
             paymentTxnId: orderRef, 
         });
 
-        console.log(`[Paystack] Order Created in DB: ${newOrder.orderReference}`);
+        console.log(`[Success] Order ${newOrder.orderReference} created for user ${userId}`);
 
+        // 5. Success Response
         res.status(201).json({
             message: 'Order placed, awaiting Paystack payment.',
             orderId: newOrder._id,
@@ -6553,14 +6548,8 @@ const finalOrderItems = await Promise.all(rawItems.map(async (item) => {
         });
 
     } catch (error) {
-        console.error('🔴 ERROR creating order:', error.message);
-        
-        // Return specific Mongoose validation error messages to the frontend
-        const errorMessage = error.name === 'ValidationError' 
-            ? Object.values(error.errors).map(val => val.message).join(', ')
-            : 'Internal server error during order creation.';
-
-        res.status(500).json({ message: errorMessage });
+        console.error('🔴 ERROR creating order:', error);
+        res.status(500).json({ message: error.message || 'Internal server error.' });
     }
 });
 
