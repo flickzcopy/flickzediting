@@ -6485,8 +6485,8 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             // If the incoming type is not in the allowed list, default it to 'NewArrivals' 
             // (Or whichever collection makes the most sense as a fallback)
             let validatedType = allowedCollections.includes(item.productType) 
-                ? item.productType 
-                : 'Uncategorized';
+                ? item.productType
+                : 'PreOrderCollection';
 
             return {
                 productId: item.productId,
