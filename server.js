@@ -6448,6 +6448,7 @@ app.post('/api/paystack/webhook', async (req, res) => {
         res.status(500).send('Internal Server Error.'); 
     }
 });
+
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
     const userId = req.userId;
     const { 
@@ -6459,7 +6460,6 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
         orderItems 
     } = req.body;
 
-    // 1. Basic Validation
     if (!shippingAddress || typeof shippingAddress !== 'object') {
         return res.status(400).json({ message: 'Invalid shipping address format.' });
     }
@@ -6468,7 +6468,6 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
         let rawItems = [];
         let isBuyNowOrder = false;
 
-        // Determine source of items (Direct Buy Now or Cart)
         if (orderItems && Array.isArray(orderItems) && orderItems.length > 0) {
             rawItems = orderItems;
             isBuyNowOrder = true;
@@ -6480,38 +6479,25 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             rawItems = cart.items;
         }
 
-        // -------------------------------------------------------------
-        // ⭐ CRITICAL FIX: DYNAMIC PRODUCT TYPE CORRECTION
-        // -------------------------------------------------------------
         const finalOrderItems = await Promise.all(rawItems.map(async (item) => {
             let correctedType = item.productType;
             let isTypeValid = !!PRODUCT_MODEL_MAP[item.productType];
 
-            // If the type is missing or not in our valid map, look it up across collections
             if (!isTypeValid) {
                 console.log(`[Paystack] Correcting productType: ${item.productType} for ${item.productId}`);
-                
                 let foundType = null;
                 for (const type of Object.keys(PRODUCT_MODEL_MAP)) {
                     try {
                         const CollectionModel = getProductModel(type);
                         const productExists = await CollectionModel.exists({ _id: item.productId });
-                        
-                        if (productExists) {
-                            foundType = type;
-                            break;
-                        }
+                        if (productExists) { foundType = type; break; }
                     } catch (err) {
                         console.warn(`Model check failed for type ${type}: ${err.message}`);
                     }
                 }
-
-                if (!foundType) {
-                    throw new Error(`Product ID ${item.productId} not found in any valid collection.`);
-                }
+                if (!foundType) throw new Error(`Product ID ${item.productId} not found.`);
                 correctedType = foundType;
 
-                // Optional: Update the permanent cart if this was a cart item
                 if (!isBuyNowOrder) {
                     await Cart.findOneAndUpdate(
                         { userId, 'items.productId': item.productId },
@@ -6533,12 +6519,9 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
                 variation: item.variation
             };
         }));
-        // -------------------------------------------------------------
 
-        // 3. Generate Reference
         const orderRef = `outflickz_${Date.now()}`; 
 
-        // 4. Create Order
         const newOrder = await Order.create({
             userId: userId,
             items: finalOrderItems, 
@@ -6554,26 +6537,30 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             paymentTxnId: orderRef, 
         });
 
-        console.log(`[Paystack] Order Created: ${newOrder.orderReference}. Source: ${isBuyNowOrder ? 'Buy Now' : 'Cart'}`);
+        // ⭐ NEW: Fetch User email for frontend Paystack initialization
+        const user = await User.findById(userId).select('email');
+
+        console.log(`[Paystack] Order Created: ${newOrder.orderReference}`);
 
         res.status(201).json({
             message: 'Order placed, awaiting Paystack payment.',
             orderId: newOrder._id,
             orderReference: newOrder.orderReference,
             totalAmount: newOrder.totalAmount, 
+            amountKobo: newOrder.amountPaidKobo, // Frontend uses this
+            email: user.email,                   // Frontend uses this
+            publicKey: process.env.PAYSTACK_PUBLIC_KEY 
         });
 
     } catch (error) {
         console.error('🔴 ERROR creating Paystack order:', error.message);
-        
-        // Handle specific "Product not found" error from our lookup
         const errorMessage = error.name === 'ValidationError' 
             ? Object.values(error.errors).map(val => val.message).join(', ')
             : error.message || 'Internal server error during order creation.';
-
         res.status(500).json({ message: errorMessage });
     }
 });
+
 // =========================================================
 // 8. POST /api/notifications/admin-order-email - Send Notification to Admin
 // This is typically called by the client AFTER a successful payment/order creation.
