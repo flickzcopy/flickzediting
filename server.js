@@ -6449,82 +6449,52 @@ app.post('/api/paystack/webhook', async (req, res) => {
     }
 });
 
-// =========================================================
-// 8. POST /api/orders/place/paystack - Create a Pending Paystack Order (Protected)
-// **This route ensures the Order is in the DB before payment starts.**
-// =========================================================
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
-    
     const userId = req.userId;
     
-    // Extract Form fields (assuming the body contains stringified JSON data, similar to /place/pending)
+    // 1. DATA EXTRACTION
+    // Since you use express.json() middleware and 'application/json' header,
+    // these fields are already correctly typed (objects are objects, numbers are numbers).
     const { 
-        shippingAddress: shippingAddressString, 
-        totalAmount: totalAmountString, 
-        subtotal: subtotalString,
-        shippingFee: shippingFeeString,
-        tax: taxString,
-        orderItems: orderItemsString 
+        shippingAddress, 
+        totalAmount, 
+        subtotal,
+        shippingFee,
+        tax,
+        orderItems 
     } = req.body;
-    
-    // Convert string fields
-    const totalAmount = parseFloat(totalAmountString);
-    const subtotal = parseFloat(subtotalString || '0');
-    const shippingFee = parseFloat(shippingFeeString || '0');
-    const tax = parseFloat(taxString || '0');
 
-    let shippingAddress;
-
-    // --- Robust Parsing Logic ---
-    try {
-        if (!shippingAddressString || shippingAddressString.trim() === '') {
-            shippingAddress = null; 
-        } else {
-            shippingAddress = JSON.parse(shippingAddressString);
-        }
-    } catch (e) {
+    // 2. ROBUST VALIDATION
+    // We no longer need to JSON.parse() here because shippingAddress is already an object.
+    if (!shippingAddress || typeof shippingAddress !== 'object') {
         return res.status(400).json({ message: 'Invalid shipping address format.' });
     }
-    
-    // 1. Critical Input Validation
-    if (!shippingAddress || totalAmount <= 0 || isNaN(totalAmount)) {
-        return res.status(400).json({ message: 'Missing shipping address or invalid total amount.' });
+
+    const parsedTotal = parseFloat(totalAmount);
+    if (isNaN(parsedTotal) || parsedTotal <= 0) {
+        return res.status(400).json({ message: 'Invalid total amount.' });
     }
 
     try {
-        // 2. RETRIEVE ORDER ITEMS (PRIORITIZE Buy Now Items)
+        // 3. RETRIEVE ORDER ITEMS
         let finalOrderItems = [];
         let isBuyNowOrder = false;
         
-        if (orderItemsString && orderItemsString.trim() !== '') {
-            // Scenario 1: Buy Now Checkout (Use the item validation logic from /place/pending)
-            let rawItems;
-            try {
-                rawItems = JSON.parse(orderItemsString);
-            } catch (e) {
-                return res.status(400).json({ message: 'Invalid order item list format.' });
-            }
-            
+        // Check if orderItems was passed (Buy Now flow)
+        if (orderItems && Array.isArray(orderItems) && orderItems.length > 0) {
             isBuyNowOrder = true;
-            
-            // NOTE: You need to include the item mapping/correction logic here 
-            // if you need server-side validation/correction for 'Buy Now' items.
-            finalOrderItems = rawItems.map(item => ({
+            finalOrderItems = orderItems.map(item => ({
                 ...item,
                 priceAtTimeOfPurchase: item.price,
             }));
-            
         } else {
-            // Scenario 2: Standard Cart Checkout
+            // Standard Cart Checkout
             const cart = await Cart.findOne({ userId }).lean();
-
             if (!cart || cart.items.length === 0) {
                 return res.status(400).json({ message: 'Cannot place order: Shopping bag is empty.' });
             }
             
-            // Map cart items to OrderItemSchema structure
             finalOrderItems = cart.items.map(item => ({
-                // Ensure all fields required by OrderItemSchema are present
                 productId: item.productId,
                 name: item.name, 
                 imageUrl: item.imageUrl,
@@ -6542,42 +6512,37 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             return res.status(400).json({ message: 'Order item list is empty.' });
         }
         
-        // 3. Generate the unique Paystack reference (REQUIRED)
+        // 4. GENERATE REFERENCE & CREATE ORDER
         const orderRef = `outflickz_${Date.now()}`; 
 
-        // 4. Create the new order in a PENDING state
         const newOrder = await Order.create({
             userId: userId,
             items: finalOrderItems, 
-            shippingAddress: shippingAddress,
-            totalAmount: totalAmount,
-            subtotal: subtotal,
-            shippingFee: shippingFee,
-            tax: tax,
-            status: 'Pending', // Initial status before successful payment
+            shippingAddress: shippingAddress, // Saved directly as an object
+            totalAmount: parsedTotal,
+            subtotal: parseFloat(subtotal || 0),
+            shippingFee: parseFloat(shippingFee || 0),
+            tax: parseFloat(tax || 0),
+            status: 'Pending',
             paymentMethod: 'Paystack',
-            orderReference: orderRef, // CRITICAL: Saved for the Paystack webhook lookup
-            amountPaidKobo: Math.round(totalAmount * 100),
+            orderReference: orderRef,
+            amountPaidKobo: Math.round(parsedTotal * 100),
             paymentTxnId: orderRef, 
         });
         
-        console.log(`Pending Paystack Order created: ${newOrder.orderReference}. Source: ${isBuyNowOrder ? 'Buy Now' : 'Cart'}`);
+        console.log(`[Backend] Pending Order created: ${newOrder.orderReference}`);
 
-        // 5. Success Response: Send the MongoDB ID and Paystack Reference
+        // 5. SUCCESS RESPONSE
         res.status(201).json({
             message: 'Order placed, awaiting Paystack payment.',
-            orderId: newOrder._id, // ⭐ ADDED: The MongoDB ID for the frontend to use for retrieval!
-            orderReference: newOrder.orderReference, // The client uses this for the Paystack widget
+            orderId: newOrder._id,
+            orderReference: newOrder.orderReference,
             totalAmount: newOrder.totalAmount, 
         });
 
     } catch (error) {
         console.error('Error placing pending Paystack order:', error);
-        const userMessage = error.message.includes('validation failed') 
-                            ? error.message.split(':').slice(-1)[0].trim() 
-                            : 'Failed to create pending order due to a server error.';
-
-        res.status(500).json({ message: userMessage });
+        res.status(500).json({ message: 'Internal server error during order creation.' });
     }
 });
 
