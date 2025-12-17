@@ -6460,15 +6460,17 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
         orderItems 
     } = req.body;
 
-    // 1. Basic Validation
     if (!shippingAddress || typeof shippingAddress !== 'object') {
         return res.status(400).json({ message: 'Invalid shipping address format.' });
     }
 
     try {
         let rawItems = [];
+        let isBuyNowOrder = false;
+
         if (orderItems && Array.isArray(orderItems) && orderItems.length > 0) {
             rawItems = orderItems;
+            isBuyNowOrder = true;
         } else {
             const cart = await Cart.findOne({ userId }).lean();
             if (!cart || cart.items.length === 0) {
@@ -6477,36 +6479,49 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             rawItems = cart.items;
         }
 
-        // 2. CRITICAL FIX: Map items to match OrderItemSchema Enums and Requirements
-        const finalOrderItems = rawItems.map(item => {
-            // Logic to ensure productType is one of the allowed Enums
-            const allowedCollections = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
-            
-            // If the incoming type is not in the allowed list, default it to 'NewArrivals' 
-            // (Or whichever collection makes the most sense as a fallback)
-            let validatedType = allowedCollections.includes(item.productType) 
-                ? item.productType
-                : 'PreOrderCollection';
+        const finalOrderItems = await Promise.all(rawItems.map(async (item) => {
+            let correctedType = item.productType;
+            let isTypeValid = !!PRODUCT_MODEL_MAP[item.productType];
+
+            if (!isTypeValid) {
+                console.log(`[Paystack] Correcting productType: ${item.productType} for ${item.productId}`);
+                let foundType = null;
+                for (const type of Object.keys(PRODUCT_MODEL_MAP)) {
+                    try {
+                        const CollectionModel = getProductModel(type);
+                        const productExists = await CollectionModel.exists({ _id: item.productId });
+                        if (productExists) { foundType = type; break; }
+                    } catch (err) {
+                        console.warn(`Model check failed for type ${type}: ${err.message}`);
+                    }
+                }
+                if (!foundType) throw new Error(`Product ID ${item.productId} not found.`);
+                correctedType = foundType;
+
+                if (!isBuyNowOrder) {
+                    await Cart.findOneAndUpdate(
+                        { userId, 'items.productId': item.productId },
+                        { '$set': { 'items.$.productType': correctedType } }
+                    );
+                }
+            }
 
             return {
                 productId: item.productId,
                 name: item.name || "Product Name",
                 imageUrl: item.imageUrl,
-                productType: validatedType, // Now valid for Mongoose Enum
+                productType: correctedType, 
                 quantity: parseInt(item.quantity),
                 priceAtTimeOfPurchase: parseFloat(item.price || item.priceAtTimeOfPurchase),
-                // variationIndex is REQUIRED by your schema and must be >= 1
-                variationIndex: parseInt(item.variationIndex) || 1, 
+                variationIndex: parseInt(item.variationIndex) || 0, 
                 size: item.size,
                 color: item.color,
                 variation: item.variation
             };
-        });
+        }));
 
-        // 3. Generate Reference
         const orderRef = `outflickz_${Date.now()}`; 
 
-        // 4. Create Order
         const newOrder = await Order.create({
             userId: userId,
             items: finalOrderItems, 
@@ -6522,23 +6537,26 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             paymentTxnId: orderRef, 
         });
 
-        console.log(`[Paystack] Order Created in DB: ${newOrder.orderReference}`);
+        // ⭐ NEW: Fetch User email for frontend Paystack initialization
+        const user = await User.findById(userId).select('email');
+
+        console.log(`[Paystack] Order Created: ${newOrder.orderReference}`);
 
         res.status(201).json({
             message: 'Order placed, awaiting Paystack payment.',
             orderId: newOrder._id,
             orderReference: newOrder.orderReference,
             totalAmount: newOrder.totalAmount, 
+            amountKobo: newOrder.amountPaidKobo, // Frontend uses this
+            email: user.email,                   // Frontend uses this
+            publicKey: process.env.PAYSTACK_PUBLIC_KEY 
         });
 
     } catch (error) {
-        console.error('🔴 ERROR creating order:', error.message);
-        
-        // Return specific Mongoose validation error messages to the frontend
+        console.error('🔴 ERROR creating Paystack order:', error.message);
         const errorMessage = error.name === 'ValidationError' 
             ? Object.values(error.errors).map(val => val.message).join(', ')
-            : 'Internal server error during order creation.';
-
+            : error.message || 'Internal server error during order creation.';
         res.status(500).json({ message: errorMessage });
     }
 });
