@@ -1176,13 +1176,13 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
         }
     }
 
+
    async function processPaystackPayment(totalAmount, email) {
     const payBtn = document.getElementById('checkout-next-btn');
     
     // =======================================================
     // 1. COLLECT & PARSE DATA FOR SERVER CALL
     // =======================================================
-    // IMPORTANT: Parsing strings into Objects so the Backend receives valid JSON
     const shippingAddress = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
     const orderItems = JSON.parse(localStorage.getItem('outflickzLocalCart') || "[]");
     
@@ -1209,7 +1209,6 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
                 subtotal: subtotal,
                 shippingFee: shippingFee,
                 tax: tax,
-                // Pass parsed items only if Buy Now flow requires it
                 orderItems: sessionStorage.getItem(BUY_NOW_KEY) ? orderItems : null 
             })
         });
@@ -1240,17 +1239,29 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
     }
 
     // =======================================================
-    // 3. LAUNCH PAYSTACK POPUP
+    // 3. LAUNCH PAYSTACK POPUP WITH DYNAMIC CHANNELS
     // =======================================================
     payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Opening Gateway...';
+
+    /**
+     * ⭐ DYNAMIC CHANNEL FILTERING
+     * For amounts like NGN 100-500, Bank Transfer often fails with a 400 error.
+     * We only enable 'bank_transfer' if totalAmount is 500 or higher.
+     * Card and OPay remain enabled as they support the NGN 100 minimum.
+     */
+    let allowedChannels = ['card', 'qr', 'mobile_money']; // Always reliable for NGN 100
+    
+    if (totalAmount >= 500) {
+        allowedChannels.push('bank_transfer', 'ussd', 'bank');
+    }
     
     const handler = PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
         email: email,
-        amount: Math.round(totalAmount * 100), // Ensuring 100.00 becomes 10000 kobo
+        amount: Math.round(totalAmount * 100), // Kobo conversion
         ref: paystackReference,
         currency: 'NGN',
-        channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'],
+        channels: allowedChannels, // Apply the filtered list
         
         callback: function(response){
             handlePaystackSuccessRedirect(mongoOrderId, response.reference); 
