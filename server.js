@@ -6477,51 +6477,35 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             rawItems = cart.items;
         }
 
-        // 2. ⭐ CRITICAL FIX: The mapping must match your OrderItemSchema Enum exactly
-        const finalOrderItems = await Promise.all(rawItems.map(async (item) => {
+        // 2. CRITICAL FIX: Map items to match OrderItemSchema Enums and Requirements
+        const finalOrderItems = rawItems.map(item => {
+            // Logic to ensure productType is one of the allowed Enums
             const allowedCollections = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
             
-            let validatedType = item.productType;
-            const productName = (item.name || "").toLowerCase();
-
-            // If the type sent isn't valid, we use a more aggressive keyword check
-            if (!allowedCollections.includes(validatedType)) {
-                // Priority 1: PreOrder (JERSEYS and BRAND SPECIFIC)
-                if (productName.includes('jersey') || productName.includes('preorder') || productName.includes('blue')) {
-                    validatedType = 'PreOrderCollection';
-                } 
-                // Priority 2: Caps
-                else if (productName.includes('cap') || productName.includes('hat') || productName.includes('beanie')) {
-                    validatedType = 'CapCollection';
-                } 
-                // Priority 3: Wears
-                else if (productName.includes('hoodie') || productName.includes('shirt') || productName.includes('wear')) {
-                    validatedType = 'WearsCollection';
-                } 
-                // Priority 4: Default
-                else {
-                    validatedType = 'NewArrivals';
-                }
-            }
+            // If the incoming type is not in the allowed list, default it to 'NewArrivals' 
+            // (Or whichever collection makes the most sense as a fallback)
+            let validatedType = allowedCollections.includes(item.productType) 
+                ? item.productType 
+                : 'Product Name';
 
             return {
                 productId: item.productId,
-                name: item.name,
+                name: item.name || "Product Name",
                 imageUrl: item.imageUrl,
-                productType: validatedType, 
-                quantity: parseInt(item.quantity) || 1,
+                productType: validatedType, // Now valid for Mongoose Enum
+                quantity: parseInt(item.quantity),
                 priceAtTimeOfPurchase: parseFloat(item.price || item.priceAtTimeOfPurchase),
                 variationIndex: parseInt(item.variationIndex) || 1, 
                 size: item.size,
                 color: item.color,
                 variation: item.variation
             };
-        }));
+        });
 
-        // 3. Generate Unique Reference
+        // 3. Generate Reference
         const orderRef = `outflickz_${Date.now()}`; 
 
-        // 4. Create the Order in PENDING state
+        // 4. Create Order
         const newOrder = await Order.create({
             userId: userId,
             items: finalOrderItems, 
@@ -6537,9 +6521,8 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             paymentTxnId: orderRef, 
         });
 
-        console.log(`[Success] Order ${newOrder.orderReference} created for user ${userId}`);
+        console.log(`[Paystack] Order Created in DB: ${newOrder.orderReference}`);
 
-        // 5. Success Response
         res.status(201).json({
             message: 'Order placed, awaiting Paystack payment.',
             orderId: newOrder._id,
@@ -6548,8 +6531,14 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('🔴 ERROR creating order:', error);
-        res.status(500).json({ message: error.message || 'Internal server error.' });
+        console.error('🔴 ERROR creating order:', error.message);
+        
+        // Return specific Mongoose validation error messages to the frontend
+        const errorMessage = error.name === 'ValidationError' 
+            ? Object.values(error.errors).map(val => val.message).join(', ')
+            : 'Internal server error during order creation.';
+
+        res.status(500).json({ message: errorMessage });
     }
 });
 
