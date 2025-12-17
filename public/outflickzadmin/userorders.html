@@ -589,67 +589,79 @@ if (order.paymentReceiptUrl && order.paymentReceiptUrl.trim()) {
         }
     }
 
+   /**
+ * Renders the fetched orders into the table.
+ * @param {Array<Object>} orders - The list of orders to render.
+ */
+function renderOrders(orders) {
+    ordersTableBody.innerHTML = '';
+    globalOrdersData = orders; 
+
     /**
-    * Renders the fetched orders into the table.
-    * @param {Array<Object>} orders - The list of orders to render.
-    */
-    function renderOrders(orders) {
-        ordersTableBody.innerHTML = '';
-        globalOrdersData = orders; // Save data globally 
+     * ⭐ THE CRITICAL FILTER FIX:
+     * We only want the Admin to see:
+     * 1. Manual Bank Transfers that are 'Pending' (User uploaded a receipt).
+     * 2. We HIDE Paystack orders that are 'Pending' (Because they haven't paid yet).
+     */
+    const filteredOrders = orders.filter(order => {
+        const isPaystack = order.paymentMethod === 'Paystack';
+        const isPending = order.status === 'Pending';
+
+        // If it's Paystack and Pending, hide it from Admin (User hasn't finished paying)
+        if (isPaystack && isPending) return false;
+
+        // Show everything else (Manual transfers, Completed orders, etc.)
+        return true;
+    });
+
+    pendingCountElement.textContent = `${filteredOrders.length} Orders Needing Attention`;
+
+    if (filteredOrders.length === 0) {
+        ordersTableContainer.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+        return;
+    }
+
+    emptyState.classList.add('hidden');
+    ordersTableContainer.classList.remove('hidden');
+
+    filteredOrders.forEach(order => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-gray-50';
         
-        // Only display orders that are strictly 'Pending' for this view.
-        const pendingOrders = orders.filter(order => order.status === 'Pending');
+        const date = formatDate(order.createdAt);
+        let customerDisplay = order.email || 'Unknown'; 
 
-        pendingCountElement.textContent = `${pendingOrders.length} Pending`;
-
-        if (pendingOrders.length === 0) {
-            ordersTableContainer.classList.add('hidden');
-            emptyState.classList.remove('hidden');
-            return;
+        if (order.userName && order.userName !== 'N/A' && 
+            !order.userName.toLowerCase().includes('undefined') && 
+            order.userName.trim().length > 1) {
+            customerDisplay = order.userName;
         }
 
-        emptyState.classList.add('hidden');
-        ordersTableContainer.classList.remove('hidden');
-
-        pendingOrders.forEach(order => {
-            const tr = document.createElement('tr');
-            tr.className = 'hover:bg-gray-50';
-            
-            const date = formatDate(order.createdAt);
-            
-            // Logic to display customer name or fallback to email
-            let customerDisplay = order.email || 'Unknown'; 
-
-            if (order.userName && order.userName !== 'N/A' && 
-                !order.userName.toLowerCase().includes('undefined') && 
-                order.userName.trim().length > 1) {
-                
-                customerDisplay = order.userName;
-            }
-
-            tr.innerHTML = `
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${order._id.substring(0, 8)}...</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${customerDisplay}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-emerald-600">${formatNaira(order.totalAmount)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${date}</td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                        ${order.status}
-                    </span>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                    <button 
-                        id="view-btn-${order._id}"
-                        onclick="handleViewDetails('${order._id}')" 
-                        class="text-white bg-blue-600 hover:bg-blue-700 py-1 px-3 rounded-lg text-xs transition duration-150 shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                    >
-                        View Details
-                    </button>
-                </td>
-            `;
-            ordersTableBody.appendChild(tr);
-        });
-    }
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${order._id.substring(0, 8)}...</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${customerDisplay}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-emerald-600">${formatNaira(order.totalAmount)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${date}</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                    ${order.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}">
+                    ${order.status}
+                </span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                <button 
+                    id="view-btn-${order._id}"
+                    onclick="handleViewDetails('${order._id}')" 
+                    class="text-white bg-blue-600 hover:bg-blue-700 py-1 px-3 rounded-lg text-xs transition duration-150 shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
+                    View Details
+                </button>
+            </td>
+        `;
+        ordersTableBody.appendChild(tr);
+    });
+}
         
     /**
     /**

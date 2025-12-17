@@ -1176,13 +1176,10 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
         }
     }
 
-
-   async function processPaystackPayment(totalAmount, email) {
+async function processPaystackPayment(totalAmount, email) {
     const payBtn = document.getElementById('checkout-next-btn');
     
-    // =======================================================
-    // 1. COLLECT & PARSE DATA FOR SERVER CALL
-    // =======================================================
+    // 1. COLLECT & PARSE DATA
     const shippingAddress = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
     const orderItems = JSON.parse(localStorage.getItem('outflickzLocalCart') || "[]");
     
@@ -1191,31 +1188,28 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
     const tax = localStorage.getItem('outflickzOrderTax') || '0';
     
     payBtn.disabled = true;
-    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Creating Order...';
+    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Initializing Order...';
 
-    // =======================================================
-    // 2. CALL API TO CREATE PENDING ORDER
-    // =======================================================
     let mongoOrderId;
     let paystackReference; 
     
     try {
+        // 2. CREATE PENDING ORDER IN DATABASE
         const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/paystack`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                shippingAddress: shippingAddress, 
-                totalAmount: totalAmount, 
-                subtotal: subtotal,
-                shippingFee: shippingFee,
-                tax: tax,
+                shippingAddress, 
+                totalAmount, 
+                subtotal,
+                shippingFee,
+                tax,
                 orderItems: sessionStorage.getItem(BUY_NOW_KEY) ? orderItems : null 
             })
         });
 
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: 'Server error.' }));
-            displayMessage(`Order setup failed: ${errorData.message}`);
+            const errorData = await response.json().catch(() => ({ message: 'Failed to record order.' }));
             throw new Error(errorData.message);
         }
 
@@ -1223,51 +1217,42 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
         mongoOrderId = data.orderId; 
         paystackReference = data.orderReference;
 
-        console.log(`[Paystack] Pending order created. Mongo ID: ${mongoOrderId}`);
-
     } catch (error) {
-        console.error('Error:', error);
+        displayMessage(`Order setup failed: ${error.message}`);
         payBtn.disabled = false;
         payBtn.innerHTML = 'Confirm & Pay Now';
         return;
     }
     
     if (typeof PaystackPop === 'undefined') {
-        displayMessage('Payment gateway unavailable.');
+        displayMessage('Payment gateway (Paystack) failed to load.');
         payBtn.disabled = false;
         return;
     }
 
-    // =======================================================
-    // 3. LAUNCH PAYSTACK POPUP WITH DYNAMIC CHANNELS
-    // =======================================================
-    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Opening Gateway...';
-
-    /**
-     * ⭐ DYNAMIC CHANNEL FILTERING
-     * For amounts like NGN 100-500, Bank Transfer often fails with a 400 error.
-     * We only enable 'bank_transfer' if totalAmount is 500 or higher.
-     * Card and OPay remain enabled as they support the NGN 100 minimum.
-     */
-    let allowedChannels = ['card', 'qr', 'mobile_money']; // Always reliable for NGN 100
-    
+    // 3. CONFIGURE CHANNELS
+    // Even at NGN 75,000, if Transfer fails, it is a Paystack Dashboard setting issue.
+    // However, we exclude it for very low amounts to avoid the 400 error.
+    let allowedChannels = ['card', 'qr', 'mobile_money']; 
     if (totalAmount >= 500) {
         allowedChannels.push('bank_transfer', 'ussd', 'bank');
     }
-    
+
+    // 4. LAUNCH PAYSTACK
     const handler = PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
         email: email,
-        amount: Math.round(totalAmount * 100), // Kobo conversion
+        amount: Math.round(totalAmount * 100), 
         ref: paystackReference,
         currency: 'NGN',
-        channels: allowedChannels, // Apply the filtered list
+        channels: allowedChannels,
         
         callback: function(response){
+            // This only runs AFTER successful payment
             handlePaystackSuccessRedirect(mongoOrderId, response.reference); 
         },
         onClose: function(){
-            displayMessage('Payment cancelled.');
+            displayMessage('Payment window closed. Your order is still pending.');
             payBtn.disabled = false;
             payBtn.innerHTML = 'Confirm & Pay Now';
         }
