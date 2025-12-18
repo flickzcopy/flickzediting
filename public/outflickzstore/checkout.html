@@ -481,7 +481,7 @@
     const API_BASE_URL = 'https://outflickzz.netlify.app';
     const CART_STORAGE_KEY = 'outflickzCartCount';
     const LOCAL_CART_KEY = 'outflickzLocalCart';
-    const BUY_NOW_KEY = 'buyNowItem'; // Using localStorage for persistence
+    const BUY_NOW_KEY = 'buyNowItem'; 
     const AUTH_TOKEN_KEY = 'userAccessToken';
     const REFRESH_ENDPOINT = `${API_BASE_URL}/api/auth/refresh`;
     const DEFAULT_ADMIN_EMAIL = "outflickzlimited@gmail.com"; 
@@ -505,9 +505,7 @@
         if (token) {
             options.headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
         }
-
         let response = await fetch(url, options);
-
         if (response.status === 401) {
             try {
                 const refreshResponse = await fetch(REFRESH_ENDPOINT, { method: 'POST', credentials: 'include' });
@@ -567,22 +565,19 @@
     }
 
     /**
-     * UPDATED: fetchInitialCartData
+     * FIXED: fetchInitialCartData
+     * Removed the guest/cart API call. Now handles guest checkout via local storage directly.
      */
     async function fetchInitialCartData() {
         const itemsListEl = document.getElementById('review-items-list');
         const paymentBtn = document.getElementById('checkout-next-btn');
         
         const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-        const isStandardCartCheckout = localCart.length > 0;
-        
-        // Use localStorage instead of sessionStorage for Buy Now survival
         const buyNowItemJSON = localStorage.getItem(BUY_NOW_KEY);
 
-        if (buyNowItemJSON && !isStandardCartCheckout) {
+        // --- FLOW A: BUY NOW (Priority) ---
+        if (buyNowItemJSON) {
             let rawItem = JSON.parse(buyNowItemJSON);
-
-            // Strict reconstruction to pass backend validation
             const sanitizedItem = {
                 productId: rawItem.productId,
                 name: rawItem.name || "Product",
@@ -594,7 +589,6 @@
                 price: parseFloat(rawItem.price) || 0,
                 quantity: parseInt(rawItem.quantity) || 1,
                 imageUrl: rawItem.imageUrl || "",
-                // Ensure 0 is treated as a valid index, not "missing"
                 variationIndex: (rawItem.variationIndex !== undefined && rawItem.variationIndex !== null) 
                                 ? parseInt(rawItem.variationIndex, 10) 
                                 : 0,
@@ -602,7 +596,8 @@
             };
 
             try {
-                const response = await secureUserFetch(`${API_BASE_URL}/api/orders/calculate-buy-now`, {
+                // Calculate pricing via backend to get current shipping/tax
+                const response = await fetch(`${API_BASE_URL}/api/orders/calculate-buy-now`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(sanitizedItem) 
@@ -620,23 +615,35 @@
             }
         }
 
-        // Standard Cart Flow
-        if (buyNowItemJSON && isStandardCartCheckout) localStorage.removeItem(BUY_NOW_KEY);
-
-        try {
-            const url = isUserLoggedIn() ? `${API_BASE_URL}/api/users/cart` : `${API_BASE_URL}/api/guest/cart`;
-            const response = await (isUserLoggedIn() ? secureUserFetch(url) : fetch(url));
-            if (!response.ok) throw new Error('Failed to fetch cart.');
-            const cartData = await response.json();
-            
-            if (!cartData.items || cartData.items.length === 0) {
+        // --- FLOW B: STANDARD CART (User or Guest) ---
+        if (isUserLoggedIn()) {
+            // Logged in users fetch synced cart from server
+            try {
+                const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart`);
+                if (!response.ok) throw new Error('Failed to fetch cart.');
+                const cartData = await response.json();
+                renderCartData(cartData, paymentBtn);
+            } catch (error) {
+                displayMessage("Could not load bag.");
+            }
+        } else {
+            // Guest users use LOCAL_CART_KEY data directly
+            if (localCart.length === 0) {
                 displayMessage('Your shopping bag is empty.');
                 setTimeout(() => window.location.href = 'homepage.html', 1500);
                 return;
             }
-            renderCartData(cartData, paymentBtn);
-        } catch (error) {
-            displayMessage("Could not load bag.");
+
+            // Simple calculation for guest checkout review
+            const subtotal = localCart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+            const guestCartData = {
+                items: localCart,
+                subtotal: subtotal,
+                shippingFee: 0, // Backend logic usually determines this; default 0 until final placement
+                tax: 0,
+                total: subtotal
+            };
+            renderCartData(guestCartData, paymentBtn);
         }
     }
 
@@ -762,7 +769,10 @@
             : JSON.parse(localStorage.getItem('outflickzOrderItems'));
 
         try {
-            const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/paystack`, {
+            const endpoint = isUserLoggedIn() ? '/api/orders/place/paystack' : '/api/orders/place/guest/paystack';
+            const fetchMethod = isUserLoggedIn() ? secureUserFetch : fetch;
+
+            const response = await fetchMethod(`${API_BASE_URL}${endpoint}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
@@ -804,10 +814,7 @@
         payBtn.disabled = true;
         payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Placing Order...';
 
-        const buyNowItemJSON = localStorage.getItem(BUY_NOW_KEY);
-        const itemsToOrder = buyNowItemJSON 
-            ? [JSON.parse(buyNowItemJSON)] 
-            : JSON.parse(localStorage.getItem('outflickzOrderItems'));
+        const itemsToOrder = JSON.parse(localStorage.getItem('outflickzOrderItems'));
 
         const formData = new FormData();
         formData.append('receipt', receiptInput.files[0]);
@@ -820,22 +827,29 @@
         formData.append('orderItems', JSON.stringify(itemsToOrder));
 
         try {
-            const res = await secureUserFetch(`${API_BASE_URL}/api/orders/place/pending`, { method: 'POST', body: formData });
+            const endpoint = isUserLoggedIn() ? '/api/orders/place/pending' : '/api/orders/place/guest/pending';
+            const fetchMethod = isUserLoggedIn() ? secureUserFetch : fetch;
+            
+            const res = await fetchMethod(`${API_BASE_URL}${endpoint}`, { method: 'POST', body: formData });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message);
             
-            finalizeOrderOnServer({ orderId: data.orderId, paymentMethod: 'Bank Transfer', receiptUrl: data.ReceiptUrl }, 'banktransfer');
+            handleOrderSuccess(data.orderId);
         } catch (e) {
             displayMessage(e.message);
             payBtn.disabled = false;
         }
     }
 
-    function handlePaystackSuccessRedirect(mongoId, ref) {
+    function handleOrderSuccess(orderId) {
         localStorage.removeItem(LOCAL_CART_KEY);
         localStorage.setItem(CART_STORAGE_KEY, '0');
         localStorage.removeItem(BUY_NOW_KEY);
-        window.location.href = `orderconfirmation.html?id=${mongoId}&method=paystack`;
+        window.location.href = `orderconfirmation.html?id=${orderId}&method=success`;
+    }
+
+    function handlePaystackSuccessRedirect(mongoId, ref) {
+        handleOrderSuccess(mongoId);
     }
 
     // --- INITIALIZATION ---
