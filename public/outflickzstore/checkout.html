@@ -577,30 +577,19 @@
         badge.classList.toggle('hidden', count <= 0);
     }
 
-    /**
- * Helper to determine the backend collection/type based on the product name.
- * This fixes the 'undefined' productType issue by guessing based on keywords.
- */
+   // --- HELPER: Fixes the 'undefined' productType by guessing based on keywords ---
 function getCollectionType(productName) {
-    if (!productName) return 'WearsCollection'; // Safe default
+    if (!productName) return 'WearsCollection'; 
     const lowerName = productName.toLowerCase();
-    
-    // Map keywords to EXACT backend model keys
-    if (lowerName.includes('tee') || lowerName.includes('tank') || lowerName.includes('wears')) {
-        return 'WearsCollection';
-    }
-    if (lowerName.includes('cap') || lowerName.includes('curve')) {
-        return 'CapCollection';
-    }
-    if (lowerName.includes('arrival') || lowerName.includes('polo')) {
-        return 'NewArrivals';
-    }
-    
-    return 'WearsCollection'; // Default fallback
+    if (lowerName.includes('tee') || lowerName.includes('tank') || lowerName.includes('wears')) return 'WearsCollection';
+    if (lowerName.includes('cap') || lowerName.includes('curve')) return 'CapCollection';
+    if (lowerName.includes('arrival') || lowerName.includes('polo')) return 'NewArrivals';
+    return 'WearsCollection';
 }
 
 /**
- * Updated Fetch logic using the name-based collection repair.
+ * FIXED fetchInitialCartData
+ * Reconstructs the item object to satisfy strict backend validation.
  */
 async function fetchInitialCartData() {
     const subtotalEl = document.getElementById('summary-subtotal');
@@ -612,68 +601,69 @@ async function fetchInitialCartData() {
     const paymentBtn = document.getElementById('checkout-next-btn');
     
     [subtotalEl, shippingCostEl, taxEstimateEl, estimatedTotalEl, finalTotalEl].forEach(el => el.textContent = '...');
-    itemsListEl.innerHTML = '<div class="text-center py-6 text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i> Loading order details...</div>';
+    itemsListEl.innerHTML = '<div class="text-center py-6 text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i> Loading order...</div>';
     paymentBtn.disabled = true;
 
     const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
     const isStandardCartCheckout = localCart.length > 0;
     const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
 
-    // --- FLOW A: BUY NOW (Fixed with getCollectionType) ---
+    // --- FLOW A: BUY NOW ---
     if (buyNowItemJSON && !isStandardCartCheckout) {
-        let item = JSON.parse(buyNowItemJSON);
+        let rawItem = JSON.parse(buyNowItemJSON);
 
-        // ⭐ REPAIR: If productType is missing or "undefined", use the helper
-        if (!item.productType || String(item.productType) === "undefined") {
-            console.log("Repairing missing productType using getCollectionType...");
-            item.productType = getCollectionType(item.name);
-        }
-        
-        // Ensure variationIndex is a Number for the backend
-        item.variationIndex = parseInt(item.variationIndex, 10);
-        if (isNaN(item.variationIndex)) item.variationIndex = 0;
+        // ⭐ CRITICAL RECONSTRUCTION: satisfy backend schema exactly
+        const sanitizedItem = {
+            productId: rawItem.productId,
+            name: rawItem.name,
+            productType: (!rawItem.productType || String(rawItem.productType) === "undefined") 
+                          ? getCollectionType(rawItem.name) 
+                          : rawItem.productType,
+            size: rawItem.size || "Standard",
+            color: rawItem.color || "Default",
+            price: parseFloat(rawItem.price) || 0,
+            quantity: parseInt(rawItem.quantity) || 1,
+            imageUrl: rawItem.imageUrl || "",
+            variationIndex: parseInt(rawItem.variationIndex, 10) || 0,
+            variation: rawItem.variation || rawItem.size || "Standard"
+        };
 
         try {
             const response = await secureUserFetch(`${API_BASE_URL}/api/orders/calculate-buy-now`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(item) 
+                body: JSON.stringify(sanitizedItem) 
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Calculation failed');
-            }
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || 'Server rejected item details.');
 
-            const cartData = await response.json();
-            renderCartData(cartData, paymentBtn);
+            renderCartData(data, paymentBtn);
             return;
         } catch (error) {
             console.error("Buy Now Error:", error);
-            displayMessage(`Error: ${error.message}`);
+            displayMessage(`Checkout Error: ${error.message}`);
             return;
         }
     }
 
     // --- FLOW B: STANDARD CART ---
-    if (buyNowItemJSON && isStandardCartCheckout) {
-        sessionStorage.removeItem(BUY_NOW_KEY);
-    }
+    if (buyNowItemJSON && isStandardCartCheckout) sessionStorage.removeItem(BUY_NOW_KEY);
 
     try {
         const url = isUserLoggedIn() ? `${API_BASE_URL}/api/users/cart` : `${API_BASE_URL}/api/guest/cart`;
         const response = await (isUserLoggedIn() ? secureUserFetch(url) : fetch(url));
         if (!response.ok) throw new Error('Failed to fetch cart.');
-        
         const cartData = await response.json();
+        
         if (!cartData.items || cartData.items.length === 0) {
-            displayMessage('Your bag is empty.');
+            displayMessage('Your shopping bag is empty.');
             setTimeout(() => window.location.href = 'homepage.html', 1500);
             return;
         }
         renderCartData(cartData, paymentBtn);
     } catch (error) {
-        displayMessage("Could not load shopping bag.");
+        displayMessage("Could not load bag.");
     }
 }
 
