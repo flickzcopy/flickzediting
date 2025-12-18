@@ -1440,157 +1440,87 @@ async function inventoryRollback(orderId, reason) {
  * @throws {Error} Throws an error if stock is insufficient or a race condition is detected.
  */
 async function processOrderCompletion(orderId, adminId) {
-    // 1. Start a Mongoose session for atomicity (crucial for inventory)
     const session = await mongoose.startSession();
     session.startTransaction();
     let order = null;
-    let OrderModel;
 
     try {
-        // Fetch the order within the transaction
-        OrderModel = mongoose.models.Order || mongoose.model('Order');
-        order = await OrderModel.findById(orderId).session(session);
+        const OrderModel = mongoose.models.Order || mongoose.model('Order');
+        // Populate userId so we can access the ID to clear the cart later
+        order = await OrderModel.findById(orderId).populate('userId').session(session);
 
-        // 1.1 Initial check
-        const isReadyForInventory = order && 
-            (order.status === 'Pending' || order.status === 'Processing');
+        if (!order) throw new Error("Order not found.");
 
-        if (!isReadyForInventory) {
+        // 1. Guardrail: Only process 'Pending' or 'Processing' orders
+        // This prevents double-deducting stock if the admin clicks twice.
+        const canProcess = ['Pending', 'Processing'].includes(order.status);
+        if (!canProcess) {
             await session.abortTransaction();
-            
-            // 409 Conflict logic: If the order is already in a confirmed state, throw the race error.
-            if (order?.status === 'Confirmed' || order?.status === 'Completed') {
-                console.warn(`Order ${orderId} is already confirmed (${order.status}). Inventory deduction skipped.`);
-                const raceError = new Error("Order already processed or is being processed.");
-                raceError.isRaceCondition = true;
-                throw raceError; 
-            }
-            
-            console.warn(`Order ${orderId} skipped: not found or status is ${order?.status}. Inventory deduction aborted.`);
-            return order; // Return the current state of the order
+            console.warn(`Order ${orderId} is already ${order.status}. Skipping.`);
+            return order;
         }
 
-        // 2. Loop through each item to deduct stock...
+        // 2. Loop and Deduct Stock
         for (const item of order.items) {
             const ProductModel = getProductModel(item.productType); 
-            const quantityOrdered = item.quantity;
-            let updatedProduct;
-            let errorMsg;
+            if (!ProductModel) throw new Error(`Model missing for: ${item.productType}`);
 
-            // =============================================================================
-            // ⭐ CORE FIX: CONDITIONAL INVENTORY DEDUCTION LOGIC ⭐
-            // =============================================================================
-            
-            // --- Group 1: Items with nested 'sizes' array (Wears, NewArrivals, PreOrder) ---
-            if (item.productType === 'WearsCollection' || 
-                item.productType === 'NewArrivals' || 
-                item.productType === 'PreOrderCollection') {
-                
-                if (!item.size) { // Add a check for size-required products
-                    errorMsg = `Missing size information for size-based product ${item.productId} in ${item.productType}.`;
-                    throw new Error(errorMsg);
-                }
+            const qty = item.quantity;
+            let updateResult;
 
-                updatedProduct = await ProductModel.findOneAndUpdate(
-                    {
-                        _id: item.productId,
-                        // 🔑 FIX: Only match the product ID and the variation index in the top-level filter.
-                        // The critical size and stock check is now solely handled by the arrayFilters.
-                        'variations.variationIndex': item.variationIndex 
-                    },
-                    {
-                        $inc: {
-                            'variations.$[var].sizes.$[size].stock': -quantityOrdered, 
-                            'totalStock': -quantityOrdered 
-                        }
-                    },
-                    {
-                        new: true,
-                        session: session, 
+            // Group 1: Size-based Collections
+            if (['WearsCollection', 'NewArrivals', 'PreOrderCollection'].includes(item.productType)) {
+                updateResult = await ProductModel.findOneAndUpdate(
+                    { _id: item.productId, 'variations.variationIndex': item.variationIndex },
+                    { $inc: { 'variations.$[var].sizes.$[size].stock': -qty, 'totalStock': -qty } },
+                    { 
+                        session, new: true, 
                         arrayFilters: [
-                            // Filter 1: Match the correct outer Variation ('var')
-                            { 'var.variationIndex': item.variationIndex }, 
-                            // Filter 2: Match the correct inner Size ('size') AND the atomic stock check
-                            { 'size.size': item.size, 'size.stock': { $gte: quantityOrdered } } 
-                        ]
+                            { 'var.variationIndex': item.variationIndex },
+                            { 'size.size': item.size, 'size.stock': { $gte: qty } }
+                        ] 
                     }
                 );
-            
-            // --- Group 2: Items with direct 'stock' on variation (CapCollection) ---
-            } else if (item.productType === 'CapCollection') {
-                
-                updatedProduct = await ProductModel.findOneAndUpdate(
-                    {
-                        _id: item.productId,
-                        'variations': {
-                            // 🔑 FIX: Use $elemMatch in the main query to perform the atomic stock check
-                            $elemMatch: {
-                                variationIndex: item.variationIndex, // Find the correct variation
-                                stock: { $gte: quantityOrdered }      // Check stock directly on variation
-                            }
-                        }
+            } 
+            // Group 2: Direct Stock (Caps)
+            else if (item.productType === 'CapCollection') {
+                updateResult = await ProductModel.findOneAndUpdate(
+                    { 
+                        _id: item.productId, 
+                        'variations': { $elemMatch: { variationIndex: item.variationIndex, stock: { $gte: qty } } } 
                     },
-                    {
-                        $inc: {
-                            // Decrement stock directly on the variation found by the filter
-                            'variations.$[var].stock': -quantityOrdered, 
-                            'totalStock': -quantityOrdered 
-                        }
-                    },
-                    {
-                        new: true,
-                        session: session, 
-                        arrayFilters: [
-                            // Filter by variation index to ensure only the matched element is updated
-                            { 'var.variationIndex': item.variationIndex } 
-                        ]
-                    }
+                    { $inc: { 'variations.$[var].stock': -qty, 'totalStock': -qty } },
+                    { session, new: true, arrayFilters: [{ 'var.variationIndex': item.variationIndex }] }
                 );
-            
-            // --- Fallback for unsupported types ---
-            } else {
-                errorMsg = `Unsupported product type found: ${item.productType}. Inventory deduction aborted.`;
-                throw new Error(errorMsg);
             }
-            // =============================================================================
-            
-            // Check if the update was successful (product found and stock condition met)
-            if (!updatedProduct) {
-                // Determine the size label for the error message
-                const sizeLabel = item.productType === 'CapCollection' ? 'N/A (Direct Stock)' : item.size;
-                
-                const finalErrorMsg = `Insufficient stock or product data mismatch for item: ${sizeLabel} of product ${item.productId} in ${item.productType}. Transaction aborted.`;
-                throw new Error(finalErrorMsg);
+
+            if (!updateResult) {
+                throw new Error(`STOCK ERROR: ${item.name} (${item.size || 'N/A'}) is out of stock.`);
             }
-            
-            console.log(`Inventory deducted for Product ID: ${item.productId}, Type: ${item.productType}, Qty: ${quantityOrdered}`);
         }
 
-        // 5. Update order status and confirmation details atomically
+        // 3. Finalize Order Status
         order.status = 'Confirmed';
         order.confirmedAt = new Date(); 
         order.confirmedBy = adminId; 
+        
         await order.save({ session });
-
-        // 6. Finalize transaction
         await session.commitTransaction();
-        console.log(`Order ${orderId} successfully confirmed and inventory fully deducted. Status: Confirmed.`);
+
+        // 4. Post-Transaction: Clear Cart (Don't let cart errors crash the transaction)
+        try {
+            const CartModel = mongoose.models.Cart || mongoose.model('Cart');
+            if (order.userId) {
+                await CartModel.findOneAndUpdate({ userId: order.userId._id }, { items: [] });
+            }
+        } catch (e) { console.error("Cart clear failed:", e.message); }
+
         return order.toObject({ getters: true });
 
     } catch (error) {
-        // Rollback on any failure
-        if (session.inTransaction()) {
-            await session.abortTransaction();
-        }
-        
-        if (error.isRaceCondition) {
-            console.warn(`Race condition handled for order ${orderId}. No rollback status update needed.`);
-        }
-        else if (order) { 
-            // Call inventoryRollback for genuine failures (like Insufficient Stock)
-            await inventoryRollback(orderId, error.message);
-        }
-
+        if (session.inTransaction()) await session.abortTransaction();
+        // Log the failure in your system
+        if (order) await inventoryRollback(orderId, error.message);
         throw error;
     } finally {
         session.endSession();
@@ -1746,121 +1676,35 @@ async function getAllOrders() {
     }
 }
 
+// This is called by your Webhook route
 async function deductInventoryAndCompleteOrder(orderId, transactionData) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    let order = null;
-
     try {
         const OrderModel = mongoose.models.Order || mongoose.model('Order');
-        order = await OrderModel.findById(orderId).populate('userId').session(session);
+        
+        // ⭐ UPDATE: We only log the payment. We do NOT deduct stock here.
+        // This ensures the Admin must manually click "Confirm" later.
+        const order = await OrderModel.findByIdAndUpdate(
+            orderId,
+            {
+                paymentStatus: 'Paid',
+                paymentMethod: 'Paystack',
+                paymentTxnId: transactionData.reference,
+                paidAt: new Date(),
+                // We keep status as 'Pending' or 'Processing'
+            },
+            { new: true }
+        );
 
         if (!order) throw new Error(`Order ${orderId} not found.`);
 
-        // Guardrail: Skip if already confirmed
-        if (['Confirmed', 'Shipped', 'Delivered'].includes(order.status)) {
-            await session.abortTransaction();
-            const raceError = new Error(`Order ${orderId} already ${order.status}.`);
-            raceError.isRaceCondition = true;
-            throw raceError;
-        }
-
-        for (const item of order.items) {
-            // DEBUG LOG: Verify what strings are actually being used
-            console.log(`Checking item: ${item.name} | Type in DB: "${item.productType}"`);
-            
-            const ProductModel = getProductModel(item.productType);
-            if (!ProductModel) {
-                throw new Error(`Model missing for type: "${item.productType}". Check getProductModel helper.`);
-            }
-
-            const quantityOrdered = item.quantity;
-            let updatedProduct;
-
-            // Group 1: Size-based collections
-            // Ensure the strings here match exactly what is in item.productType
-            const sizeBased = ['WearsCollection', 'NewArrivals', 'PreOrderCollection'];
-
-            if (sizeBased.includes(item.productType)) {
-                updatedProduct = await ProductModel.findOneAndUpdate(
-                    { 
-                        _id: item.productId, 
-                        'variations.variationIndex': item.variationIndex 
-                    },
-                    { 
-                        $inc: { 
-                            'variations.$[var].sizes.$[size].stock': -quantityOrdered, 
-                            'totalStock': -quantityOrdered 
-                        } 
-                    },
-                    { 
-                        session, 
-                        new: true, 
-                        arrayFilters: [
-                            { 'var.variationIndex': item.variationIndex },
-                            { 'size.size': item.size, 'size.stock': { $gte: quantityOrdered } }
-                        ] 
-                    }
-                );
-            } 
-            // Group 2: Direct stock (Caps)
-            else if (item.productType === 'CapCollection') {
-                updatedProduct = await ProductModel.findOneAndUpdate(
-                    { 
-                        _id: item.productId, 
-                        'variations': { $elemMatch: { variationIndex: item.variationIndex, stock: { $gte: quantityOrdered } } } 
-                    },
-                    { 
-                        $inc: { 
-                            'variations.$[var].stock': -quantityOrdered, 
-                            'totalStock': -quantityOrdered 
-                        } 
-                    },
-                    { 
-                        session, 
-                        new: true, 
-                        arrayFilters: [{ 'var.variationIndex': item.variationIndex }] 
-                    }
-                );
-            }
-
-            if (!updatedProduct) {
-                // If this triggers, either stock is 0 or the IDs/Indexes don't match
-                throw new Error(`STOCK FAILURE: ${item.name}. Check if VariationIndex ${item.variationIndex} or Size ${item.size} exists.`);
-            }
-        }
-
-        // --- UPDATE STATUS ---
-        // This makes the order appear in Sales Log (Screenshot 3)
-        order.status = 'Confirmed'; 
-        order.paymentStatus = 'Paid';
-        order.paymentTxnId = transactionData.reference;
-        order.paidAt = new Date();
-        order.confirmedAt = new Date();
-
-        await order.save({ session });
-        await session.commitTransaction();
-        
-        console.log(`✅ Success! Order ${orderId} moved to Confirmed.`);
-
-        // Clear Cart
-        const CartModel = mongoose.models.Cart || mongoose.model('Cart');
-        if (order.userId) {
-            await CartModel.findOneAndUpdate({ userId: order.userId._id }, { items: [] });
-        }
-
+        console.log(`✅ Paystack Payment Recorded for Order ${orderId}. Awaiting Admin Confirmation.`);
         return order.toObject({ getters: true });
 
     } catch (error) {
-        if (session.inTransaction()) await session.abortTransaction();
-        console.error(`❌ LOG ERROR: ${error.message}`);
-        if (!error.isRaceCondition && order) await inventoryRollback(orderId, error.message);
+        console.error(`❌ Webhook Payment Log Failed: ${error.message}`);
         throw error;
-    } finally {
-        session.endSession();
     }
 }
-
 
 /**
  * ====================================================================================
@@ -3129,42 +2973,35 @@ app.get('/api/admin/users/:userId/orders', verifyToken, async (req, res) => {
 // =========================================================
 app.get('/api/admin/orders/pending', verifyToken, async (req, res) => {
     try {
-        // Find all orders where the status is 'Pending'
-        // These are typically Bank Transfer orders waiting for manual confirmation.
-        const pendingOrders = await Order.find({ status: 'Pending' })
-            .select('_id userId totalAmount createdAt status paymentMethod paymentReceiptUrl subtotal shippingFee tax')
-            .sort({ createdAt: 1 })
-            .lean();
+        // Find all orders that haven't been confirmed yet.
+        // This now includes Bank Transfers AND Paystack orders awaiting the 'Confirm' click.
+        const pendingOrders = await Order.find({ 
+            status: { $in: ['Pending', 'Processing', 'Inventory Failure (Manual Review)'] } 
+        })
+        .select('_id userId totalAmount createdAt status paymentMethod paymentStatus paymentReceiptUrl orderReference')
+        .sort({ createdAt: 1 })
+        .lean();
 
-        // 1. Get User Details for each pending order (for 'Customer' column)
         const populatedOrders = await Promise.all(
             pendingOrders.map(async (order) => {
                 const user = await User.findById(order.userId)
                     .select('profile.firstName profile.lastName email') 
                     .lean();
 
-                const firstName = user?.profile?.firstName;
-                const lastName = user?.profile?.lastName;
-                
-                const userName = (firstName && lastName) 
-                    ? `${firstName} ${lastName}` 
+                const userName = (user?.profile?.firstName && user?.profile?.lastName) 
+                    ? `${user.profile.firstName} ${user.profile.lastName}` 
                     : user?.email || 'N/A';
-                
-                const email = user ? user.email : 'Unknown User';
                 
                 return {
                     ...order,
-                    userName: userName,
-                    email: email,
+                    userName,
+                    email: user?.email || 'Unknown User',
                 };
             })
         );
 
-        // Send the complete list of pending orders
         res.status(200).json(populatedOrders);
-
     } catch (error) {
-        console.error('Error fetching pending orders:', error);
         res.status(500).json({ message: 'Failed to retrieve pending orders.' });
     }
 });
@@ -3177,7 +3014,7 @@ app.get('/api/admin/orders/confirmed', verifyToken, async (req, res) => {
         // Find orders ready for fulfillment. 
         // Note: 'Processing' is included as a fallback for the manual Admin confirmation flow.
         const confirmedOrders = await Order.find({ 
-            status: { $in: ['Confirmed', 'Processing', 'Shipped', 'Delivered'] } 
+            status: { $in: ['Confirmed', 'Shipped', 'Delivered'] } 
         })
         .select('_id userId totalAmount createdAt status orderReference totalQuantity')
         .sort({ createdAt: -1 })
@@ -3409,22 +3246,21 @@ app.put('/api/admin/orders/:orderId/status', verifyToken, async (req, res) => {
     const { newStatus } = req.body; 
     
     // Define the logical flow of your store
-    const validTransitions = {
-        'Pending': ['Confirmed', 'Processing', 'Cancelled'], 
-        'Confirmed': ['Shipped', 'Cancelled'], // Paystack orders land here first
-        'Processing': ['Confirmed', 'Shipped', 'Cancelled'],
+  const validTransitions = {
+        'Confirmed': ['Shipped', 'Cancelled'], 
         'Shipped': ['Delivered'],
-        'Inventory Failure (Manual Review)': ['Confirmed', 'Cancelled']
+        'Delivered': [], // End of the road
+        'Cancelled': []
     };
     
     try {
         const order = await Order.findById(orderId);
         if (!order) return res.status(404).json({ message: 'Order not found.' });
 
-        // Validate the state change
-        if (!validTransitions[order.status] || !validTransitions[order.status].includes(newStatus)) {
+        // BLOCKER: If the admin tries to skip the "Confirm" button
+        if (['Pending', 'Processing'].includes(order.status) && newStatus !== 'Cancelled') {
             return res.status(400).json({ 
-                message: `Invalid transition from ${order.status} to ${newStatus}.` 
+                message: `Order must be Confirmed (Inventory Deducted) before moving to ${newStatus}. Please click the Confirm button first.` 
             });
         }
         
@@ -4798,10 +4634,6 @@ app.delete(
         }
     }
 );
-
-// =========================================================
-// 11. GET /api/admin/inventory/deductions - Fetch Deducted Inventory Logs (Updated for Paystack)
-// =========================================================
 app.get('/api/admin/inventory/deductions', verifyToken, async (req, res) => {
     try {
         const categoryFilter = req.query.category ? req.query.category.toLowerCase() : 'all';
@@ -4816,6 +4648,7 @@ app.get('/api/admin/inventory/deductions', verifyToken, async (req, res) => {
         let pipeline = [
             {
                 $match: {
+                    // Only show orders where inventory HAS been deducted
                     status: { $in: ['Confirmed', 'Shipped', 'Delivered'] }
                 }
             },
@@ -4835,20 +4668,23 @@ app.get('/api/admin/inventory/deductions', verifyToken, async (req, res) => {
             }
         }
         
-        // 4. Project Stage - ADDED paymentTxnId HERE
+        // Project Stage - Now includes paymentMethod for better logging
         pipeline.push({
             $project: {
                 _id: 0,
                 productId: '$items.productId',
                 name: '$items.name',
+                size: '$items.size', // Added size for better logging detail
                 category: '$items.productType',
                 quantity: '$items.quantity', 
                 orderId: '$_id',
+                orderReference: '$orderReference', // Helpful for searching
                 date: '$confirmedAt',
                 
-                // --- ESSENTIAL FOR PAYSTACK DETECTION ---
-                paymentTxnId: '$paymentTxnId', // Pass the Paystack ref to frontend
-                confirmedBy: '$confirmedBy'   // Will be 'SYSTEM_PAYSTACK' for autos
+                // --- Updated for Manual Confirmation Workflow ---
+                paymentMethod: '$paymentMethod', 
+                paymentTxnId: '$paymentTxnId', 
+                confirmedBy: '$confirmedBy'   // This will now be the Admin's ID
             }
         });
 
@@ -4857,6 +4693,7 @@ app.get('/api/admin/inventory/deductions', verifyToken, async (req, res) => {
         const OrderModel = mongoose.models.Order || mongoose.model('Order');
         const deductionLogs = await OrderModel.aggregate(pipeline);
 
+        // Cleanup names for the Frontend
         const deductionLogsFormatted = deductionLogs.map(log => ({
             ...log,
             category: log.category 
@@ -6276,15 +6113,13 @@ app.post('/api/paystack/webhook', async (req, res) => {
     const secret = process.env.PAYSTACK_SECRET_KEY; 
     const hash = crypto.createHmac('sha512', secret).update(JSON.stringify(req.body)).digest('hex');
     
-    // 1. Verify Signature
+    // Verify Signature
     if (hash !== req.headers['x-paystack-signature']) return res.status(401).send('Unauthorized');
 
     const event = req.body;
 
     if (event.event === 'charge.success') {
         const transactionData = event.data;
-        
-        // ⭐ PRECISION FIX: Get the MongoDB ID from metadata passed during checkout
         const orderId = transactionData.metadata?.orderId; 
 
         if (!orderId) {
@@ -6293,17 +6128,21 @@ app.post('/api/paystack/webhook', async (req, res) => {
         }
 
         try {
-            // ⚡ AUTOMATION TRIGGER
-            // This now handles stock deduction and moves status to 'Confirmed'
-            await deductInventoryAndCompleteOrder(orderId, transactionData);
+            const OrderModel = mongoose.models.Order || mongoose.model('Order');
+
+            // ⭐ FIX: We ONLY update payment info. 
+            // We keep status as 'Pending' so the Admin must click "Confirm" manually.
+            await OrderModel.findByIdAndUpdate(orderId, {
+                paymentStatus: 'Paid',
+                paymentMethod: 'Paystack',
+                paymentTxnId: transactionData.reference,
+                paidAt: new Date()
+            });
             
-            console.log(`✅ Webhook Success: Order ${orderId} confirmed and stock deducted.`);
+            console.log(`✅ Webhook: Order ${orderId} marked as PAID. Awaiting Admin confirmation.`);
             return res.status(200).send('Webhook Processed');
         } catch (error) {
-            if (error.isRaceCondition) {
-                return res.status(200).send('Already processed');
-            }
-            console.error(`❌ Automation Failed: ${error.message}`);
+            console.error(`❌ Webhook Update Failed: ${error.message}`);
             return res.status(200).send('Error logged'); 
         }
     }
