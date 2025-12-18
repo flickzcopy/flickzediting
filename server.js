@@ -1853,7 +1853,7 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
         // --- END STOCK DEDUCTION LOOP ---
 
         // 3. Update order status to final 'Completed' state (the webhook final status)
-        order.status = 'Completed'; 
+        order.status = 'Comfirmed'; 
         order.completedAt = new Date();
         order.paymentTxnId = transactionData.id; // Log TXN ID
         order.paidAt = new Date(); // Log paid time
@@ -6412,14 +6412,14 @@ app.post('/api/paystack/webhook', async (req, res) => {
         }
 
         // Prevent duplicate processing
-        if (order.status === 'Completed' || order.status === 'Confirmed') {
+        if (order.status === 'Confirmed') {
             return res.status(200).send('Order already processed.');
         }
 
         // 5. ATOMIC INVENTORY DEDUCTION
-        let completedOrder;
+        let comfirmedOrder;
         try {
-            completedOrder = await deductInventoryAndCompleteOrder(order._id, transactionData);
+            comfirmedOrder = await deductInventoryAndCompleteOrder(order._id, transactionData);
         } catch (error) {
             if (error.isRaceCondition) {
                 return res.status(200).send('Race condition handled.');
@@ -6431,8 +6431,8 @@ app.post('/api/paystack/webhook', async (req, res) => {
         // 6. Clear Cart & Send Confirmation
         await Cart.findOneAndUpdate({ userId: order.userId }, { items: [], updatedAt: Date.now() });
         
-        if (completedOrder) {
-            await sendOrderConfirmationEmail(completedOrder, 'completed'); 
+        if (comfirmedOrder) {
+            await sendOrderConfirmationEmail(comfirmedOrder, 'comfirmed'); 
         }
 
         console.log(`Order ${order._id} finalized successfully.`);
