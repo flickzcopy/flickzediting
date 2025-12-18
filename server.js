@@ -3256,10 +3256,6 @@ app.get('/api/admin/orders/:orderId', verifyToken, async (req, res) => {
     }
 });
 
-// =========================================================
-// (All other endpoints remain the same)
-// =========================================================
-// =========================================================
 // 9. PUT /api/admin/orders/:orderId/confirm - Confirm an Order (Admin Protected)
 // =========================================================
 app.put('/api/admin/orders/:orderId/confirm', verifyToken, async (req, res) => {
@@ -3387,12 +3383,15 @@ app.put('/api/admin/orders/:orderId/status', verifyToken, async (req, res) => {
     const { orderId } = req.params;
     const { newStatus } = req.body; 
     
-    // GUARDRAIL: Maps where an order is allowed to go next.
-    // 'Confirmed' is the entry point from the Paystack Webhook.
+    // GUARDRAIL: Define exactly where an order is allowed to go.
     const validTransitions = {
-        'Confirmed': 'Shipped',
-        'Processing': 'Shipped', // Fallback for manual admin-confirmed orders
-        'Shipped': 'Delivered'
+        // Bank Transfers start here
+        'Pending': ['Confirmed', 'Processing', 'Cancelled'], 
+        // Paystack orders start here (Automated)
+        'Confirmed': ['Shipped', 'Cancelled'],
+        'Processing': ['Shipped', 'Cancelled'],
+        'Shipped': ['Delivered'],
+        'Inventory Failure (Manual Review)': ['Confirmed', 'Cancelled']
     };
     
     try {
@@ -3401,8 +3400,8 @@ app.put('/api/admin/orders/:orderId/status', verifyToken, async (req, res) => {
 
         const currentStatus = order.status;
 
-        // 1. Validate Transition
-        if (newStatus !== validTransitions[currentStatus]) {
+        // 🌟 THE FIX: Check if the newStatus is one of the ALLOWED options in the array
+        if (!validTransitions[currentStatus] || !validTransitions[currentStatus].includes(newStatus)) {
             return res.status(400).json({ 
                 message: `Invalid transition. A ${currentStatus} order cannot be moved to ${newStatus}.` 
             });
@@ -3424,7 +3423,7 @@ app.put('/api/admin/orders/:orderId/status', verifyToken, async (req, res) => {
             { new: true }
         ).lean();
 
-        // 4. Trigger fulfillment emails
+        // 4. Trigger fulfillment emails (Only for Shipped and Delivered)
         const user = await User.findById(finalOrder.userId).select('email').lean();
         if (user?.email) {
             try {
@@ -3439,7 +3438,10 @@ app.put('/api/admin/orders/:orderId/status', verifyToken, async (req, res) => {
         }
         
         // 5. Log Action for Audit Trail
-        const logType = newStatus === 'Shipped' ? 'ORDER_SHIPPED' : 'ORDER_DELIVERED';
+        let logType = 'STATUS_UPDATED';
+        if (newStatus === 'Shipped') logType = 'ORDER_SHIPPED';
+        if (newStatus === 'Delivered') logType = 'ORDER_DELIVERED';
+        
         await logAdminStatusUpdate(finalOrder, req.adminId, logType); 
 
         res.status(200).json({ 
@@ -3452,7 +3454,6 @@ app.put('/api/admin/orders/:orderId/status', verifyToken, async (req, res) => {
         res.status(500).json({ message: 'Server error during status update.' });
     }
 });
-
 
 // GET /api/admin/capscollections - Fetch ALL Cap Collections (Admin List View)
 app.get('/api/admin/capscollections', verifyToken, async (req, res) => {
@@ -6284,6 +6285,7 @@ app.delete('/api/users/cart', verifyUserToken, async (req, res) => {
         res.status(500).json({ message: 'Failed to clear shopping bag.' });
     }
 });
+
 app.post('/api/paystack/webhook', async (req, res) => {
     // 1. Verify Signature
     const secret = process.env.PAYSTACK_SECRET_KEY; 
