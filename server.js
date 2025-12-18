@@ -1750,8 +1750,8 @@ async function getAllOrders() {
 }
 
 /**
- * Executes the inventory deduction atomically and sets the order status to 'Confirmed'.
- * DESIGNED FOR AUTOMATED WEBHOOK CALLS.
+ * Executes inventory deduction atomically and sets status to 'Confirmed'.
+ * DESIGNED FOR PAYSTACK WEBHOOKS.
  */
 async function deductInventoryAndCompleteOrder(orderId, transactionData) {
     const session = await mongoose.startSession();
@@ -1760,84 +1760,80 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
 
     try {
         const OrderModel = mongoose.models.Order || mongoose.model('Order');
-        // Fetch and populate user to get email for the confirmation
+        // Populate userId to get email and username for the confirmation email
         order = await OrderModel.findById(orderId).populate('userId').session(session);
 
-        // 1. CRITICAL CHECK: Allow Pending or Processing to move to Confirmed
-        const isReadyForInventory = order && (order.status === 'Pending' || order.status === 'Processing');
-
-        if (!isReadyForInventory) {
+        // 1. CRITICAL GUARDRAIL: Only process if Pending or Processing
+        if (!order || !['Pending', 'Processing'].includes(order.status)) {
             await session.abortTransaction();
             const raceError = new Error(`Order ${orderId} is already ${order?.status || 'processed'}.`);
             raceError.isRaceCondition = true;
             throw raceError;
         }
 
-        // 2. STOCK DEDUCTION LOOP
+        // 2. ATOMIC STOCK DEDUCTION
         for (const item of order.items) {
-             const ProductModel = getProductModel(item.productType); 
-             const quantityOrdered = item.quantity;
-             let updatedProduct;
-             
-             if (['WearsCollection', 'NewArrivals', 'PreOrderCollection'].includes(item.productType)) {
-                 updatedProduct = await ProductModel.findOneAndUpdate(
-                     { _id: item.productId, 'variations.variationIndex': item.variationIndex },
-                     { $inc: { 'variations.$[var].sizes.$[size].stock': -quantityOrdered, 'totalStock': -quantityOrdered } },
-                     { new: true, session, arrayFilters: [
-                         { 'var.variationIndex': item.variationIndex }, 
-                         { 'size.size': item.size, 'size.stock': { $gte: quantityOrdered } } 
-                     ]}
-                 );
-             } else if (item.productType === 'CapCollection') {
-                 updatedProduct = await ProductModel.findOneAndUpdate(
-                     { _id: item.productId, 'variations': { $elemMatch: { variationIndex: item.variationIndex, stock: { $gte: quantityOrdered } } } },
-                     { $inc: { 'variations.$[var].stock': -quantityOrdered, 'totalStock': -quantityOrdered } },
-                     { new: true, session, arrayFilters: [{ 'var.variationIndex': item.variationIndex }] }
-                 );
-             }
+            const ProductModel = getProductModel(item.productType);
+            const quantityOrdered = item.quantity;
+            let updatedProduct;
 
-             if (!updatedProduct) {
-                 throw new Error(`Insufficient stock for ${item.name}.`);
-             }
+            if (['WearsCollection', 'NewArrivals', 'PreOrderCollection'].includes(item.productType)) {
+                updatedProduct = await ProductModel.findOneAndUpdate(
+                    { _id: item.productId, 'variations.variationIndex': item.variationIndex },
+                    { $inc: { 'variations.$[var].sizes.$[size].stock': -quantityOrdered, 'totalStock': -quantityOrdered } },
+                    { session, new: true, arrayFilters: [
+                        { 'var.variationIndex': item.variationIndex },
+                        { 'size.size': item.size, 'size.stock': { $gte: quantityOrdered } }
+                    ]}
+                );
+            } else if (item.productType === 'CapCollection') {
+                updatedProduct = await ProductModel.findOneAndUpdate(
+                    { 
+                        _id: item.productId, 
+                        'variations': { $elemMatch: { variationIndex: item.variationIndex, stock: { $gte: quantityOrdered } } } 
+                    },
+                    { $inc: { 'variations.$[var].stock': -quantityOrdered, 'totalStock': -quantityOrdered } },
+                    { session, new: true, arrayFilters: [{ 'var.variationIndex': item.variationIndex }] }
+                );
+            }
+
+            if (!updatedProduct) {
+                throw new Error(`Insufficient stock for ${item.name} (${item.size || 'No Size'}).`);
+            }
         }
 
-        // 3. FINALIZING DATA: Update status to 'Confirmed'
-        order.status = 'Confirmed'; 
+        // 3. FINALIZING DATA: Move from 'Pending' to 'Confirmed'
+        order.status = 'Confirmed'; // ⚡ THIS FIXES YOUR SCREENSHOT ISSUE
         order.paymentStatus = 'Paid';
-        order.paymentTxnId = transactionData.id || transactionData.reference; 
-        order.paidAt = new Date(); 
-        order.confirmedAt = new Date(); 
+        order.paymentTxnId = transactionData.id || transactionData.reference;
+        order.paidAt = new Date();
+        order.confirmedAt = new Date();
+        order.confirmedBy = 'SYSTEM_PAYSTACK'; // Marks it as automated
         order.updatedAt = Date.now();
 
         await order.save({ session });
         await session.commitTransaction();
-        session.endSession(); 
+        console.log(`✅ Inventory Deducted & Order ${orderId} confirmed via Paystack.`);
 
-        // --- ⭐ AUTOMATIC POST-PROCESSING ⭐ ---
-        
-        // 4. Clear User Cart immediately
+        // 4. POST-PROCESSING (Outside Transaction for performance)
+        // Clear Cart
         const CartModel = mongoose.models.Cart || mongoose.model('Cart');
-        await CartModel.findOneAndUpdate({ userId: order.userId }, { items: [] });
+        await CartModel.findOneAndUpdate({ userId: order.userId._id }, { items: [] });
 
-        // 5. Send Automated Email
+        // Send Email
         const customerEmail = order.shippingAddress?.email || order.userId?.email;
         if (customerEmail) {
-            try {
-                // Using your specific function name
-                await sendOrderConfirmationEmailForAdmin(customerEmail, order);
-                console.log(`✅ Order ${orderId} confirmed & Email sent.`);
-            } catch (emailErr) {
-                console.error("Email failed, but order is confirmed:", emailErr.message);
-            }
+            await sendOrderConfirmationEmailForAdmin(customerEmail, order);
         }
 
         return order.toObject({ getters: true });
 
     } catch (error) {
         if (session.inTransaction()) await session.abortTransaction();
-        session.endSession();
         if (!error.isRaceCondition && order) await inventoryRollback(orderId, error.message);
         throw error;
+    } finally {
+        session.endSession();
     }
 }
 
@@ -6287,7 +6283,6 @@ app.delete('/api/users/cart', verifyUserToken, async (req, res) => {
 });
 
 app.post('/api/paystack/webhook', async (req, res) => {
-    // 1. Verify Signature
     const secret = process.env.PAYSTACK_SECRET_KEY; 
     const hash = crypto.createHmac('sha512', secret).update(JSON.stringify(req.body)).digest('hex');
     
@@ -6303,23 +6298,20 @@ app.post('/api/paystack/webhook', async (req, res) => {
         const order = await Order.findOne({ orderReference });
         if (!order) return res.status(200).send('Order not found.');
 
-        // 2. Avoid duplicate processing
-        if (['Confirmed', 'Shipped', 'Delivered'].includes(order.status)) {
-            return res.status(200).send('Order already confirmed.');
+        // Prevent duplicate processing
+        if (['Confirmed', 'Shipped', 'Delivered', 'Completed'].includes(order.status)) {
+            return res.status(200).send('Order already processed.');
         }
 
-        // 3. ⭐ TRIGGER INSTANT AUTOMATION
-        // This deducts stock and sets status to 'Confirmed' instantly
+        // ⚡ TRIGGER AUTOMATION: Use the dedicated Webhook function
         await deductInventoryAndCompleteOrder(order._id, transactionData);
         
-        res.status(200).send('Webhook processed: Stock deducted and Status set to Confirmed.');
-
+        res.status(200).send('Success');
     } catch (error) {
-        console.error('Webhook Error:', error.message);
-        res.status(200).send('Handled with errors.'); 
+        console.error(`❌ Webhook Error: ${error.message}`);
+        res.status(200).send('Handled with error'); 
     }
 });
-
 
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
     const userId = req.userId;
