@@ -406,7 +406,7 @@
         return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(amount);
     }
 
-    // Helper function to determine status badge classes for Orders
+   // Updated Helper function for Status Badges
 function getStatusBadge(status) {
     let className = '';
     let text = status || 'N/A';
@@ -418,18 +418,17 @@ function getStatusBadge(status) {
         case 'Shipped':
             className = 'bg-blue-100 text-blue-800';
             break;
-        case 'Confirmed': // Manually confirmed/Ready for Shipping
+        // ⭐ UPDATED: Confirmed now has a distinct "Success" look
+        case 'Confirmed': 
+            className = 'bg-emerald-100 text-emerald-800';
+            text = 'Confirmed (Paid)'; 
+            break;
         case 'Processing':
             className = 'bg-yellow-100 text-yellow-800';
+            text = 'Processing';
             break;
         case 'Pending':
             className = 'bg-gray-100 text-gray-800';
-            break;
-        
-        // ⭐ NEW STATUSES: Completed (System Finalized) and Manual Review Cases
-        case 'Completed': // System Finalized (Paid, Inventory Checked)
-            className = 'bg-emerald-100 text-emerald-800';
-            text = 'Completed (Auto)'; // Explicitly mark it as system-finalized
             break;
         case 'Cancelled':
         case 'Inventory Failure (Manual Review)':
