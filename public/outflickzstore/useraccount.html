@@ -978,13 +978,12 @@ async function handleCreateAccount(event) {
         createBtn.disabled = false;
     }
 }
-
 /**
-* Handles account verification code submission.
-*/
+ * Handles account verification code submission.
+ * UPDATED: Optimized to guide users toward homepage.html
+ */
 async function handleVerification(event) {
     event.preventDefault();
-    // Trim whitespace from the code input immediately
     const code = document.getElementById('verify-code').value.trim(); 
     const verifyBtn = document.getElementById('verify-btn');
     const email = pendingVerificationEmail;
@@ -995,12 +994,10 @@ async function handleVerification(event) {
         return;
     }
 
-    // ⭐ CLIENT-SIDE VALIDATION: Check if code is present and has expected length
     if (!code || code.length !== 6) { 
         displayMessage('Please enter a valid 6-digit verification code.', 'error');
-        return; // Stop execution here if validation fails
+        return; 
     }
-    // ⭐ END VALIDATION
 
     verifyBtn.textContent = 'Verifying...';
     verifyBtn.disabled = true;
@@ -1012,63 +1009,62 @@ async function handleVerification(event) {
             body: JSON.stringify({ email: email, code: code })
         });
 
-        // ROBUST JSON PARSING
         let data = {};
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
             data = await response.json();
         } else if (!response.ok) {
-            // Handle non-JSON server errors
-            throw new Error(`Server Error (${response.status}): Netlify could not find the function or the server crashed.`);
+            throw new Error(`Server Error (${response.status}): Service unavailable.`);
         }
-        // END ROBUST PARSING
-
 
         if (response.ok) {
-            displayMessage('Account verified successfully! You can now sign in.', 'success');
+            // 🎉 SUCCESS PATH
+            displayMessage('Account verified! Finalizing your session...', 'success');
             
-            // ⭐ FIX: Immediately disable the button and input on success
-            // This prevents the user from clicking again and triggering the 400 'already verified' error.
             document.getElementById('verify-code').disabled = true;
-            verifyBtn.textContent = 'Verified!'; // Set to success state
+            verifyBtn.textContent = 'Verified!';
 
-            pendingVerificationEmail = '';
-            document.getElementById('verify-code').value = '';
-
-            setTimeout(() => {
-                showView('login');
-                document.getElementById('login-email').value = email; // Pre-fill email
+            // --- 🚀 REDIRECT LOGIC ---
+            // If your backend is updated to return an accessToken upon verification:
+            if (data.accessToken) {
+                localStorage.setItem(AUTH_TOKEN_KEY, data.accessToken);
+                console.log('Session established via verification token.');
                 
-                // Re-enable input for future use after the view switch
-                document.getElementById('verify-code').disabled = false;
-            }, 2000);
-            
-            // Crucial: We return here to skip any failure/error logic below
+                // Attempt to sync the cart before moving to homepage
+                try { await fetchAndSetPermanentCartState(); } catch (e) { console.warn(e); }
+
+                setTimeout(() => {
+                    window.location.href = 'homepage.html'; 
+                }, 1500);
+            } else {
+                // If backend does NOT return a token, we must go to Login, 
+                // but we pre-fill the email to make it easy.
+                displayMessage('Account verified! Please sign in to continue.', 'success');
+                setTimeout(() => {
+                    showView('login');
+                    const loginEmailField = document.getElementById('login-email');
+                    if (loginEmailField) loginEmailField.value = email;
+                    document.getElementById('verify-code').disabled = false;
+                }, 2000);
+            }
             return;
 
         } else {
-            // ⭐ ADDED LOGIC: If the failure is "already verified" (status 400) 
-            // and the function is still running due to a double-call bug, 
-            // we suppress the error message but reset the button.
+            // 🟡 ERROR HANDLING
             if (response.status === 400 && data.message && data.message.includes('already verified')) {
-                console.warn('Suppressing redundant "already verified" error message due to potential double-submission.');
-                displayMessage('This account is already verified. Please proceed to sign in.', 'info');
+                displayMessage('Account already verified. Redirecting to login...', 'info');
+                setTimeout(() => showView('login'), 2000);
             } else {
-                // For all other errors, display the failure message
-                const errorMessage = data.message || `Verification API Error (${response.status}).`;
-                displayMessage(`Verification Failed: ${errorMessage}`, 'error');
+                const errorMessage = data.message || `Verification failed (${response.status}).`;
+                displayMessage(errorMessage, 'error');
+                verifyBtn.textContent = 'Verify Account';
+                verifyBtn.disabled = false;
             }
-            
-            // On failure, we re-enable the button so the user can try again
-            verifyBtn.textContent = 'Verify Account';
-            verifyBtn.disabled = false;
         }
 
     } catch (error) {
-        console.error('Verification network failed:', error);
-        displayMessage(`Connection Error: ${error.message || 'Could not connect to the verification service.'}`, 'error');
-        
-        // Ensure reset on network/fatal error
+        console.error('Verification error:', error);
+        displayMessage(`Connection Error: ${error.message}`, 'error');
         verifyBtn.textContent = 'Verify Account';
         verifyBtn.disabled = false;
     }

@@ -164,6 +164,31 @@ tailwind.config = {
     }
 }
 
+document.addEventListener('DOMContentLoaded', async () => {
+    const token = localStorage.getItem('userAccessToken');
+    
+    // 1. Redirect if not logged in
+    if (!token) {
+        console.warn('No access token found. Redirecting to login...');
+        window.location.href = 'useraccount.html'; 
+        return; // Stop execution
+    }
+
+    // 2. If we have a token, sync the permanent cart immediately
+    // This ensures the homepage shows the correct item count in the header
+    try {
+        if (typeof fetchAndSetPermanentCartState === 'function') {
+            await fetchAndSetPermanentCartState();
+            console.log('User session verified and cart synced.');
+        }
+    } catch (error) {
+        console.error('Session might be invalid:', error);
+        // Optional: If the token is expired/invalid, log them out
+        // localStorage.removeItem('userAccessToken');
+        // window.location.href = 'account.html';
+    }
+});
+
 // Simple JS for Toggling Mobile Menu
 function toggleMenu() {
     document.getElementById('mobile-menu').classList.toggle('hidden');

@@ -5556,7 +5556,6 @@ app.post('/api/users/resend-verification', async (req, res) => {
         res.status(500).json({ message: 'Failed to resend verification code due to a server error.' });
     }
 });
-
 // --- 2. POST /api/users/verify (Account Verification) ---
 app.post('/api/users/verify', async (req, res) => {
     const { email, code } = req.body;
@@ -5567,7 +5566,7 @@ app.post('/api/users/verify', async (req, res) => {
     }
 
     try {
-        // FIX: Explicitly select the hidden fields for the verification check
+        // Explicitly select hidden fields
         const user = await User.findOne({ email })
             .select('+verificationCode +verificationCodeExpires');
 
@@ -5580,20 +5579,18 @@ app.post('/api/users/verify', async (req, res) => {
              return res.status(400).json({ message: 'Account is already verified.' });
         }
         
-        // CRITICAL CHECK: Ensure the hash field exists before comparing
+        // Ensure hash field exists
         if (!user.verificationCode) {
-            console.error(`Verification hash missing for ${email}. User may need to resend code.`);
-            return res.status(400).json({ message: 'No verification code is pending for this user. Please resend the code.' });
+            return res.status(400).json({ message: 'No verification code is pending. Please resend the code.' });
         }
 
         // 2. Check Expiration
         if (new Date() > user.verificationCodeExpires) {
-            return res.status(400).json({ message: 'Verification code has expired. Please request a new one.' });
+            return res.status(400).json({ message: 'Verification code has expired.' });
         }
 
         // 3. Compare Code
         const isMatch = await bcrypt.compare(code, user.verificationCode); 
-
         if (!isMatch) {
             return res.status(401).json({ message: 'Invalid verification code.' });
         }
@@ -5602,18 +5599,39 @@ app.post('/api/users/verify', async (req, res) => {
         await User.updateOne(
             { _id: user._id },
             { 
-                $set: { 
-                    // 🎉 FIXED: Using dot notation to update the nested 'status.isVerified' field
-                    'status.isVerified': true 
-                },
-                // Clear the hash and expiry after successful verification
+                $set: { 'status.isVerified': true },
                 $unset: { verificationCode: "", verificationCodeExpires: "" }
             }
         );
+
+        // ⭐ NEW: GENERATE AUTHENTICATION SESSION FOR AUTO-REDIRECT
+        // This allows the frontend to skip the login page.
         
-        console.log(`User ${email} successfully verified.`);
+        // Replace 'generateUserAccessToken' with your actual JWT signing function
+        const tokenPayload = { id: user._id, email: user.email };
+        const accessToken = generateUserAccessToken(tokenPayload); // Ensure this function is defined in your app
+
+        // Optional: Set HTTP-Only Refresh Cookie if your architecture uses them
+        const refreshToken = generateUserRefreshToken(tokenPayload);
+        res.cookie('refreshToken', refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'Strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        });
+
+        console.log(`User ${email} verified and session generated.`);
         
-        res.status(200).json({ message: 'Account successfully verified. You can now log in.' });
+        // 5. Send Success Response with Token
+        res.status(200).json({ 
+            message: 'Account verified successfully!',
+            accessToken: accessToken, // Frontend will save this to localStorage
+            user: {
+                id: user._id,
+                email: user.email,
+                firstName: user.firstName
+            }
+        });
 
     } catch (error) {
         console.error("User verification error:", error);
