@@ -1749,26 +1749,26 @@ async function getAllOrders() {
 }
 
 /**
- * Executes the inventory deduction atomically and sets the order status to 'Completed'.
- * This is designed to be called by automated systems like webhooks.
+ * Executes the inventory deduction atomically and sets the order status to 'Confirmed'.
+ * This is designed to be called automatically by the Paystack webhook.
  * @param {string} orderId The ID of the order to complete.
  * @param {object} transactionData The transaction data from Paystack (for logging TXN ID).
- * @returns {Promise<Object>} The completed order object.
+ * @returns {Promise<Object>} The confirmed order object.
  * @throws {Error} Throws an error if stock is insufficient or a race condition is detected.
  */
 async function deductInventoryAndCompleteOrder(orderId, transactionData) {
-    // 1. Start a Mongoose session for atomicity (crucial for inventory)
+    // 1. Start a Mongoose session for atomicity
     const session = await mongoose.startSession();
     session.startTransaction();
     let order = null;
-    let OrderModel;
 
     try {
-        OrderModel = mongoose.models.Order || mongoose.model('Order');
+        const OrderModel = mongoose.models.Order || mongoose.model('Order');
         // Fetch the order within the transaction
         order = await OrderModel.findById(orderId).session(session);
 
-        // CRITICAL CHECK: Only process orders in 'Pending' or 'Processing' state
+        // 1.1 CRITICAL CHECK: Only process orders in 'Pending' or 'Processing' state
+        // This prevents double-deducting stock if the webhook fires twice.
         const isReadyForInventory = order && 
             (order.status === 'Pending' || order.status === 'Processing');
 
@@ -1785,14 +1785,13 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
              const ProductModel = getProductModel(item.productType); 
              const quantityOrdered = item.quantity;
              let updatedProduct;
-             let errorMsg;
              
              // --- Group 1: Size-based items (Wears, NewArrivals, PreOrder) ---
-             if (item.productType === 'WearsCollection' || item.productType === 'NewArrivals' || item.productType === 'PreOrderCollection') {
+             if (['WearsCollection', 'NewArrivals', 'PreOrderCollection'].includes(item.productType)) {
                  if (!item.size) { 
-                     errorMsg = `Missing size for product ${item.productId} in ${item.productType}.`;
-                     throw new Error(errorMsg);
+                     throw new Error(`Missing size for product ${item.productId} in ${item.productType}.`);
                  }
+
                  updatedProduct = await ProductModel.findOneAndUpdate(
                      {
                          _id: item.productId,
@@ -1813,6 +1812,7 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
                          ]
                      }
                  );
+
              // --- Group 2: Direct-stock items (CapCollection) ---
              } else if (item.productType === 'CapCollection') {
                  updatedProduct = await ProductModel.findOneAndUpdate(
@@ -1840,35 +1840,41 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
                      }
                  );
              } else {
-                 errorMsg = `Unsupported product type: ${item.productType}.`;
-                 throw new Error(errorMsg);
+                 throw new Error(`Unsupported product type: ${item.productType}.`);
              }
 
+             // 2.1 Check if the atomic update failed (means stock ran out during payment)
              if (!updatedProduct) {
-                 const sizeLabel = item.productType === 'CapCollection' ? 'N/A (Direct Stock)' : item.size;
-                 const finalErrorMsg = `Insufficient stock or product mismatch for item: ${sizeLabel} of product ${item.productId}.`;
-                 throw new Error(finalErrorMsg);
+                 const sizeLabel = item.productType === 'CapCollection' ? 'Standard' : item.size;
+                 throw new Error(`Insufficient stock for item: ${item.name} (${sizeLabel}).`);
              }
         }
-        // --- END STOCK DEDUCTION LOOP ---
 
-        // 3. Update order status to final 'Completed' state (the webhook final status)
-        order.status = 'Comfirmed'; 
-        order.completedAt = new Date();
-        order.paymentTxnId = transactionData.id; // Log TXN ID
-        order.paidAt = new Date(); // Log paid time
+        // --- 3. FINALIZING THE ORDER ---
+        // Updated status to 'Confirmed' (Fixed typo)
+        order.status = 'Confirmed'; 
+        order.paymentStatus = 'Paid';
+        order.paymentTxnId = transactionData.id || transactionData.reference; 
+        order.paidAt = new Date(); 
+        order.confirmedAt = new Date(); 
+        order.updatedAt = Date.now();
+
         await order.save({ session });
 
         // 4. Finalize transaction
         await session.commitTransaction();
+        console.log(`✅ Order ${orderId} confirmed via Paystack. Stock deducted.`);
+        
         return order.toObject({ getters: true });
 
     } catch (error) {
+        // Rollback on any failure
         if (session.inTransaction()) {
             await session.abortTransaction();
         }
+        
         if (!error.isRaceCondition && order) { 
-            // Call rollback for genuine stock/data failures
+            // Update order with the specific error for Admin review
             await inventoryRollback(orderId, error.message);
         }
         throw error;
@@ -3178,46 +3184,38 @@ app.get('/api/admin/orders/pending', verifyToken, async (req, res) => {
 });
 
 // =========================================================
-// 8c. GET /api/admin/orders/confirmed - Fetch Confirmed/Processing Orders (Admin Protected)
+// 8c. GET /api/admin/orders/confirmed - Fetch Confirmed Orders
 // =========================================================
 app.get('/api/admin/orders/confirmed', verifyToken, async (req, res) => {
     try {
-        // Find orders that are ready for fulfillment (Confirmed or Processing)
-        // Processing status might exist briefly before Confirmed.
+        // Find orders ready for fulfillment. 
+        // Note: 'Processing' is included as a fallback for the manual Admin confirmation flow.
         const confirmedOrders = await Order.find({ 
-                status: { $in: ['Confirmed', 'Shipped', 'Delivered'] } // View all fulfilled/in-process
-            })
-            .select('_id userId totalAmount createdAt status paymentMethod orderReference subtotal shippingFee tax')
-            .sort({ createdAt: -1 }) // Show most recent first
-            .lean();
+            status: { $in: ['Confirmed', 'Processing', 'Shipped', 'Delivered'] } 
+        })
+        .select('_id userId totalAmount createdAt status orderReference totalQuantity')
+        .sort({ createdAt: -1 })
+        .lean();
 
-        // 1. Get User Details for each confirmed order
         const populatedOrders = await Promise.all(
             confirmedOrders.map(async (order) => {
                 const user = await User.findById(order.userId)
                     .select('profile.firstName profile.lastName email') 
                     .lean();
 
-                const firstName = user?.profile?.firstName;
-                const lastName = user?.profile?.lastName;
-                
-                const userName = (firstName && lastName) 
-                    ? `${firstName} ${lastName}` 
+                const userName = (user?.profile?.firstName && user?.profile?.lastName) 
+                    ? `${user.profile.firstName} ${user.profile.lastName}` 
                     : user?.email || 'N/A';
-                
-                const email = user ? user.email : 'Unknown User';
                 
                 return {
                     ...order,
-                    userName: userName,
-                    email: email,
+                    userName,
+                    email: user?.email || 'Unknown User',
                 };
             })
         );
 
-        // Send the complete list of confirmed orders
         res.status(200).json(populatedOrders);
-
     } catch (error) {
         console.error('Error fetching confirmed orders:', error);
         res.status(500).json({ message: 'Failed to retrieve confirmed orders.' });
@@ -3431,97 +3429,69 @@ app.put('/api/admin/orders/:orderId/status', verifyToken, async (req, res) => {
     const { orderId } = req.params;
     const { newStatus } = req.body; 
     
-    // 🎯 CRITICAL FIX: Fulfillment MUST start from 'Confirmed'.
-    // This prevents an admin from shipping an order that failed inventory (status: Processing)
+    // GUARDRAIL: Maps where an order is allowed to go next.
+    // 'Confirmed' is the entry point from the Paystack Webhook.
     const validTransitions = {
         'Confirmed': 'Shipped',
+        'Processing': 'Shipped', // Fallback for manual admin-confirmed orders
         'Shipped': 'Delivered'
     };
     
-    let updateFields = { status: newStatus };
-    let finalOrder = null;
-
-    if (!orderId || !newStatus) {
-        return res.status(400).json({ message: 'Order ID and a new status are required.' });
-    }
-
     try {
-        // Fetch the full order for context and email
         const order = await Order.findById(orderId).lean();
-
-        if (!order) {
-            return res.status(404).json({ message: 'Order not found.' });
-        }
+        if (!order) return res.status(404).json({ message: 'Order not found.' });
 
         const currentStatus = order.status;
-        const expectedNextStatus = validTransitions[currentStatus];
 
-        // 1. Validate Status Transition - The Guardrail
-        if (newStatus !== expectedNextStatus) {
-            console.warn(`[Fulfillment Guardrail Fail] Invalid transition from ${currentStatus} to ${newStatus}. Must be 'Confirmed' to ship.`);
+        // 1. Validate Transition
+        if (newStatus !== validTransitions[currentStatus]) {
             return res.status(400).json({ 
-                message: `Invalid status transition from ${currentStatus} to ${newStatus}. Order must be Confirmed to move to Shipped.` 
+                message: `Invalid transition. A ${currentStatus} order cannot be moved to ${newStatus}.` 
             });
         }
         
-        // ... (Remaining logic for Shipped/Delivered handling is correct) ...
-
-        // 2. Handle 'Shipped' transition (No tracking number/company)
-        if (newStatus === 'Shipped') {
-            updateFields = { 
-                ...updateFields, 
-                // Only setting the timestamp
-                shippedAt: new Date()
-            };
-        }
+        // 2. Prepare Update Data
+        let updateFields = { status: newStatus, updatedAt: Date.now() };
         
-        // 3. Handle 'Delivered' transition
-        if (newStatus === 'Delivered') {
-              updateFields = { 
-                ...updateFields, 
-                deliveredAt: new Date()
-            };
+        if (newStatus === 'Shipped') {
+            updateFields.shippedAt = new Date();
+        } else if (newStatus === 'Delivered') {
+            updateFields.deliveredAt = new Date();
         }
 
-        // 4. Perform the atomic status update
-        finalOrder = await Order.findByIdAndUpdate(
+        // 3. Update Database
+        const finalOrder = await Order.findByIdAndUpdate(
             orderId, 
             { $set: updateFields },
             { new: true }
         ).lean();
 
-        // 5. Send Email Notification (Logic remains, but emails should be simpler)
+        // 4. Trigger fulfillment emails
         const user = await User.findById(finalOrder.userId).select('email').lean();
-        const customerEmail = user ? user.email : null;
-
-        if (customerEmail) {
+        if (user?.email) {
             try {
                 if (newStatus === 'Shipped') {
-                    await sendShippingUpdateEmail(customerEmail, finalOrder); 
+                    await sendShippingUpdateEmail(user.email, finalOrder); 
                 } else if (newStatus === 'Delivered') {
-                    await sendDeliveredEmail(customerEmail, finalOrder);
+                    await sendDeliveredEmail(user.email, finalOrder);
                 }
             } catch (emailError) {
-                console.error(`WARNING: Failed to send ${newStatus} email to ${customerEmail}:`, emailError.message);
+                console.error(`Email notification failed for ${newStatus}:`, emailError.message);
             }
         }
         
-        // ⭐ INTEGRATION: Log the shipping/delivery action
-        if (finalOrder) {
-            const logEventType = newStatus === 'Shipped' ? 'ORDER_SHIPPED' : 'ORDER_DELIVERED';
-            // We assume req.adminId is available from verifyToken
-            await logAdminStatusUpdate(finalOrder, req.adminId, logEventType); 
-        }
+        // 5. Log Action for Audit Trail
+        const logType = newStatus === 'Shipped' ? 'ORDER_SHIPPED' : 'ORDER_DELIVERED';
+        await logAdminStatusUpdate(finalOrder, req.adminId, logType); 
 
-        // 6. Success Response
         res.status(200).json({ 
-            message: `Order ${orderId} status successfully updated to ${newStatus}.`,
+            message: `Order successfully moved to ${newStatus}.`,
             order: finalOrder 
         });
 
     } catch (error) {
-        console.error(`Error updating order status ${orderId}:`, error);
-        res.status(500).json({ message: 'Failed to update order status due to a server error.' });
+        console.error(`Error updating order status:`, error);
+        res.status(500).json({ message: 'Server error during status update.' });
     }
 });
 
@@ -6357,10 +6327,9 @@ app.delete('/api/users/cart', verifyUserToken, async (req, res) => {
     }
 });
 
-// 7. POST /api/paystack/webhook - Handle Paystack Notifications
+// --- 7. POST /api/paystack/webhook - Handle Paystack Notifications ---
 app.post('/api/paystack/webhook', async (req, res) => {
     // 1. Verify Webhook Signature
-    // Ensure you are using the raw body for hash calculation
     const secret = process.env.PAYSTACK_SECRET_KEY; 
     const hash = crypto.createHmac('sha512', secret)
         .update(JSON.stringify(req.body)) 
@@ -6411,15 +6380,17 @@ app.post('/api/paystack/webhook', async (req, res) => {
             return res.status(200).send('Amount mismatch.');
         }
 
-        // Prevent duplicate processing
-        if (order.status === 'Confirmed') {
+        // Prevent duplicate processing (Checks for 'Confirmed' and subsequent states)
+        const finalStatuses = ['Confirmed', 'Shipped', 'Delivered'];
+        if (finalStatuses.includes(order.status)) {
             return res.status(200).send('Order already processed.');
         }
 
-        // 5. ATOMIC INVENTORY DEDUCTION
-        let comfirmedOrder;
+        // 5. ATOMIC INVENTORY DEDUCTION & AUTOMATIC CONFIRMATION
+        let confirmedOrder;
         try {
-            comfirmedOrder = await deductInventoryAndCompleteOrder(order._id, transactionData);
+            // This function now officially sets the status to "Confirmed"
+            confirmedOrder = await deductInventoryAndCompleteOrder(order._id, transactionData);
         } catch (error) {
             if (error.isRaceCondition) {
                 return res.status(200).send('Race condition handled.');
@@ -6428,14 +6399,17 @@ app.post('/api/paystack/webhook', async (req, res) => {
             return res.status(200).send('Inventory failure, requires manual review.');
         }
         
-        // 6. Clear Cart & Send Confirmation
-        await Cart.findOneAndUpdate({ userId: order.userId }, { items: [], updatedAt: Date.now() });
-        
-        if (comfirmedOrder) {
-            await sendOrderConfirmationEmail(comfirmedOrder, 'comfirmed'); 
+        // 6. Clear Cart & Send Confirmation Email
+        if (confirmedOrder) {
+            // Empty the user's permanent cart
+            await Cart.findOneAndUpdate({ userId: order.userId }, { items: [], updatedAt: Date.now() });
+            
+            // ⭐ AUTOMATIC NOTIFICATION: Sends email with status 'confirmed'
+            await sendOrderConfirmationEmail(confirmedOrder, 'confirmed'); 
+            
+            console.log(`✅ Order ${order._id} confirmed and user notified.`);
         }
 
-        console.log(`Order ${order._id} finalized successfully.`);
         res.status(200).send('Webhook processed successfully.');
 
     } catch (error) {
