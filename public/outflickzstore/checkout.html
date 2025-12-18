@@ -1182,39 +1182,31 @@ async function processPaystackPayment(totalAmount, email) {
     // 1. COLLECT & PARSE DATA
     const shippingAddress = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
     
-    // --- CRITICAL FIX: Determine the correct items to send ---
     let itemsToOrder = [];
-    const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
+    const buyNowItemJSON = sessionStorage.getItem('BUY_NOW_KEY'); // Ensure this matches your constant name
 
     if (buyNowItemJSON) {
-        // FLOW A: Buy Now Item
         const item = JSON.parse(buyNowItemJSON);
-        // Ensure data types match backend schema (Numbers stayed as Numbers)
-        item.variationIndex = parseInt(item.variationIndex, 10) || 1;
+        item.variationIndex = parseInt(item.variationIndex, 10) || 0;
         item.productType = item.productType || 'Uncategorized';
-        itemsToOrder = [item]; // Backend expects an array of items
-        console.log("Paystack Flow: Using Buy Now item data.");
+        itemsToOrder = [item];
     } else {
-        // FLOW B: Standard Cart
-        itemsToOrder = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
-        console.log("Paystack Flow: Using Standard Cart data.");
+        itemsToOrder = JSON.parse(localStorage.getItem('LOCAL_CART_KEY') || "[]");
     }
     
-    // Ensure we aren't sending an empty order
     if (itemsToOrder.length === 0) {
         displayMessage("Your cart is empty. Cannot proceed with payment.");
-        payBtn.disabled = false;
-        payBtn.innerHTML = 'Confirm & Pay Now';
         return;
     }
+
+    // UI Feedback
+    payBtn.disabled = true;
+    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Initializing Order...';
 
     const subtotal = localStorage.getItem('outflickzOrderSubtotal') || '0';
     const shippingFee = localStorage.getItem('outflickzOrderShipping') || '0';
     const tax = localStorage.getItem('outflickzOrderTax') || '0';
     
-    payBtn.disabled = true;
-    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Initializing Order...';
-
     let mongoOrderId;
     let paystackReference; 
     
@@ -1225,11 +1217,10 @@ async function processPaystackPayment(totalAmount, email) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 shippingAddress, 
-                totalAmount, 
-                subtotal,
-                shippingFee,
-                tax,
-                // Send the itemsToOrder array we built above
+                totalAmount: parseFloat(totalAmount), 
+                subtotal: parseFloat(subtotal),
+                shippingFee: parseFloat(shippingFee),
+                tax: parseFloat(tax),
                 orderItems: itemsToOrder 
             })
         });
@@ -1243,45 +1234,56 @@ async function processPaystackPayment(totalAmount, email) {
         mongoOrderId = data.orderId; 
         paystackReference = data.orderReference;
 
-    } catch (error) {
-        console.error("Order Creation Error:", error);
-        displayMessage(`Order setup failed: ${error.message}`);
-        payBtn.disabled = false;
-        payBtn.innerHTML = 'Confirm & Pay Now';
-        return;
-    }
-    
-    if (typeof PaystackPop === 'undefined') {
-        displayMessage('Payment gateway (Paystack) failed to load.');
-        payBtn.disabled = false;
-        payBtn.innerHTML = 'Confirm & Pay Now';
-        return;
-    }
-
-    // 3. CONFIGURE CHANNELS
-    let allowedChannels = ['card', 'qr', 'mobile_money', 'bank_transfer', 'ussd', 'bank']; 
-
-    // 4. LAUNCH PAYSTACK
-    const handler = PaystackPop.setup({
-        key: PAYSTACK_PUBLIC_KEY,
-        email: email,
-        amount: Math.round(totalAmount * 100), // Kobo conversion
-        ref: paystackReference,
-        currency: 'NGN',
-        channels: allowedChannels,
-        
-        callback: function(response){
-            // Runs AFTER successful payment
-            handlePaystackSuccessRedirect(mongoOrderId, response.reference); 
-        },
-        onClose: function(){
-            displayMessage('Payment window closed. Your order is still pending.');
-            payBtn.disabled = false;
-            payBtn.innerHTML = 'Confirm & Pay Now';
+        // --- VALIDATION BEFORE PAYSTACK ---
+        if (!email || email === "null" || email === "") {
+            throw new Error("Customer email is missing. Please log in again.");
         }
-    });
-    
-    handler.openIframe();
+
+        if (typeof PaystackPop === 'undefined') {
+            throw new Error('Payment gateway failed to load. Check your internet.');
+        }
+
+        // 3. LAUNCH PAYSTACK
+        const handler = PaystackPop.setup({
+            key: PAYSTACK_PUBLIC_KEY,
+            email: email,
+            // Ensure amount is a rounded integer to avoid 400 Bad Request
+            amount: Math.round(parseFloat(totalAmount) * 100), 
+            ref: paystackReference,
+            currency: 'NGN',
+            channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'],
+            
+            // CRITICAL: Metadata allows your Webhook to find the Order by ID
+            metadata: {
+                orderId: mongoOrderId,
+                custom_fields: [
+                    {
+                        display_name: "Order ID",
+                        variable_name: "order_id",
+                        value: mongoOrderId
+                    }
+                ]
+            },
+            
+            callback: function(response){
+                // response.reference is the Paystack Ref
+                handlePaystackSuccessRedirect(mongoOrderId, response.reference); 
+            },
+            onClose: function(){
+                displayMessage('Payment window closed. You can complete this later in your orders.');
+                payBtn.disabled = false;
+                payBtn.innerHTML = 'Confirm & Pay Now';
+            }
+        });
+        
+        handler.openIframe();
+
+    } catch (error) {
+        console.error("Payment Initialization Error:", error);
+        displayMessage(error.message);
+        payBtn.disabled = false;
+        payBtn.innerHTML = 'Confirm & Pay Now';
+    }
 }
 
     /**
