@@ -6113,7 +6113,6 @@ app.post('/api/paystack/webhook', async (req, res) => {
     const secret = process.env.PAYSTACK_SECRET_KEY; 
     const hash = crypto.createHmac('sha512', secret).update(JSON.stringify(req.body)).digest('hex');
     
-    // Verify Signature
     if (hash !== req.headers['x-paystack-signature']) return res.status(401).send('Unauthorized');
 
     const event = req.body;
@@ -6122,22 +6121,20 @@ app.post('/api/paystack/webhook', async (req, res) => {
         const transactionData = event.data;
         const orderId = transactionData.metadata?.orderId; 
 
-        if (!orderId) {
-            console.error(`❌ Webhook Error: No orderId found in Paystack metadata.`);
-            return res.status(200).send('Metadata missing'); 
-        }
-
         try {
             const OrderModel = mongoose.models.Order || mongoose.model('Order');
 
-            // ⭐ FIX: We ONLY update payment info. 
-            // We keep status as 'Pending' so the Admin must click "Confirm" manually.
-            await OrderModel.findByIdAndUpdate(orderId, {
+            // 1. Mark as PAID but keep status as PENDING (Admin must confirm later)
+            const order = await OrderModel.findByIdAndUpdate(orderId, {
                 paymentStatus: 'Paid',
                 paymentMethod: 'Paystack',
                 paymentTxnId: transactionData.reference,
-                paidAt: new Date()
-            });
+                paidAt: new Date(),
+                status: 'Pending' // Explicitly keep it pending for Admin review
+            }).populate('userId');
+
+            // 2. Notify Admin that a payment was received
+            await sendAdminEmailNotification(order, transactionData.amount);
             
             console.log(`✅ Webhook: Order ${orderId} marked as PAID. Awaiting Admin confirmation.`);
             return res.status(200).send('Webhook Processed');
@@ -6146,7 +6143,6 @@ app.post('/api/paystack/webhook', async (req, res) => {
             return res.status(200).send('Error logged'); 
         }
     }
-
     res.status(200).send('Event ignored');
 });
 

@@ -160,6 +160,8 @@
 
     // Helper function to format Naira currency
     function formatNaira(amount) {
+        // Assuming totalAmount is in Naira (not Kobo) as per your schema comments.
+        // If it's in Kobo, you'd divide by 100 first: amount / 100.
         return new Intl.NumberFormat('en-NG', {
             style: 'currency',
             currency: 'NGN',
@@ -186,6 +188,7 @@
             case 'cancelled':
             case 'refunded':
             case 'verification failed':
+            case 'amount mismatch (manual review)':
             case 'inventory failure (manual review)':
                 colorClasses = 'bg-red-100 text-red-800';
                 break;
@@ -198,6 +201,7 @@
 
     /**
      * Renders sales data into the table.
+     * @param {Array} data - Filtered sales data (Order documents).
      */
     function renderSalesTable(data) {
         salesTableBody.innerHTML = '';
@@ -205,33 +209,27 @@
         if (data.length === 0) {
             salesTableBody.innerHTML = `
                 <tr class="text-center">
-                    <td colspan="7" class="p-6 text-gray-500">No sales transactions match your criteria.</td>
+                    <td colspan="6" class="p-6 text-gray-500">No sales transactions match your criteria.</td>
                 </tr>
             `;
             return;
         }
 
         data.forEach(order => {
-            const dateObj = new Date(order.createdAt);
+            const dateObj = new Date(order.createdAt); // Use createdAt from the schema's timestamps
             const formattedDate = dateObj.toLocaleDateString('en-US', { 
                 year: 'numeric', month: 'short', day: 'numeric' 
             });
 
+            // Assuming the backend populates the userId field to get the customer's name/email.
             const customerName = order.userId?.username || order.userId?.email || order.userId || 'N/A';
-            const totalAmount = order.totalAmount;
-
-            // ⭐ PAYSTACK LOGIC: Check if it has a transaction ID
-            const isPaystack = !!(order.paymentTxnId);
-            const paymentMethodBadge = isPaystack 
-                ? '<span class="text-emerald-600 font-medium text-xs">● Paystack</span>' 
-                : '<span class="text-gray-500 font-medium text-xs">● Transfer</span>';
+            const totalAmount = order.totalAmount; // This is the total price in Naira
 
             const row = document.createElement('tr');
-            row.className = 'hover:bg-gray-50 transition duration-100 border-b border-gray-100';
+            row.className = 'hover:bg-gray-50 transition duration-100';
             row.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${order.orderReference || order._id}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${customerName}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${paymentMethodBadge}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${order.items.length} items</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-600">${formatNaira(totalAmount)}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${formattedDate}</td>
@@ -244,7 +242,7 @@
     }
 
     /**
-     * Filters the sales data.
+     * Filters the sales data based on search term AND collection (productType).
      */
     function filterSalesData() {
         const searchTerm = document.getElementById('search-sales').value.toLowerCase();
@@ -252,12 +250,18 @@
 
         const filteredData = ALL_SALES_DATA.filter(order => {
             const customerIdentifier = order.userId?.username || order.userId?.email || order.userId || '';
+            
+            // 1. Search term filter (Order ID, User ID/Email/Username)
             const matchesSearch = (order.orderReference && order.orderReference.toLowerCase().includes(searchTerm)) || 
                                   (order._id && order._id.toString().toLowerCase().includes(searchTerm)) ||
                                   (customerIdentifier.toLowerCase().includes(searchTerm));
             
+            // 2. Collection filter: Check if any item in the order matches the selected productType
             const matchesCollection = collectionFilter === 'all' || 
-                                      (order.items && order.items.some(item => item.productType === collectionFilter));
+                                        (order.items && order.items.some(item => 
+                                            // ⭐ CRITICAL FIX: Use item.productType for filtering ⭐
+                                            item.productType && item.productType === collectionFilter
+                                        ));
 
             return matchesSearch && matchesCollection;
         });
@@ -270,12 +274,15 @@
      */
     async function fetchSalesData() {
         try {
+            // Get token from localStorage (Assuming you store the admin token there)
             const token = localStorage.getItem('adminToken'); 
             if (!token) {
+                 // Redirect to login if no token is found
                 window.location.href = './admin-login.html'; 
                 return;
             }
 
+            // Replace with your actual backend URL/port
             const response = await fetch('/api/admin/orders/all', {
                 method: 'GET',
                 headers: {
@@ -284,49 +291,57 @@
                 }
             });
 
-            if (!response.ok) throw new Error('Failed to fetch');
-
-            const data = await response.json();
-            
-            // ⭐ AUTOMATION SYNC: Only update table if data has actually changed
-            if (JSON.stringify(data) !== JSON.stringify(ALL_SALES_DATA)) {
-                ALL_SALES_DATA = data;
-                renderSalesTable(ALL_SALES_DATA);
+            if (!response.ok) {
+                // If token is invalid or request fails, log and show error
+                console.error('Failed to fetch sales data:', response.statusText);
+                salesTableBody.innerHTML = `
+                    <tr class="text-center">
+                        <td colspan="6" class="p-6 text-red-500">Error loading sales data. Server responded with status: ${response.status}</td>
+                    </tr>
+                `;
+                return;
             }
 
+            const data = await response.json();
+            ALL_SALES_DATA = data; // Store the fetched data globally
+            renderSalesTable(ALL_SALES_DATA); // Render initial view
+
         } catch (error) {
-            console.error('Fetch error:', error);
-            salesTableBody.innerHTML = `<tr class="text-center"><td colspan="7" class="p-6 text-red-500">Error syncing sales data.</td></tr>`;
+            console.error('Network or parsing error fetching sales data:', error);
+            salesTableBody.innerHTML = `
+                <tr class="text-center">
+                    <td colspan="6" class="p-6 text-red-500">A network error occurred. Please check server connection.</td>
+                </tr>
+            `;
         }
     }
 
-    /**
-     * Auto-Sync Logic: Poll the server every 60 seconds to catch Paystack updates
-     */
-    function startAutoSync() {
-        setInterval(() => {
-            fetchSalesData();
-        }, 60000); // Sync every minute
-    }
 
+    /**
+     * Handles the admin logout process.
+     */
     function logoutAdmin() {
+        console.log("Logging out... Clearing admin token.");
         localStorage.removeItem('adminToken');
         window.location.href = './admin-login.html'; 
     }
 
-    // Initialization
+
+    // Initialization on load
     document.addEventListener('DOMContentLoaded', () => {
+        // Hide sidebar on small screens
         sidebarToggle.addEventListener('click', () => {
             sidebar.classList.toggle('-translate-x-full');
         });
         
+        // Fetch and load real data
         fetchSalesData();
-        startAutoSync(); // 👈 Keep the dashboard updated with automated payments
 
+        // Add event listeners for filtering
         document.getElementById('search-sales').addEventListener('input', filterSalesData);
         document.getElementById('filter-collection').addEventListener('change', filterSalesData);
     });
 
-</script>
+    </script>
 </body>
 </html>
