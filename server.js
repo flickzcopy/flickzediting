@@ -1735,12 +1735,9 @@ async function getAllOrders() {
         // without sending back the entire User object (like hashed password).
         const allOrders = await OrderModel.find({})
             .sort({ createdAt: -1 }) // Sort by newest order first
-            .populate('userId', 'email username') // Populate User info needed for display
+            .populate('userId', 'email username')
+             .sort({ createdAt: -1 })
             .lean(); // Use .lean() for faster read performance
-
-        // NOTE: The 'collection' filter on the frontend is challenging 
-        // because it's stored in the nested 'items' array.
-        // For simple display, the current fetch is enough.
 
         return allOrders;
     } catch (error) {
@@ -1758,68 +1755,105 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
         const OrderModel = mongoose.models.Order || mongoose.model('Order');
         order = await OrderModel.findById(orderId).populate('userId').session(session);
 
-        // 1. GUARDRAIL: Prevent double-deduction
-        if (!order || !['Pending', 'Processing'].includes(order.status)) {
+        if (!order) throw new Error(`Order ${orderId} not found.`);
+
+        // Guardrail: Skip if already confirmed
+        if (['Confirmed', 'Shipped', 'Delivered'].includes(order.status)) {
             await session.abortTransaction();
-            const raceError = new Error(`Order ${orderId} already processed.`);
+            const raceError = new Error(`Order ${orderId} already ${order.status}.`);
             raceError.isRaceCondition = true;
             throw raceError;
         }
 
-        // 2. ATOMIC STOCK DEDUCTION
         for (const item of order.items) {
+            // DEBUG LOG: Verify what strings are actually being used
+            console.log(`Checking item: ${item.name} | Type in DB: "${item.productType}"`);
+            
             const ProductModel = getProductModel(item.productType);
+            if (!ProductModel) {
+                throw new Error(`Model missing for type: "${item.productType}". Check getProductModel helper.`);
+            }
+
             const quantityOrdered = item.quantity;
             let updatedProduct;
 
-            // Logic for Size-based products
-            if (['WearsCollection', 'NewArrivals', 'PreOrderCollection'].includes(item.productType)) {
+            // Group 1: Size-based collections
+            // Ensure the strings here match exactly what is in item.productType
+            const sizeBased = ['WearsCollection', 'NewArrivals', 'PreOrderCollection'];
+
+            if (sizeBased.includes(item.productType)) {
                 updatedProduct = await ProductModel.findOneAndUpdate(
-                    { _id: item.productId, 'variations.variationIndex': item.variationIndex },
-                    { $inc: { 'variations.$[var].sizes.$[size].stock': -quantityOrdered, 'totalStock': -quantityOrdered } },
-                    { session, new: true, arrayFilters: [
-                        { 'var.variationIndex': item.variationIndex },
-                        { 'size.size': item.size, 'size.stock': { $gte: quantityOrdered } }
-                    ]}
+                    { 
+                        _id: item.productId, 
+                        'variations.variationIndex': item.variationIndex 
+                    },
+                    { 
+                        $inc: { 
+                            'variations.$[var].sizes.$[size].stock': -quantityOrdered, 
+                            'totalStock': -quantityOrdered 
+                        } 
+                    },
+                    { 
+                        session, 
+                        new: true, 
+                        arrayFilters: [
+                            { 'var.variationIndex': item.variationIndex },
+                            { 'size.size': item.size, 'size.stock': { $gte: quantityOrdered } }
+                        ] 
+                    }
                 );
             } 
-            // Logic for Caps
+            // Group 2: Direct stock (Caps)
             else if (item.productType === 'CapCollection') {
                 updatedProduct = await ProductModel.findOneAndUpdate(
-                    { _id: item.productId, 'variations': { $elemMatch: { variationIndex: item.variationIndex, stock: { $gte: quantityOrdered } } } },
-                    { $inc: { 'variations.$[var].stock': -quantityOrdered, 'totalStock': -quantityOrdered } },
-                    { session, new: true, arrayFilters: [{ 'var.variationIndex': item.variationIndex }] }
+                    { 
+                        _id: item.productId, 
+                        'variations': { $elemMatch: { variationIndex: item.variationIndex, stock: { $gte: quantityOrdered } } } 
+                    },
+                    { 
+                        $inc: { 
+                            'variations.$[var].stock': -quantityOrdered, 
+                            'totalStock': -quantityOrdered 
+                        } 
+                    },
+                    { 
+                        session, 
+                        new: true, 
+                        arrayFilters: [{ 'var.variationIndex': item.variationIndex }] 
+                    }
                 );
             }
 
-            if (!updatedProduct) throw new Error(`Insufficient stock for ${item.name}.`);
+            if (!updatedProduct) {
+                // If this triggers, either stock is 0 or the IDs/Indexes don't match
+                throw new Error(`STOCK FAILURE: ${item.name}. Check if VariationIndex ${item.variationIndex} or Size ${item.size} exists.`);
+            }
         }
 
-        // 3. FINALIZING DATA: Automate the move to 'Confirmed'
-        // This makes it show up in your "Confirmed" Admin list immediately
+        // --- UPDATE STATUS ---
+        // This makes the order appear in Sales Log (Screenshot 3)
         order.status = 'Confirmed'; 
         order.paymentStatus = 'Paid';
         order.paymentTxnId = transactionData.reference;
         order.paidAt = new Date();
         order.confirmedAt = new Date();
-        order.confirmedBy = 'SYSTEM_PAYSTACK'; 
 
         await order.save({ session });
         await session.commitTransaction();
+        
+        console.log(`✅ Success! Order ${orderId} moved to Confirmed.`);
 
-        // 4. POST-PROCESSING
+        // Clear Cart
         const CartModel = mongoose.models.Cart || mongoose.model('Cart');
-        await CartModel.findOneAndUpdate({ userId: order.userId._id }, { items: [] });
-
-        const customerEmail = order.shippingAddress?.email || order.userId?.email;
-        if (customerEmail) {
-            await sendOrderConfirmationEmailForAdmin(customerEmail, order);
+        if (order.userId) {
+            await CartModel.findOneAndUpdate({ userId: order.userId._id }, { items: [] });
         }
 
         return order.toObject({ getters: true });
 
     } catch (error) {
         if (session.inTransaction()) await session.abortTransaction();
+        console.error(`❌ LOG ERROR: ${error.message}`);
         if (!error.isRaceCondition && order) await inventoryRollback(orderId, error.message);
         throw error;
     } finally {
@@ -1827,24 +1861,6 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
     }
 }
 
-/**
- * Fetches all orders for the Sales Log.
- * Ensures Paystack transaction IDs and User details are included.
- */
-async function getAllOrders() {
-    try {
-        const OrderModel = mongoose.models.Order || mongoose.model('Order');
-        
-        // 1. Fetch orders and sort by newest first
-        // 2. Populate userId to get the customer's username/email for the table
-        return await OrderModel.find({})
-            .populate('userId', 'username email') 
-            .sort({ createdAt: -1 })
-            .lean(); // .lean() makes the query faster and return plain JS objects
-    } catch (error) {
-        throw new Error(`Database Fetch Error: ${error.message}`);
-    }
-}
 
 /**
  * ====================================================================================
