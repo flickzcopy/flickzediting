@@ -469,6 +469,7 @@ module.exports = {
     generateOrderEmailHtml,
     formatCurrency
 };
+
 /**
  * Sends the order confirmation email.
  * Tailored to handle both 'Confirmed' and 'Completed' statuses.
@@ -1898,6 +1899,7 @@ async function mergeLocalCart(userId, localItems) {
         // Do NOT throw here, as it might cause the login route to crash entirely.
     }
 }
+
 /**
  * Takes a list of order documents and adds 'name' and 'imageUrl' to each item 
  * by fetching product details from all relevant collections.
@@ -6124,22 +6126,37 @@ app.post('/api/paystack/webhook', async (req, res) => {
         try {
             const OrderModel = mongoose.models.Order || mongoose.model('Order');
 
-            // 1. Mark as PAID but keep status as PENDING (Admin must confirm later)
+            // 1. UPDATE PAYMENT INFO FIRST
+            // We use findByIdAndUpdate to record the payment details immediately.
             const order = await OrderModel.findByIdAndUpdate(orderId, {
                 paymentStatus: 'Paid',
                 paymentMethod: 'Paystack',
                 paymentTxnId: transactionData.reference,
                 paidAt: new Date(),
-                status: 'Pending' // Explicitly keep it pending for Admin review
-            }).populate('userId');
+            }, { new: true }).populate('userId');
 
-            // 2. Notify Admin that a payment was received
-            await sendAdminEmailNotification(order, transactionData.amount);
+            if (!order) throw new Error(`Order ${orderId} not found during webhook.`);
+
+            // 2. ATOMIC INVENTORY DEDUCTION (Swift Flow)
+            // Instead of just logging, we now trigger the full deduction logic.
+            console.log(`[Webhook] Payment confirmed for ${orderId}. Starting Atomic Inventory Deduction...`);
+            const completedOrder = await deductInventoryAtomic(orderId);
+
+            // 3. NOTIFY ADMIN & CUSTOMER
+            // Now that inventory is safe, send notifications.
+            await sendAdminEmailNotificationForAdmin(completedOrder, transactionData.amount);
             
-            console.log(`✅ Webhook: Order ${orderId} marked as PAID. Awaiting Admin confirmation.`);
+            // Send customer confirmation since order.status is now 'Completed'
+            if (completedOrder.userId?.email) {
+                await sendOrderConfirmationEmailForAdmin(completedOrder.userId.email, completedOrder);
+            }
+
+            console.log(`✅ Webhook: Order ${orderId} fully processed and stock deducted.`);
             return res.status(200).send('Webhook Processed');
+
         } catch (error) {
-            console.error(`❌ Webhook Update Failed: ${error.message}`);
+            console.error(`❌ Webhook Swift Flow Failed: ${error.message}`);
+            // Note: deductInventoryAtomic already handles inventoryRollback() internally.
             return res.status(200).send('Error logged'); 
         }
     }
