@@ -447,84 +447,57 @@ document.addEventListener('DOMContentLoaded', () => {
  * @param {object} itemDetails - The product object passed from the button's onclick.
  */
 function simulateBuyNow(itemDetails) {
-    
-    // Locate the card to find the input elements
     const card = document.querySelector(`.collection-card[data-collection-id="${itemDetails.productId}"]`);
-    if (!card) return; // Exit if product card not found
+    if (!card) return;
 
-    // --- 1. Gather Quantity ---
     const quantityInput = card.querySelector(`#quantity-input-${itemDetails.productId}`);
     const selectedQuantity = parseInt(quantityInput?.value) || 1; 
 
-    // --- 2. Gather Size & Color (Standardized Approach) ---
     const selectedSizeInput = card.querySelector(`input[name="size-${itemDetails.productId}"]:checked`);
     const selectedColorInput = card.querySelector(`input[name="color-${itemDetails.productId}"]:checked`);
     
-    // Assign the values (use empty string as N/A placeholder for cleaner URL construction if needed)
     const selectedSize = selectedSizeInput ? selectedSizeInput.value : '';
     const selectedColor = selectedColorInput ? selectedColorInput.value : '';
 
-
-    // --- 3. Determine variationIndex and Image (ENHANCED LOGIC) ---
     let variationIndex = 1; 
     let selectedImageUrl = itemDetails.imageUrl;
     
     if (selectedColor) { 
         const colorMapContainer = card.querySelector(`#color-map-${itemDetails.productId}`);
-        
         if (colorMapContainer) {
             try {
                 const colorMap = JSON.parse(colorMapContainer.getAttribute('data-color-map'));
-                const colorHex = selectedColor; 
-                
-                const colorMapKeys = Object.keys(colorMap);
-                const inferredIndex = colorMapKeys.indexOf(colorHex);
-                
+                const inferredIndex = Object.keys(colorMap).indexOf(selectedColor);
                 if (inferredIndex !== -1) {
-                    // ⭐ CRITICAL FIX: Convert 0-based client index to 1-based server index! ⭐
                     variationIndex = inferredIndex + 1; 
-                    
-                    const newImageUrls = colorMap[colorHex];
-                    if (newImageUrls && newImageUrls.frontImageUrl) {
-                        selectedImageUrl = newImageUrls.frontImageUrl;
-                    }
+                    const newImageUrls = colorMap[selectedColor];
+                    if (newImageUrls?.frontImageUrl) selectedImageUrl = newImageUrls.frontImageUrl;
                 }
-            } catch (e) {
-                console.error("Error parsing color map data:", e);
-            }
+            } catch (e) { console.error("Color map error", e); }
         }
     }
 
-    // ⭐ CRITICAL FIX: Standardize fallback to 'Uncategorized' or product name ⭐
-    const safeProductType = itemDetails.productType || itemDetails.name;
-
-    // --- CONSTRUCT THE FINAL CHECKOUT ITEM ---
+    // ⭐ CONSTRUCTING THE ITEM
     const itemToCheckout = {
         productId: itemDetails.productId, 
         name: itemDetails.name,
-        productType: safeProductType, 
+        productType: itemDetails.productType || 'Uncategorized', 
         price: itemDetails.price,
         imageUrl: selectedImageUrl, 
         quantity: selectedQuantity,
         size: selectedSize, 
         color: selectedColor, 
         variationIndex: variationIndex,
-        variation: (selectedColor !== '' && selectedSize !== '') 
+        // Ensure variation string is built for the Order Schema
+        variation: (selectedColor && selectedSize) 
             ? `${selectedColor} / ${selectedSize}`
-            : (selectedColor !== '' ? selectedColor : (selectedSize !== '' ? selectedSize : 'Default Variant')),
-        checkout: true // Flag to indicate this is a "Buy Now" item for the checkout page
+            : (selectedColor || selectedSize || 'Default')
     };
 
-    // 🌟 Console Log 1
-    console.log("Preparing for Buy Now Checkout:", itemToCheckout);
+    // 🎯 CRITICAL FIX: Wrap in an ARRAY before storing
+    // The backend expects orderItems to be an array so it can .map() through them.
+    sessionStorage.setItem('buyNowItem', JSON.stringify([itemToCheckout])); 
     
-    // 🌟 Console Log 2
-    console.log(`[BUY NOW DIAGNOSTIC] Product: ${itemToCheckout.name} | Type: ${itemToCheckout.productType} | Variation Index: ${itemToCheckout.variationIndex} | Color: ${itemToCheckout.color}`);
-    
-    // 🎯 CRITICAL STEP: Store the single item in Session Storage for checkout.html to retrieve
-    sessionStorage.setItem('buyNowItem', JSON.stringify(itemToCheckout));
-    
-    // Redirect the user to the checkout page
     window.location.href = 'checkout.html';
 }
 
