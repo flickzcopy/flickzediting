@@ -577,8 +577,31 @@
         badge.classList.toggle('hidden', count <= 0);
     }
 
-    // --- DATA FETCHING ---
+    /**
+ * Helper to determine the backend collection/type based on the product name.
+ * This fixes the 'undefined' productType issue by guessing based on keywords.
+ */
+function getCollectionType(productName) {
+    if (!productName) return 'WearsCollection'; // Safe default
+    const lowerName = productName.toLowerCase();
+    
+    // Map keywords to EXACT backend model keys
+    if (lowerName.includes('tee') || lowerName.includes('tank') || lowerName.includes('wears')) {
+        return 'WearsCollection';
+    }
+    if (lowerName.includes('cap') || lowerName.includes('curve')) {
+        return 'CapCollection';
+    }
+    if (lowerName.includes('arrival') || lowerName.includes('polo')) {
+        return 'NewArrivals';
+    }
+    
+    return 'WearsCollection'; // Default fallback
+}
 
+/**
+ * Updated Fetch logic using the name-based collection repair.
+ */
 async function fetchInitialCartData() {
     const subtotalEl = document.getElementById('summary-subtotal');
     const shippingCostEl = document.getElementById('summary-shipping-cost');
@@ -588,7 +611,6 @@ async function fetchInitialCartData() {
     const itemsListEl = document.getElementById('review-items-list');
     const paymentBtn = document.getElementById('checkout-next-btn');
     
-    // UI Loading state
     [subtotalEl, shippingCostEl, taxEstimateEl, estimatedTotalEl, finalTotalEl].forEach(el => el.textContent = '...');
     itemsListEl.innerHTML = '<div class="text-center py-6 text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i> Loading order details...</div>';
     paymentBtn.disabled = true;
@@ -597,16 +619,17 @@ async function fetchInitialCartData() {
     const isStandardCartCheckout = localCart.length > 0;
     const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
 
-    // --- FLOW A: BUY NOW ---
+    // --- FLOW A: BUY NOW (Fixed with getCollectionType) ---
     if (buyNowItemJSON && !isStandardCartCheckout) {
         let item = JSON.parse(buyNowItemJSON);
 
-        // ⭐ CRITICAL FIX: Ensure productType is never the string "undefined"
-        if (!item.productType || String(item.productType).toLowerCase() === "undefined" || item.productType === "") {
-            item.productType = "General"; 
+        // ⭐ REPAIR: If productType is missing or "undefined", use the helper
+        if (!item.productType || String(item.productType) === "undefined") {
+            console.log("Repairing missing productType using getCollectionType...");
+            item.productType = getCollectionType(item.name);
         }
         
-        // Ensure variationIndex is a valid number for the backend
+        // Ensure variationIndex is a Number for the backend
         item.variationIndex = parseInt(item.variationIndex, 10);
         if (isNaN(item.variationIndex)) item.variationIndex = 0;
 
@@ -614,12 +637,12 @@ async function fetchInitialCartData() {
             const response = await secureUserFetch(`${API_BASE_URL}/api/orders/calculate-buy-now`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(item)
+                body: JSON.stringify(item) 
             });
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.message || 'Failed to calculate totals.');
+                throw new Error(errorData.message || 'Calculation failed');
             }
 
             const cartData = await response.json();
@@ -627,7 +650,7 @@ async function fetchInitialCartData() {
             return;
         } catch (error) {
             console.error("Buy Now Error:", error);
-            displayMessage(`Order error: ${error.message}`);
+            displayMessage(`Error: ${error.message}`);
             return;
         }
     }
@@ -640,19 +663,17 @@ async function fetchInitialCartData() {
     try {
         const url = isUserLoggedIn() ? `${API_BASE_URL}/api/users/cart` : `${API_BASE_URL}/api/guest/cart`;
         const response = await (isUserLoggedIn() ? secureUserFetch(url) : fetch(url));
-        
         if (!response.ok) throw new Error('Failed to fetch cart.');
         
         const cartData = await response.json();
         if (!cartData.items || cartData.items.length === 0) {
-            displayMessage('Your shopping bag is empty.');
-            setTimeout(() => window.location.href = 'homepage.html', 2000);
+            displayMessage('Your bag is empty.');
+            setTimeout(() => window.location.href = 'homepage.html', 1500);
             return;
         }
         renderCartData(cartData, paymentBtn);
     } catch (error) {
-        console.error("Cart Loading Error:", error);
-        displayMessage("Could not load your shopping bag.");
+        displayMessage("Could not load shopping bag.");
     }
 }
 
