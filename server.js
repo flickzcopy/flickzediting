@@ -471,28 +471,28 @@ module.exports = {
 };
 /**
  * Sends the order confirmation email.
- * This is the final version tailored for admin confirmation.
- * @param {string} customerEmail - The verified email of the customer.
- * @param {Object} order - The final Mongoose order document (status: 'Completed').
+ * Tailored to handle both 'Confirmed' and 'Completed' statuses.
  */
 async function sendOrderConfirmationEmailForAdmin(customerEmail, order) {
     
-    // ✅ FIX: Use the actual final status for the subject.
-    // If order.status is falsy (shouldn't happen here), default to 'Completed'.
-    const finalStatus = order.status || 'Completed';
-
-    const subject = `✅ Your Order #${order._id.toString().substring(0, 8)} is Confirmed and ${finalStatus}!`; 
+    const status = order.status;
     
-    // NOTE: The generateOrderEmailHtml function uses fixed variables (SHIPPING_COST, TAX_RATE) 
-    // which should be defined in its scope, but it's otherwise acceptable.
+    // Determine the user-friendly verb based on the status
+    // If Confirmed -> "is Confirmed" | If Completed -> "is Completed"
+    const statusText = status === 'Confirmed' ? 'Confirmed' : 'Completed';
+    
+    // Create a dynamic subject line
+    const subject = `✅ Order #${order._id.toString().substring(0, 8)} ${statusText}!`; 
+
+    // Generate HTML - Ensure your template handles these status variations
     const htmlContent = generateOrderEmailHtml(order); 
 
     try {
         const info = await sendMail(customerEmail, subject, htmlContent);
-        console.log(`Email sent: ${info.messageId} to ${customerEmail}`);
+        console.log(`Email sent: ${info.messageId} to ${customerEmail} (Status: ${status})`);
     } catch (error) {
-        // Log the email failure but DO NOT re-throw, as the core transaction is complete.
         console.error(`ERROR sending confirmation email for order ${order._id}:`, error);
+        // We don't throw error here to prevent blocking the checkout process if the mail server is slow
     }
 }
 
@@ -1760,10 +1760,9 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
 
     try {
         const OrderModel = mongoose.models.Order || mongoose.model('Order');
-        // Populate userId to get email and username for the confirmation email
         order = await OrderModel.findById(orderId).populate('userId').session(session);
 
-        // 1. CRITICAL GUARDRAIL: Only process if Pending or Processing
+        // 1. GUARDRAIL: Only process if Pending (prevents double-processing)
         if (!order || !['Pending', 'Processing'].includes(order.status)) {
             await session.abortTransaction();
             const raceError = new Error(`Order ${orderId} is already ${order?.status || 'processed'}.`);
@@ -1771,12 +1770,13 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
             throw raceError;
         }
 
-        // 2. ATOMIC STOCK DEDUCTION
+        // 2. ATOMIC STOCK DEDUCTION LOOP
         for (const item of order.items) {
             const ProductModel = getProductModel(item.productType);
             const quantityOrdered = item.quantity;
             let updatedProduct;
 
+            // Handle Wears, NewArrivals, PreOrder (Size-based)
             if (['WearsCollection', 'NewArrivals', 'PreOrderCollection'].includes(item.productType)) {
                 updatedProduct = await ProductModel.findOneAndUpdate(
                     { _id: item.productId, 'variations.variationIndex': item.variationIndex },
@@ -1786,43 +1786,37 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
                         { 'size.size': item.size, 'size.stock': { $gte: quantityOrdered } }
                     ]}
                 );
-            } else if (item.productType === 'CapCollection') {
+            } 
+            // Handle Caps (Direct variation stock)
+            else if (item.productType === 'CapCollection') {
                 updatedProduct = await ProductModel.findOneAndUpdate(
-                    { 
-                        _id: item.productId, 
-                        'variations': { $elemMatch: { variationIndex: item.variationIndex, stock: { $gte: quantityOrdered } } } 
-                    },
+                    { _id: item.productId, 'variations': { $elemMatch: { variationIndex: item.variationIndex, stock: { $gte: quantityOrdered } } } },
                     { $inc: { 'variations.$[var].stock': -quantityOrdered, 'totalStock': -quantityOrdered } },
                     { session, new: true, arrayFilters: [{ 'var.variationIndex': item.variationIndex }] }
                 );
             }
 
-            if (!updatedProduct) {
-                throw new Error(`Insufficient stock for ${item.name} (${item.size || 'No Size'}).`);
-            }
+            if (!updatedProduct) throw new Error(`Insufficient stock for ${item.name}.`);
         }
 
-        // 3. FINALIZING DATA: Move from 'Pending' to 'Confirmed'
-        order.status = 'Confirmed'; // ⚡ THIS FIXES YOUR SCREENSHOT ISSUE
+        // 3. FINALIZING DATA: Automate the move to 'Confirmed'
+        order.status = 'Confirmed'; 
         order.paymentStatus = 'Paid';
-        order.paymentTxnId = transactionData.id || transactionData.reference;
+        order.paymentTxnId = transactionData.reference || transactionData.id;
         order.paidAt = new Date();
         order.confirmedAt = new Date();
-        order.confirmedBy = 'SYSTEM_PAYSTACK'; // Marks it as automated
-        order.updatedAt = Date.now();
+        order.confirmedBy = 'SYSTEM_PAYSTACK'; // Audit trail
 
         await order.save({ session });
         await session.commitTransaction();
-        console.log(`✅ Inventory Deducted & Order ${orderId} confirmed via Paystack.`);
 
-        // 4. POST-PROCESSING (Outside Transaction for performance)
-        // Clear Cart
+        // 4. POST-PROCESSING: Clear Cart & Send Email
         const CartModel = mongoose.models.Cart || mongoose.model('Cart');
         await CartModel.findOneAndUpdate({ userId: order.userId._id }, { items: [] });
 
-        // Send Email
         const customerEmail = order.shippingAddress?.email || order.userId?.email;
         if (customerEmail) {
+            // This will send the "Your order is Confirmed" email automatically
             await sendOrderConfirmationEmailForAdmin(customerEmail, order);
         }
 
@@ -3372,81 +3366,53 @@ app.put('/api/admin/orders/:orderId/confirm', verifyToken, async (req, res) => {
     }
 });
 
-// =========================================================
-// 10. PUT /api/admin/orders/:orderId/status - Update Fulfillment Status
-// =========================================================
 app.put('/api/admin/orders/:orderId/status', verifyToken, async (req, res) => {
     const { orderId } = req.params;
     const { newStatus } = req.body; 
     
-    // GUARDRAIL: Define exactly where an order is allowed to go.
+    // Define the logical flow of your store
     const validTransitions = {
-        // Bank Transfers start here
         'Pending': ['Confirmed', 'Processing', 'Cancelled'], 
-        // Paystack orders start here (Automated)
-        'Confirmed': ['Shipped', 'Cancelled'],
-        'Processing': ['Shipped', 'Cancelled'],
+        'Confirmed': ['Shipped', 'Cancelled'], // Paystack orders land here first
+        'Processing': ['Confirmed', 'Shipped', 'Cancelled'],
         'Shipped': ['Delivered'],
         'Inventory Failure (Manual Review)': ['Confirmed', 'Cancelled']
     };
     
     try {
-        const order = await Order.findById(orderId).lean();
+        const order = await Order.findById(orderId);
         if (!order) return res.status(404).json({ message: 'Order not found.' });
 
-        const currentStatus = order.status;
-
-        // 🌟 THE FIX: Check if the newStatus is one of the ALLOWED options in the array
-        if (!validTransitions[currentStatus] || !validTransitions[currentStatus].includes(newStatus)) {
+        // Validate the state change
+        if (!validTransitions[order.status] || !validTransitions[order.status].includes(newStatus)) {
             return res.status(400).json({ 
-                message: `Invalid transition. A ${currentStatus} order cannot be moved to ${newStatus}.` 
+                message: `Invalid transition from ${order.status} to ${newStatus}.` 
             });
         }
         
-        // 2. Prepare Update Data
-        let updateFields = { status: newStatus, updatedAt: Date.now() };
+        // Update fields based on status
+        order.status = newStatus;
+        order.updatedAt = Date.now();
         
-        if (newStatus === 'Shipped') {
-            updateFields.shippedAt = new Date();
-        } else if (newStatus === 'Delivered') {
-            updateFields.deliveredAt = new Date();
-        }
+        if (newStatus === 'Shipped') order.shippedAt = new Date();
+        if (newStatus === 'Delivered') order.deliveredAt = new Date();
 
-        // 3. Update Database
-        const finalOrder = await Order.findByIdAndUpdate(
-            orderId, 
-            { $set: updateFields },
-            { new: true }
-        ).lean();
+        const updatedOrder = await order.save();
 
-        // 4. Trigger fulfillment emails (Only for Shipped and Delivered)
-        const user = await User.findById(finalOrder.userId).select('email').lean();
+        // Trigger Emails (Shipped/Delivered only)
+        const user = await User.findById(updatedOrder.userId).select('email').lean();
         if (user?.email) {
             try {
-                if (newStatus === 'Shipped') {
-                    await sendShippingUpdateEmail(user.email, finalOrder); 
-                } else if (newStatus === 'Delivered') {
-                    await sendDeliveredEmail(user.email, finalOrder);
-                }
-            } catch (emailError) {
-                console.error(`Email notification failed for ${newStatus}:`, emailError.message);
-            }
+                if (newStatus === 'Shipped') await sendShippingUpdateEmail(user.email, updatedOrder); 
+                else if (newStatus === 'Delivered') await sendDeliveredEmail(user.email, updatedOrder);
+            } catch (e) { console.error("Fulfillment email failed:", e.message); }
         }
         
-        // 5. Log Action for Audit Trail
-        let logType = 'STATUS_UPDATED';
-        if (newStatus === 'Shipped') logType = 'ORDER_SHIPPED';
-        if (newStatus === 'Delivered') logType = 'ORDER_DELIVERED';
-        
-        await logAdminStatusUpdate(finalOrder, req.adminId, logType); 
+        // Log for Audit
+        await logAdminStatusUpdate(updatedOrder, req.adminId, `ORDER_${newStatus.toUpperCase()}`); 
 
-        res.status(200).json({ 
-            message: `Order successfully moved to ${newStatus}.`,
-            order: finalOrder 
-        });
-
+        res.status(200).json({ message: `Order moved to ${newStatus}.`, order: updatedOrder });
     } catch (error) {
-        console.error(`Error updating order status:`, error);
         res.status(500).json({ message: 'Server error during status update.' });
     }
 });
@@ -6286,31 +6252,36 @@ app.post('/api/paystack/webhook', async (req, res) => {
     const secret = process.env.PAYSTACK_SECRET_KEY; 
     const hash = crypto.createHmac('sha512', secret).update(JSON.stringify(req.body)).digest('hex');
     
+    // Verify the request actually came from Paystack
     if (hash !== req.headers['x-paystack-signature']) return res.status(401).send('Unauthorized');
 
     const event = req.body;
-    if (event.event !== 'charge.success') return res.status(200).send('Event ignored.');
 
-    const transactionData = event.data;
-    const orderReference = transactionData.reference;
+    // Only trigger if the charge was successful
+    if (event.event === 'charge.success') {
+        const transactionData = event.data;
+        const orderReference = transactionData.reference;
 
-    try {
-        const order = await Order.findOne({ orderReference });
-        if (!order) return res.status(200).send('Order not found.');
+        try {
+            const order = await Order.findOne({ orderReference });
+            
+            if (!order) {
+                console.error(`Order not found for reference: ${orderReference}`);
+                return res.status(200).send('Order not found'); 
+            }
 
-        // Prevent duplicate processing
-        if (['Confirmed', 'Shipped', 'Delivered', 'Completed'].includes(order.status)) {
-            return res.status(200).send('Order already processed.');
+            // ⚡ AUTOMATION TRIGGER
+            // This function deducts stock, sets status to 'Confirmed', and sends the email.
+            await deductInventoryAndCompleteOrder(order._id, transactionData);
+            
+            return res.status(200).send('Webhook Processed');
+        } catch (error) {
+            console.error(`❌ Automation Failed: ${error.message}`);
+            return res.status(200).send('Error handled'); 
         }
-
-        // ⚡ TRIGGER AUTOMATION: Use the dedicated Webhook function
-        await deductInventoryAndCompleteOrder(order._id, transactionData);
-        
-        res.status(200).send('Success');
-    } catch (error) {
-        console.error(`❌ Webhook Error: ${error.message}`);
-        res.status(200).send('Handled with error'); 
     }
+
+    res.status(200).send('Event ignored');
 });
 
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
