@@ -1399,32 +1399,33 @@ function getProductModel(productType) {
 }
 
 /**
- * ====================================================================================
- * HELPER FUNCTION: INVENTORY ROLLBACK (Order Status Update)
- * ====================================================================================
- * Updates the order status to indicate a stock failure after a transaction aborts.
- * This is called outside the transaction to persist the failure state immediately.
- * @param {string} orderId The ID of the order that failed.
- * @param {string} reason The error message explaining the failure.
- */
+ * HELPER FUNCTION: INVENTORY ROLLBACK
+ * Updates the order status to indicate a stock failure after a transaction aborts.
+ * This is called outside the transaction to persist the failure state immediately.
+ */
 async function inventoryRollback(orderId, reason) {
-    try {
-        const OrderModel = mongoose.models.Order || mongoose.model('Order');
+    try {
+        const OrderModel = mongoose.models.Order || mongoose.model('Order');
 
-        await OrderModel.findByIdAndUpdate(
-            orderId,
-            {
-                status: 'Inventory Failure (Manual Review)', 
-                notes: [reason], // Add the reason to the notes array for better logging
-                updatedAt: Date.now()
-            },
-            { new: true }
-        );
-        console.warn(`Order ${orderId} status set to 'Inventory Failure (Manual Review)' and reason logged. Reason: ${reason}`);
-    } catch (err) {
-        console.error(`CRITICAL: Failed to update order ${orderId} status during rollback.`, err);
-        // Do not re-throw, as the main error is already being handled.
-    }
+        // We use $push for notes to keep a history of what happened
+        await OrderModel.findByIdAndUpdate(
+            orderId,
+            {
+                status: 'Inventory Failure (Manual Review)', 
+                $push: { notes: `Auto-Rollback: ${reason} at ${new Date().toISOString()}` },
+                updatedAt: Date.now()
+            },
+            { new: true }
+        );
+        
+        console.warn(`🔴 CRITICAL: Order ${orderId} failed automation. Reason: ${reason}`);
+        
+        // OPTIONAL: Trigger an admin alert here (e.g., Email or WhatsApp to you)
+        // await sendAdminAlert(`Payment received for Order ${orderId} but stock deduction failed.`);
+        
+    } catch (err) {
+        console.error(`CRITICAL: Failed to update order ${orderId} status during rollback.`, err);
+    }
 }
 
 /**
@@ -1748,7 +1749,6 @@ async function getAllOrders() {
     }
 }
 
-
 /**
  * Executes the inventory deduction atomically and sets the order status to 'Confirmed'.
  * DESIGNED FOR AUTOMATED WEBHOOK CALLS.
@@ -1760,20 +1760,20 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
 
     try {
         const OrderModel = mongoose.models.Order || mongoose.model('Order');
-        // Populating user helps get the email automatically
+        // Fetch and populate user to get email for the confirmation
         order = await OrderModel.findById(orderId).populate('userId').session(session);
 
-        // 1. CRITICAL CHECK: Prevent double-processing
+        // 1. CRITICAL CHECK: Allow Pending or Processing to move to Confirmed
         const isReadyForInventory = order && (order.status === 'Pending' || order.status === 'Processing');
 
         if (!isReadyForInventory) {
             await session.abortTransaction();
-            const raceError = new Error(`Order already processed.`);
+            const raceError = new Error(`Order ${orderId} is already ${order?.status || 'processed'}.`);
             raceError.isRaceCondition = true;
             throw raceError;
         }
 
-        // 2. STOCK DEDUCTION LOOP (Wears, NewArrivals, Caps)
+        // 2. STOCK DEDUCTION LOOP
         for (const item of order.items) {
              const ProductModel = getProductModel(item.productType); 
              const quantityOrdered = item.quantity;
@@ -1801,7 +1801,7 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
              }
         }
 
-        // 3. FINALIZING THE ORDER DATA (Automatic Confirmation)
+        // 3. FINALIZING DATA: Update status to 'Confirmed'
         order.status = 'Confirmed'; 
         order.paymentStatus = 'Paid';
         order.paymentTxnId = transactionData.id || transactionData.reference; 
@@ -1815,19 +1815,17 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
 
         // --- ⭐ AUTOMATIC POST-PROCESSING ⭐ ---
         
-        // 4. Clear User Cart
+        // 4. Clear User Cart immediately
         const CartModel = mongoose.models.Cart || mongoose.model('Cart');
         await CartModel.findOneAndUpdate({ userId: order.userId }, { items: [] });
 
-        // 5. Send Automated Email using the CORRECT function name
-        // We pull the email from the order's shipping info or the populated user object
+        // 5. Send Automated Email
         const customerEmail = order.shippingAddress?.email || order.userId?.email;
-        
         if (customerEmail) {
             try {
-                // Fixed function name to match your provided block
+                // Using your specific function name
                 await sendOrderConfirmationEmailForAdmin(customerEmail, order);
-                console.log(`📧 Automated confirmation email sent to: ${customerEmail}`);
+                console.log(`✅ Order ${orderId} confirmed & Email sent.`);
             } catch (emailErr) {
                 console.error("Email failed, but order is confirmed:", emailErr.message);
             }
@@ -6286,65 +6284,40 @@ app.delete('/api/users/cart', verifyUserToken, async (req, res) => {
         res.status(500).json({ message: 'Failed to clear shopping bag.' });
     }
 });
-
-// --- 7. POST /api/paystack/webhook - Handle Paystack Notifications ---
 app.post('/api/paystack/webhook', async (req, res) => {
-    // 1. Verify Webhook Signature (Crucial for security)
+    // 1. Verify Signature
     const secret = process.env.PAYSTACK_SECRET_KEY; 
-    const hash = crypto.createHmac('sha512', secret)
-        .update(JSON.stringify(req.body)) 
-        .digest('hex');
+    const hash = crypto.createHmac('sha512', secret).update(JSON.stringify(req.body)).digest('hex');
     
-    if (hash !== req.headers['x-paystack-signature']) {
-        console.error('⚠️ Webhook verification failed: Invalid signature.');
-        return res.status(401).send('Unauthorized');
-    }
+    if (hash !== req.headers['x-paystack-signature']) return res.status(401).send('Unauthorized');
 
     const event = req.body;
-
-    // 2. Only proceed if the charge was successful
-    if (event.event !== 'charge.success') {
-        return res.status(200).send('Event ignored.');
-    }
+    if (event.event !== 'charge.success') return res.status(200).send('Event ignored.');
 
     const transactionData = event.data;
     const orderReference = transactionData.reference;
 
     try {
-        // 3. Find the Order (Note: Populate userId so we can clear the cart later)
-        const order = await Order.findOne({ orderReference }).populate('userId');
+        const order = await Order.findOne({ orderReference });
+        if (!order) return res.status(200).send('Order not found.');
 
-        if (!order) {
-            console.error(`❌ Order not found for reference: ${orderReference}`);
-            return res.status(200).send('Order not found.');
+        // 2. Avoid duplicate processing
+        if (['Confirmed', 'Shipped', 'Delivered'].includes(order.status)) {
+            return res.status(200).send('Order already confirmed.');
         }
 
-        // 4. Check if already processed (Avoid double-deducting stock)
-        // Since it's Paystack, we check for 'Confirmed'
-        const finalizedStatuses = ['Confirmed', 'Shipped', 'Delivered'];
-        if (finalizedStatuses.includes(order.status)) {
-            console.log(`ℹ️ Order ${order._id} already confirmed. Skipping.`);
-            return res.status(200).send('Order already processed.');
-        }
-
-        // 5. ⭐ TRIGGER AUTOMATION ⭐
-        // This function handles:
-        // - Setting Status to 'Confirmed'
-        // - Deducting Stock atomically
-        // - Clearing User Cart
-        // - Sending the Confirmation Email
-        console.log(`🚀 Automating confirmation for Order: ${order._id}`);
+        // 3. ⭐ TRIGGER INSTANT AUTOMATION
+        // This deducts stock and sets status to 'Confirmed' instantly
         await deductInventoryAndCompleteOrder(order._id, transactionData);
         
-        // 6. Respond to Paystack
-        res.status(200).send('Webhook processed successfully and user notified.');
+        res.status(200).send('Webhook processed: Stock deducted and Status set to Confirmed.');
 
     } catch (error) {
-        // We log the error but return 200 so Paystack doesn't keep retrying the same failed request
-        console.error('🔴 Webhook Automation Error:', error.message);
-        res.status(200).send('Webhook received but internal automation failed.'); 
+        console.error('Webhook Error:', error.message);
+        res.status(200).send('Handled with errors.'); 
     }
 });
+
 
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
     const userId = req.userId;
