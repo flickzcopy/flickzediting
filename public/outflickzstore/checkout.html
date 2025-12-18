@@ -579,64 +579,82 @@
 
     // --- DATA FETCHING ---
 
-    async function fetchInitialCartData() {
-        const subtotalEl = document.getElementById('summary-subtotal');
-        const shippingCostEl = document.getElementById('summary-shipping-cost');
-        const taxEstimateEl = document.getElementById('summary-tax-estimate');
-        const estimatedTotalEl = document.getElementById('summary-estimated-total');
-        const finalTotalEl = document.getElementById('summary-estimated-total-final');
-        const itemsListEl = document.getElementById('review-items-list');
-        const paymentBtn = document.getElementById('checkout-next-btn');
-        
-        [subtotalEl, shippingCostEl, taxEstimateEl, estimatedTotalEl, finalTotalEl].forEach(el => el.textContent = '...');
-        itemsListEl.innerHTML = '<div class="text-center py-6 text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i> Loading order...</div>';
-        paymentBtn.disabled = true;
+async function fetchInitialCartData() {
+    const subtotalEl = document.getElementById('summary-subtotal');
+    const shippingCostEl = document.getElementById('summary-shipping-cost');
+    const taxEstimateEl = document.getElementById('summary-tax-estimate');
+    const estimatedTotalEl = document.getElementById('summary-estimated-total');
+    const finalTotalEl = document.getElementById('summary-estimated-total-final');
+    const itemsListEl = document.getElementById('review-items-list');
+    const paymentBtn = document.getElementById('checkout-next-btn');
+    
+    // UI Loading state
+    [subtotalEl, shippingCostEl, taxEstimateEl, estimatedTotalEl, finalTotalEl].forEach(el => el.textContent = '...');
+    itemsListEl.innerHTML = '<div class="text-center py-6 text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i> Loading order details...</div>';
+    paymentBtn.disabled = true;
 
-        const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-        const isStandardCartCheckout = localCart.length > 0;
-        const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
+    const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
+    const isStandardCartCheckout = localCart.length > 0;
+    const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
 
-        // FLOW A: BUY NOW
-        if (buyNowItemJSON && !isStandardCartCheckout) {
-            let item = JSON.parse(buyNowItemJSON);
-            item.productType = (!item.productType || item.productType === "undefined") ? 'Uncategorized' : item.productType;
-            if (!item.size && item.variation) item.size = item.variation;
-            item.variationIndex = parseInt(item.variationIndex, 10) || 1;
+    // --- FLOW A: BUY NOW ---
+    if (buyNowItemJSON && !isStandardCartCheckout) {
+        let item = JSON.parse(buyNowItemJSON);
 
-            try {
-                const response = await secureUserFetch(`${API_BASE_URL}/api/orders/calculate-buy-now`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(item)
-                });
-                if (!response.ok) throw new Error('Failed to calculate Buy Now totals.');
-                const cartData = await response.json();
-                renderCartData(cartData, paymentBtn);
-                return;
-            } catch (error) {
-                displayMessage(error.message);
-                return;
-            }
+        // ⭐ CRITICAL FIX: Ensure productType is never the string "undefined"
+        if (!item.productType || String(item.productType).toLowerCase() === "undefined" || item.productType === "") {
+            item.productType = "General"; 
         }
-
-        // FLOW B: STANDARD CART
-        if (buyNowItemJSON && isStandardCartCheckout) sessionStorage.removeItem(BUY_NOW_KEY);
+        
+        // Ensure variationIndex is a valid number for the backend
+        item.variationIndex = parseInt(item.variationIndex, 10);
+        if (isNaN(item.variationIndex)) item.variationIndex = 0;
 
         try {
-            const url = isUserLoggedIn() ? `${API_BASE_URL}/api/users/cart` : `${API_BASE_URL}/api/guest/cart`;
-            const response = await (isUserLoggedIn() ? secureUserFetch(url) : fetch(url));
-            if (!response.ok) throw new Error('Failed to fetch cart.');
-            const cartData = await response.json();
-            if (!cartData.items || cartData.items.length === 0) {
-                displayMessage('Cart is empty. Redirecting...');
-                setTimeout(() => window.location.href = 'homepage.html', 1500);
-                return;
+            const response = await secureUserFetch(`${API_BASE_URL}/api/orders/calculate-buy-now`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(item)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to calculate totals.');
             }
+
+            const cartData = await response.json();
             renderCartData(cartData, paymentBtn);
+            return;
         } catch (error) {
-            displayMessage("Error loading cart.");
+            console.error("Buy Now Error:", error);
+            displayMessage(`Order error: ${error.message}`);
+            return;
         }
     }
+
+    // --- FLOW B: STANDARD CART ---
+    if (buyNowItemJSON && isStandardCartCheckout) {
+        sessionStorage.removeItem(BUY_NOW_KEY);
+    }
+
+    try {
+        const url = isUserLoggedIn() ? `${API_BASE_URL}/api/users/cart` : `${API_BASE_URL}/api/guest/cart`;
+        const response = await (isUserLoggedIn() ? secureUserFetch(url) : fetch(url));
+        
+        if (!response.ok) throw new Error('Failed to fetch cart.');
+        
+        const cartData = await response.json();
+        if (!cartData.items || cartData.items.length === 0) {
+            displayMessage('Your shopping bag is empty.');
+            setTimeout(() => window.location.href = 'homepage.html', 2000);
+            return;
+        }
+        renderCartData(cartData, paymentBtn);
+    } catch (error) {
+        console.error("Cart Loading Error:", error);
+        displayMessage("Could not load your shopping bag.");
+    }
+}
 
     function renderCartData(data, paymentBtn) {
         const subtotal = data.subtotal || 0;
@@ -706,34 +724,42 @@
         }
     }
 
-    function validateAndProceedToReview() {
-        const form = document.getElementById('shipping-form');
-        if (!form.checkValidity()) {
-            form.reportValidity();
-            return;
-        }
-        const shippingData = {
-            firstName: document.getElementById('first-name').value,
-            lastName: document.getElementById('last-name').value,
-            email: document.getElementById('email').value,
-            street: document.getElementById('address-line-1').value,
-            city: document.getElementById('city').value,
-            state: document.getElementById('state').value,
-            zipCode: document.getElementById('zip-code').value, 
-            country: document.getElementById('country').value,
-        };
-        localStorage.setItem('outflickzShippingData', JSON.stringify(shippingData));
+   function validateAndProceedToReview() {
+    const form = document.getElementById('shipping-form');
+    
+    // Zip Code specific: Remove 'required' if it exists in HTML
+    const zipInput = document.getElementById('zip-code');
+    if (zipInput) zipInput.removeAttribute('required');
 
-        document.getElementById('review-address-name').textContent = `${shippingData.firstName} ${shippingData.lastName}`;
-        document.getElementById('review-address-line1').textContent = shippingData.street;
-        document.getElementById('review-address-line2').textContent = `${shippingData.city}, ${shippingData.state} ${shippingData.zipCode}, ${shippingData.country}`;
-        document.getElementById('review-contact-info').textContent = shippingData.email;
-
-        checkoutStep = 2;
-        updateCheckoutView();
-        window.scrollTo(0,0);
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
     }
 
+    const shippingData = {
+        firstName: document.getElementById('first-name').value.trim(),
+        lastName: document.getElementById('last-name').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        street: document.getElementById('address-line-1').value.trim(),
+        city: document.getElementById('city').value.trim(),
+        state: document.getElementById('state').value,
+        // Zip code is collected but can be an empty string
+        zipCode: document.getElementById('zip-code').value.trim() || "N/A", 
+        country: document.getElementById('country').value,
+    };
+
+    localStorage.setItem('outflickzShippingData', JSON.stringify(shippingData));
+
+    // Update the Review UI
+    document.getElementById('review-address-name').textContent = `${shippingData.firstName} ${shippingData.lastName}`;
+    document.getElementById('review-address-line1').textContent = shippingData.street;
+    document.getElementById('review-address-line2').textContent = `${shippingData.city}, ${shippingData.state} ${shippingData.zipCode}, ${shippingData.country}`;
+    document.getElementById('review-contact-info').textContent = shippingData.email;
+
+    checkoutStep = 2;
+    updateCheckoutView();
+    window.scrollTo(0, 0);
+}
     // --- PAYMENT PROCESSING ---
 
     async function handleFinalOrderPlacement() {
