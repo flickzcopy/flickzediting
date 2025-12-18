@@ -1181,8 +1181,33 @@ async function processPaystackPayment(totalAmount, email) {
     
     // 1. COLLECT & PARSE DATA
     const shippingAddress = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
-    const orderItems = JSON.parse(localStorage.getItem('outflickzLocalCart') || "[]");
     
+    // --- CRITICAL FIX: Determine the correct items to send ---
+    let itemsToOrder = [];
+    const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
+
+    if (buyNowItemJSON) {
+        // FLOW A: Buy Now Item
+        const item = JSON.parse(buyNowItemJSON);
+        // Ensure data types match backend schema (Numbers stayed as Numbers)
+        item.variationIndex = parseInt(item.variationIndex, 10) || 1;
+        item.productType = item.productType || 'Uncategorized';
+        itemsToOrder = [item]; // Backend expects an array of items
+        console.log("Paystack Flow: Using Buy Now item data.");
+    } else {
+        // FLOW B: Standard Cart
+        itemsToOrder = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
+        console.log("Paystack Flow: Using Standard Cart data.");
+    }
+    
+    // Ensure we aren't sending an empty order
+    if (itemsToOrder.length === 0) {
+        displayMessage("Your cart is empty. Cannot proceed with payment.");
+        payBtn.disabled = false;
+        payBtn.innerHTML = 'Confirm & Pay Now';
+        return;
+    }
+
     const subtotal = localStorage.getItem('outflickzOrderSubtotal') || '0';
     const shippingFee = localStorage.getItem('outflickzOrderShipping') || '0';
     const tax = localStorage.getItem('outflickzOrderTax') || '0';
@@ -1204,13 +1229,14 @@ async function processPaystackPayment(totalAmount, email) {
                 subtotal,
                 shippingFee,
                 tax,
-                orderItems: sessionStorage.getItem(BUY_NOW_KEY) ? orderItems : null 
+                // Send the itemsToOrder array we built above
+                orderItems: itemsToOrder 
             })
         });
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ message: 'Failed to record order.' }));
-            throw new Error(errorData.message);
+            throw new Error(errorData.message || 'Server error during order creation.');
         }
 
         const data = await response.json();
@@ -1218,6 +1244,7 @@ async function processPaystackPayment(totalAmount, email) {
         paystackReference = data.orderReference;
 
     } catch (error) {
+        console.error("Order Creation Error:", error);
         displayMessage(`Order setup failed: ${error.message}`);
         payBtn.disabled = false;
         payBtn.innerHTML = 'Confirm & Pay Now';
@@ -1227,25 +1254,24 @@ async function processPaystackPayment(totalAmount, email) {
     if (typeof PaystackPop === 'undefined') {
         displayMessage('Payment gateway (Paystack) failed to load.');
         payBtn.disabled = false;
+        payBtn.innerHTML = 'Confirm & Pay Now';
         return;
     }
 
     // 3. CONFIGURE CHANNELS
-    // Even at NGN 75,000, if Transfer fails, it is a Paystack Dashboard setting issue.
-    // However, we exclude it for very low amounts to avoid the 400 error.
-    let allowedChannels = ['card', 'qr', 'mobile_money','bank_transfer', 'ussd', 'bank']; 
+    let allowedChannels = ['card', 'qr', 'mobile_money', 'bank_transfer', 'ussd', 'bank']; 
 
     // 4. LAUNCH PAYSTACK
     const handler = PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
         email: email,
-        amount: Math.round(totalAmount * 100), 
+        amount: Math.round(totalAmount * 100), // Kobo conversion
         ref: paystackReference,
         currency: 'NGN',
         channels: allowedChannels,
         
         callback: function(response){
-            // This only runs AFTER successful payment
+            // Runs AFTER successful payment
             handlePaystackSuccessRedirect(mongoOrderId, response.reference); 
         },
         onClose: function(){
