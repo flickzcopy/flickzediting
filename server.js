@@ -1749,10 +1749,6 @@ async function getAllOrders() {
     }
 }
 
-/**
- * Executes inventory deduction atomically and sets status to 'Confirmed'.
- * DESIGNED FOR PAYSTACK WEBHOOKS.
- */
 async function deductInventoryAndCompleteOrder(orderId, transactionData) {
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -1762,21 +1758,21 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
         const OrderModel = mongoose.models.Order || mongoose.model('Order');
         order = await OrderModel.findById(orderId).populate('userId').session(session);
 
-        // 1. GUARDRAIL: Only process if Pending (prevents double-processing)
+        // 1. GUARDRAIL: Prevent double-deduction
         if (!order || !['Pending', 'Processing'].includes(order.status)) {
             await session.abortTransaction();
-            const raceError = new Error(`Order ${orderId} is already ${order?.status || 'processed'}.`);
+            const raceError = new Error(`Order ${orderId} already processed.`);
             raceError.isRaceCondition = true;
             throw raceError;
         }
 
-        // 2. ATOMIC STOCK DEDUCTION LOOP
+        // 2. ATOMIC STOCK DEDUCTION
         for (const item of order.items) {
             const ProductModel = getProductModel(item.productType);
             const quantityOrdered = item.quantity;
             let updatedProduct;
 
-            // Handle Wears, NewArrivals, PreOrder (Size-based)
+            // Logic for Size-based products
             if (['WearsCollection', 'NewArrivals', 'PreOrderCollection'].includes(item.productType)) {
                 updatedProduct = await ProductModel.findOneAndUpdate(
                     { _id: item.productId, 'variations.variationIndex': item.variationIndex },
@@ -1787,7 +1783,7 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
                     ]}
                 );
             } 
-            // Handle Caps (Direct variation stock)
+            // Logic for Caps
             else if (item.productType === 'CapCollection') {
                 updatedProduct = await ProductModel.findOneAndUpdate(
                     { _id: item.productId, 'variations': { $elemMatch: { variationIndex: item.variationIndex, stock: { $gte: quantityOrdered } } } },
@@ -1800,23 +1796,23 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
         }
 
         // 3. FINALIZING DATA: Automate the move to 'Confirmed'
+        // This makes it show up in your "Confirmed" Admin list immediately
         order.status = 'Confirmed'; 
         order.paymentStatus = 'Paid';
-        order.paymentTxnId = transactionData.reference || transactionData.id;
+        order.paymentTxnId = transactionData.reference;
         order.paidAt = new Date();
         order.confirmedAt = new Date();
-        order.confirmedBy = 'SYSTEM_PAYSTACK'; // Audit trail
+        order.confirmedBy = 'SYSTEM_PAYSTACK'; 
 
         await order.save({ session });
         await session.commitTransaction();
 
-        // 4. POST-PROCESSING: Clear Cart & Send Email
+        // 4. POST-PROCESSING
         const CartModel = mongoose.models.Cart || mongoose.model('Cart');
         await CartModel.findOneAndUpdate({ userId: order.userId._id }, { items: [] });
 
         const customerEmail = order.shippingAddress?.email || order.userId?.email;
         if (customerEmail) {
-            // This will send the "Your order is Confirmed" email automatically
             await sendOrderConfirmationEmailForAdmin(customerEmail, order);
         }
 
@@ -1828,6 +1824,25 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
         throw error;
     } finally {
         session.endSession();
+    }
+}
+
+/**
+ * Fetches all orders for the Sales Log.
+ * Ensures Paystack transaction IDs and User details are included.
+ */
+async function getAllOrders() {
+    try {
+        const OrderModel = mongoose.models.Order || mongoose.model('Order');
+        
+        // 1. Fetch orders and sort by newest first
+        // 2. Populate userId to get the customer's username/email for the table
+        return await OrderModel.find({})
+            .populate('userId', 'username email') 
+            .sort({ createdAt: -1 })
+            .lean(); // .lean() makes the query faster and return plain JS objects
+    } catch (error) {
+        throw new Error(`Database Fetch Error: ${error.message}`);
     }
 }
 
@@ -2874,23 +2889,30 @@ app.get('/api/analytics/visitors/:period', verifyToken, async (req, res) => {
     }
 });
 
+// =========================================================
+// GET /api/admin/orders/all - Retrieve Full Sales Log
+// =========================================================
 app.get('/api/admin/orders/all', verifyToken, async (req, res) => {
     try {
-        console.log("Attempting to retrieve all order data for Sales Log...");
-        
-        // Call the new function
+        // Only admins should access this (verifyToken handles this)
         const orders = await getAllOrders();
         
-        console.log(`Successfully retrieved ${orders.length} orders.`);
-        
-        // Return the orders array
-        res.status(200).json(orders);
+        // Map data if you need to transform any fields before sending to frontend
+        const sanitizedOrders = orders.map(order => ({
+            ...order,
+            // Ensure the frontend always has a reference to display
+            displayId: order.orderReference || order._id,
+            // Flag to identify Paystack orders easily
+            isAutomated: !!order.paymentTxnId 
+        }));
+
+        res.status(200).json(sanitizedOrders);
         
     } catch (error) {
-        console.error("Sales Log API Crash Detected:", error);
+        console.error("Sales Log API Crash:", error);
         res.status(500).json({ 
-            message: 'Failed to retrieve all order records.',
-            internalError: error.message
+            message: 'Failed to retrieve order records.',
+            error: error.message 
         });
     }
 });
@@ -4762,14 +4784,12 @@ app.delete(
 );
 
 // =========================================================
-// 11. GET /api/admin/inventory/deductions - Fetch Deducted Inventory Logs (Admin Protected)
+// 11. GET /api/admin/inventory/deductions - Fetch Deducted Inventory Logs (Updated for Paystack)
 // =========================================================
 app.get('/api/admin/inventory/deductions', verifyToken, async (req, res) => {
     try {
-        // Get the category filter from the query parameter (e.g., ?category=wears)
         const categoryFilter = req.query.category ? req.query.category.toLowerCase() : 'all';
         
-        // Map the URL filter string to the Mongoose Model Name
         const categoryMap = {
             'wears': 'WearsCollection', 
             'caps': 'CapCollection', 
@@ -4777,74 +4797,62 @@ app.get('/api/admin/inventory/deductions', verifyToken, async (req, res) => {
             'preorders': 'PreOrderCollection' 
         };
         
-        // 1. Initial Match Stage (Filter by Order Status)
-        // We only care about orders where inventory was actually deducted ('Confirmed' or later)
         let pipeline = [
             {
                 $match: {
                     status: { $in: ['Confirmed', 'Shipped', 'Delivered'] }
                 }
             },
-            // 2. Unwind the 'items' array
-            // This creates a separate document for every single product line item in every order.
             {
                 $unwind: '$items'
             }
         ];
         
-        // 3. Optional Match Stage (Filter by Category)
         if (categoryFilter !== 'all') {
             const productType = categoryMap[categoryFilter];
             if (productType) {
                 pipeline.push({
-                    $match: {
-                        'items.productType': productType // Filter on the specific collection/model name
-                    }
+                    $match: { 'items.productType': productType }
                 });
             } else {
-                // Handle invalid category query gracefully
-                return res.status(400).json({ message: 'Invalid category filter provided.' });
+                return res.status(400).json({ message: 'Invalid category filter.' });
             }
         }
         
-        // 4. Project Stage (Reshape the data for the frontend log)
+        // 4. Project Stage - ADDED paymentTxnId HERE
         pipeline.push({
             $project: {
-                _id: 0, // Exclude the default _id from the order document
-                
-                // Fields needed by the frontend:
+                _id: 0,
                 productId: '$items.productId',
                 name: '$items.name',
-                category: '$items.productType', // Use productType as the category name
+                category: '$items.productType',
                 quantity: '$items.quantity', 
-                orderId: '$_id', // The original order ID
-                date: '$confirmedAt', // The date the deduction happened
+                orderId: '$_id',
+                date: '$confirmedAt',
                 
-                // Optional: Include the Admin who confirmed the order
-                confirmedBy: '$confirmedBy' 
+                // --- ESSENTIAL FOR PAYSTACK DETECTION ---
+                paymentTxnId: '$paymentTxnId', // Pass the Paystack ref to frontend
+                confirmedBy: '$confirmedBy'   // Will be 'SYSTEM_PAYSTACK' for autos
             }
         });
 
-        // 5. Sort Stage (Newest deductions first)
-        pipeline.push({
-            $sort: { date: -1 } 
-        });
+        pipeline.push({ $sort: { date: -1 } });
 
-        // Execute the aggregation pipeline on the Order model
         const OrderModel = mongoose.models.Order || mongoose.model('Order');
         const deductionLogs = await OrderModel.aggregate(pipeline);
 
-        // Map the raw productType string to a cleaner display name for the frontend
         const deductionLogsFormatted = deductionLogs.map(log => ({
             ...log,
-            category: log.category.replace('Collection', '').replace('PreOrder', 'Pre-Order')
+            category: log.category 
+                ? log.category.replace('Collection', '').replace('PreOrder', 'Pre-Order')
+                : 'General'
         }));
 
         res.status(200).json(deductionLogsFormatted);
 
     } catch (error) {
         console.error('Error fetching inventory deduction log:', error);
-        res.status(500).json({ message: 'Failed to retrieve inventory deduction logs.' });
+        res.status(500).json({ message: 'Failed to retrieve logs.' });
     }
 });
 
@@ -6252,32 +6260,35 @@ app.post('/api/paystack/webhook', async (req, res) => {
     const secret = process.env.PAYSTACK_SECRET_KEY; 
     const hash = crypto.createHmac('sha512', secret).update(JSON.stringify(req.body)).digest('hex');
     
-    // Verify the request actually came from Paystack
+    // 1. Verify Signature
     if (hash !== req.headers['x-paystack-signature']) return res.status(401).send('Unauthorized');
 
     const event = req.body;
 
-    // Only trigger if the charge was successful
     if (event.event === 'charge.success') {
         const transactionData = event.data;
-        const orderReference = transactionData.reference;
+        
+        // ⭐ PRECISION FIX: Get the MongoDB ID from metadata passed during checkout
+        const orderId = transactionData.metadata?.orderId; 
+
+        if (!orderId) {
+            console.error(`❌ Webhook Error: No orderId found in Paystack metadata.`);
+            return res.status(200).send('Metadata missing'); 
+        }
 
         try {
-            const order = await Order.findOne({ orderReference });
-            
-            if (!order) {
-                console.error(`Order not found for reference: ${orderReference}`);
-                return res.status(200).send('Order not found'); 
-            }
-
             // ⚡ AUTOMATION TRIGGER
-            // This function deducts stock, sets status to 'Confirmed', and sends the email.
-            await deductInventoryAndCompleteOrder(order._id, transactionData);
+            // This now handles stock deduction and moves status to 'Confirmed'
+            await deductInventoryAndCompleteOrder(orderId, transactionData);
             
+            console.log(`✅ Webhook Success: Order ${orderId} confirmed and stock deducted.`);
             return res.status(200).send('Webhook Processed');
         } catch (error) {
+            if (error.isRaceCondition) {
+                return res.status(200).send('Already processed');
+            }
             console.error(`❌ Automation Failed: ${error.message}`);
-            return res.status(200).send('Error handled'); 
+            return res.status(200).send('Error logged'); 
         }
     }
 
