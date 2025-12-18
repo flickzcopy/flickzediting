@@ -907,51 +907,143 @@ async function fetchUserData() {
 
 
 
-  /**
- * Renders the cart/order data to the UI summary and stores totals for payment.
+   /**
+ * Fetches the initial cart data, CHECKING FOR A 'BUY NOW' ITEM FIRST. (UPDATED FOR PRIORITIZATION)
  */
-function renderCartData(data, paymentBtn) {
+async function fetchInitialCartData() {
     const subtotalEl = document.getElementById('summary-subtotal');
     const shippingCostEl = document.getElementById('summary-shipping-cost');
     const taxEstimateEl = document.getElementById('summary-tax-estimate');
     const estimatedTotalEl = document.getElementById('summary-estimated-total');
     const finalTotalEl = document.getElementById('summary-estimated-total-final');
     const itemsListEl = document.getElementById('review-items-list');
-
-    // 1. Update UI with formatted currency (Assuming Naira)
-    subtotalEl.textContent = `₦${data.subtotal.toLocaleString()}`;
-    shippingCostEl.textContent = `₦${data.shippingFee.toLocaleString()}`;
-    taxEstimateEl.textContent = `₦${data.tax.toLocaleString()}`;
-    estimatedTotalEl.textContent = `₦${data.total.toLocaleString()}`;
-    finalTotalEl.textContent = `₦${data.total.toLocaleString()}`;
-
-    // 2. Persist totals for the payment process
-    localStorage.setItem('outflickzOrderSubtotal', data.subtotal);
-    localStorage.setItem('outflickzOrderShipping', data.shippingFee);
-    localStorage.setItem('outflickzOrderTax', data.tax);
-    localStorage.setItem('outflickzOrderTotal', data.total);
+    const paymentBtn = document.getElementById('checkout-next-btn');
     
-    // Store items for Admin Notification reference
-    localStorage.setItem('outflickzOrderItems', JSON.stringify(data.items));
+    // Set loading state
+    subtotalEl.textContent = '...';
+    shippingCostEl.textContent = '...';
+    taxEstimateEl.textContent = '...';
+    estimatedTotalEl.textContent = '...';
+    finalTotalEl.textContent = '...';
+    itemsListEl.innerHTML = '<div class="text-center py-6 text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i> Loading order details...</div>';
+    paymentBtn.disabled = true;
 
-    // 3. Render Item List in Review Step
-    if (data.items && data.items.length > 0) {
-        itemsListEl.innerHTML = data.items.map(item => `
-            <div class="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-                <div class="flex items-center">
-                    <img src="${item.imageUrl}" alt="${item.name}" class="w-16 h-16 object-cover rounded-md mr-4">
-                    <div>
-                        <h4 class="font-medium text-gray-800">${item.name}</h4>
-                        <p class="text-sm text-gray-500">Qty: ${item.quantity} | Size: ${item.size || 'N/A'}</p>
-                        <p class="text-sm font-semibold text-gray-700">₦${item.price.toLocaleString()}</p>
-                    </div>
-                </div>
-            </div>
-        `).join('');
+    let cartData;
+    
+    // Determine if the user has a local cart with items (Standard Checkout intention)
+    const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
+    const isStandardCartCheckout = localCart.length > 0;
+    const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
+    
+    // =========================================================================
+    // 🎯 BUY NOW / PRE-ORDER LOGIC START: (Only proceed if NO standard cart items exist)
+    // =========================================================================
+    
+    if (buyNowItemJSON && !isStandardCartCheckout) { // ⭐ CRITICAL CHANGE HERE: ADD `&& !isStandardCartCheckout`
+        console.log("Processing Buy Now flow...");
+        
+        let item = JSON.parse(buyNowItemJSON);
+
+        // ⭐ CRITICAL FIXES FOR SERVER VALIDATION (Addressing 400 Bad Request) ⭐
+        
+        // 1. FIX: Ensure productType is present (Correcting faulty assignment from previous versions)
+        if (!item.productType || item.productType === "undefined" || item.productType === null) {
+            item.productType = 'Uncategorized'; // *** FIX: Use assignment = ***
+            console.warn(`Fixed invalid productType to '${item.productType}' for Buy Now item.`);
+        }
+        
+        // 2. Fix empty 'size' field (Critical for Caps which use variation as size identifier)
+        if (!item.size && item.variation) {
+            item.size = item.variation; 
+            console.warn("Fixed empty size by using variation value for Buy Now item (Cap fix).");
+        }
+
+        // 3. FIX: Ensure variationIndex is a positive integer or set a safe default of 1
+        const variationIndexNum = parseInt(item.variationIndex, 10);
+        if (isNaN(variationIndexNum) || variationIndexNum <= 0) {
+            item.variationIndex = 1; 
+            console.warn(`Fixed invalid variationIndex to 1 for Buy Now item.`);
+        } else {
+            item.variationIndex = variationIndexNum; // Ensure it's treated as a number
+        }
+        
+        // --- END CRITICAL FIXES ---
+
+        try {
+            // ⭐ FIX: Using secureUserFetch for protected API endpoint (handles token refresh)
+            const response = await secureUserFetch(`${API_BASE_URL}/api/orders/calculate-buy-now`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(item) // Send the corrected item object
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to calculate Buy Now totals from API.');
+            }
+
+            cartData = await response.json(); 
+            renderCartData(cartData, paymentBtn);
+            return; // EXIT: Buy Now flow complete
+
+        } catch (error) {
+            console.error('Error fetching Buy Now totals:', error);
+            itemsListEl.innerHTML = '<div class="text-center py-6 text-red-500">Error calculating totals. Please try again.</div>';
+            displayMessage(error.message || 'A critical error occurred. Cannot proceed to checkout.');
+            return;
+        }
+    }
+    // =========================================================================
+    // --- STANDARD CART LOGIC START ---
+    
+    // If Buy Now flag existed but was ignored (because isStandardCartCheckout was true), 
+    // ensure the flag is cleared before proceeding to prevent issues on subsequent pages.
+    if (buyNowItemJSON && isStandardCartCheckout) {
+          console.warn('Clearing residual BUY_NOW_KEY to proceed with Standard Cart.');
+          sessionStorage.removeItem(BUY_NOW_KEY); 
     }
 
-    // Enable payment button now that data is loaded
-    paymentBtn.disabled = false;
+    // Check for empty local cart if user is NOT logged in 
+    if (!isUserLoggedIn()) {
+        // Re-check localCart here, though it should be caught by isStandardCartCheckout 
+        if (localCart.length === 0) { 
+            displayMessage('Your cart is empty. Redirecting to home.');
+            setTimeout(() => window.location.href = 'homepage.html', 1500);
+            return;
+        } 
+    }
+
+    try {
+        // === REAL API CALL FOR STANDARD CART ===
+        const url = isUserLoggedIn() ? `${API_BASE_URL}/api/users/cart` : `${API_BASE_URL}/api/guest/cart`;
+        
+        // If the user is logged in, use secureUserFetch. Otherwise, use standard fetch.
+        const fetcher = isUserLoggedIn() ? secureUserFetch : fetch;
+        
+        const response = await fetcher(url, { method: 'GET' });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to fetch cart data from API.');
+        }
+
+        cartData = await response.json();
+
+        if (!cartData.items || cartData.items.length === 0) {
+            displayMessage('Your cart is empty. Redirecting to home.');
+            setTimeout(() => window.location.href = 'homepage.html', 1500);
+            return;
+        }
+        
+        // Render the data received from the API (which should now be ₦70,000.00)
+        renderCartData(cartData, paymentBtn);
+        
+    } catch (error) {
+        console.error('Error fetching cart data for checkout:', error);
+        itemsListEl.innerHTML = '<div class="text-center py-6 text-red-500">Error loading cart. Please go back to cart.</div>';
+        displayMessage(error.message || 'An error occurred loading your cart. Please try again.');
+        paymentBtn.disabled = true;
+    }
 }
 
     /**
@@ -1089,33 +1181,8 @@ async function processPaystackPayment(totalAmount, email) {
     
     // 1. COLLECT & PARSE DATA
     const shippingAddress = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
+    const orderItems = JSON.parse(localStorage.getItem('outflickzLocalCart') || "[]");
     
-    // --- CRITICAL FIX: Determine the correct items to send ---
-    let itemsToOrder = [];
-    const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
-
-    if (buyNowItemJSON) {
-        // FLOW A: Buy Now Item
-        const item = JSON.parse(buyNowItemJSON);
-        // Ensure data types match backend schema (Numbers stayed as Numbers)
-        item.variationIndex = parseInt(item.variationIndex, 10) || 1;
-        item.productType = item.productType || 'Uncategorized';
-        itemsToOrder = [item]; // Backend expects an array of items
-        console.log("Paystack Flow: Using Buy Now item data.");
-    } else {
-        // FLOW B: Standard Cart
-        itemsToOrder = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
-        console.log("Paystack Flow: Using Standard Cart data.");
-    }
-    
-    // Ensure we aren't sending an empty order
-    if (itemsToOrder.length === 0) {
-        displayMessage("Your cart is empty. Cannot proceed with payment.");
-        payBtn.disabled = false;
-        payBtn.innerHTML = 'Confirm & Pay Now';
-        return;
-    }
-
     const subtotal = localStorage.getItem('outflickzOrderSubtotal') || '0';
     const shippingFee = localStorage.getItem('outflickzOrderShipping') || '0';
     const tax = localStorage.getItem('outflickzOrderTax') || '0';
@@ -1137,14 +1204,13 @@ async function processPaystackPayment(totalAmount, email) {
                 subtotal,
                 shippingFee,
                 tax,
-                // Send the itemsToOrder array we built above
-                orderItems: itemsToOrder 
+                orderItems: sessionStorage.getItem(BUY_NOW_KEY) ? orderItems : null 
             })
         });
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ message: 'Failed to record order.' }));
-            throw new Error(errorData.message || 'Server error during order creation.');
+            throw new Error(errorData.message);
         }
 
         const data = await response.json();
@@ -1152,7 +1218,6 @@ async function processPaystackPayment(totalAmount, email) {
         paystackReference = data.orderReference;
 
     } catch (error) {
-        console.error("Order Creation Error:", error);
         displayMessage(`Order setup failed: ${error.message}`);
         payBtn.disabled = false;
         payBtn.innerHTML = 'Confirm & Pay Now';
@@ -1162,24 +1227,25 @@ async function processPaystackPayment(totalAmount, email) {
     if (typeof PaystackPop === 'undefined') {
         displayMessage('Payment gateway (Paystack) failed to load.');
         payBtn.disabled = false;
-        payBtn.innerHTML = 'Confirm & Pay Now';
         return;
     }
 
     // 3. CONFIGURE CHANNELS
-    let allowedChannels = ['card', 'qr', 'mobile_money', 'bank_transfer', 'ussd', 'bank']; 
+    // Even at NGN 75,000, if Transfer fails, it is a Paystack Dashboard setting issue.
+    // However, we exclude it for very low amounts to avoid the 400 error.
+    let allowedChannels = ['card', 'qr', 'mobile_money','bank_transfer', 'ussd', 'bank']; 
 
     // 4. LAUNCH PAYSTACK
     const handler = PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
         email: email,
-        amount: Math.round(totalAmount * 100), // Kobo conversion
+        amount: Math.round(totalAmount * 100), 
         ref: paystackReference,
         currency: 'NGN',
         channels: allowedChannels,
         
         callback: function(response){
-            // Runs AFTER successful payment
+            // This only runs AFTER successful payment
             handlePaystackSuccessRedirect(mongoOrderId, response.reference); 
         },
         onClose: function(){
