@@ -477,27 +477,11 @@
     </a>
     
 <script>
-    // Customizing Tailwind colors to match the theme
-    tailwind.config = {
-        theme: {
-            extend: {
-                colors: {
-                    'ash-dark': '#111111',
-                    'ash-red': '#a80000',
-                    'color-white': '#FFFFFF',
-                    'color-black': '#000000',
-                    'racing-grey': '#333333',
-                    'racing-silver': '#AAAAAA',
-                }
-            }
-        }
-    }
-
     // --- CONFIGURATION ---
     const API_BASE_URL = 'https://outflickzz.netlify.app';
     const CART_STORAGE_KEY = 'outflickzCartCount';
     const LOCAL_CART_KEY = 'outflickzLocalCart';
-    const BUY_NOW_KEY = 'buyNowItem'; 
+    const BUY_NOW_KEY = 'buyNowItem'; // Using localStorage for persistence
     const AUTH_TOKEN_KEY = 'userAccessToken';
     const REFRESH_ENDPOINT = `${API_BASE_URL}/api/auth/refresh`;
     const DEFAULT_ADMIN_EMAIL = "outflickzlimited@gmail.com"; 
@@ -512,7 +496,6 @@
     ];
 
     // --- AUTHENTICATION HELPERS ---
-
     function isUserLoggedIn() {
         return localStorage.getItem('outflickzAuthStatus') === 'loggedIn';
     }
@@ -526,7 +509,6 @@
         let response = await fetch(url, options);
 
         if (response.status === 401) {
-            console.log("Token expired. Attempting refresh...");
             try {
                 const refreshResponse = await fetch(REFRESH_ENDPOINT, { method: 'POST', credentials: 'include' });
                 if (refreshResponse.ok) {
@@ -552,14 +534,12 @@
     }
 
     // --- UI & MESSAGING ---
-
     function displayMessage(message) {
         const modalContainer = document.getElementById('message-modal-container');
         const modalText = document.getElementById('message-modal-text');
         if (modalContainer && modalText) {
             modalText.textContent = message;
             modalContainer.classList.remove('hidden');
-            modalContainer.onclick = (e) => { if (e.target === modalContainer) hideMessageModal(); };
             setTimeout(hideMessageModal, 5000);
         }
     }
@@ -577,95 +557,88 @@
         badge.classList.toggle('hidden', count <= 0);
     }
 
-   // --- HELPER: Fixes the 'undefined' productType by guessing based on keywords ---
-function getCollectionType(productName) {
-    if (!productName) return 'WearsCollection'; 
-    const lowerName = productName.toLowerCase();
-    if (lowerName.includes('tee') || lowerName.includes('tank') || lowerName.includes('wears')) return 'WearsCollection';
-    if (lowerName.includes('cap') || lowerName.includes('curve')) return 'CapCollection';
-    if (lowerName.includes('arrival') || lowerName.includes('polo')) return 'NewArrivals';
-    return 'WearsCollection';
-}
+    function getCollectionType(productName) {
+        if (!productName) return 'WearsCollection'; 
+        const lowerName = productName.toLowerCase();
+        if (lowerName.includes('tee') || lowerName.includes('tank') || lowerName.includes('wears')) return 'WearsCollection';
+        if (lowerName.includes('cap') || lowerName.includes('curve')) return 'CapCollection';
+        if (lowerName.includes('arrival') || lowerName.includes('polo')) return 'NewArrivals';
+        return 'WearsCollection';
+    }
 
-/**
- * FIXED fetchInitialCartData
- * Reconstructs the item object to satisfy strict backend validation.
- */
-async function fetchInitialCartData() {
-    const subtotalEl = document.getElementById('summary-subtotal');
-    const shippingCostEl = document.getElementById('summary-shipping-cost');
-    const taxEstimateEl = document.getElementById('summary-tax-estimate');
-    const estimatedTotalEl = document.getElementById('summary-estimated-total');
-    const finalTotalEl = document.getElementById('summary-estimated-total-final');
-    const itemsListEl = document.getElementById('review-items-list');
-    const paymentBtn = document.getElementById('checkout-next-btn');
-    
-    [subtotalEl, shippingCostEl, taxEstimateEl, estimatedTotalEl, finalTotalEl].forEach(el => el.textContent = '...');
-    itemsListEl.innerHTML = '<div class="text-center py-6 text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i> Loading order...</div>';
-    paymentBtn.disabled = true;
+    /**
+     * UPDATED: fetchInitialCartData
+     */
+    async function fetchInitialCartData() {
+        const itemsListEl = document.getElementById('review-items-list');
+        const paymentBtn = document.getElementById('checkout-next-btn');
+        
+        const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
+        const isStandardCartCheckout = localCart.length > 0;
+        
+        // Use localStorage instead of sessionStorage for Buy Now survival
+        const buyNowItemJSON = localStorage.getItem(BUY_NOW_KEY);
 
-    const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-    const isStandardCartCheckout = localCart.length > 0;
-    const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
+        if (buyNowItemJSON && !isStandardCartCheckout) {
+            let rawItem = JSON.parse(buyNowItemJSON);
 
-    // --- FLOW A: BUY NOW ---
-    if (buyNowItemJSON && !isStandardCartCheckout) {
-        let rawItem = JSON.parse(buyNowItemJSON);
+            // Strict reconstruction to pass backend validation
+            const sanitizedItem = {
+                productId: rawItem.productId,
+                name: rawItem.name || "Product",
+                productType: (rawItem.productType && String(rawItem.productType) !== "undefined") 
+                             ? rawItem.productType 
+                             : getCollectionType(rawItem.name),
+                size: rawItem.size || "Standard",
+                color: rawItem.color || "Default",
+                price: parseFloat(rawItem.price) || 0,
+                quantity: parseInt(rawItem.quantity) || 1,
+                imageUrl: rawItem.imageUrl || "",
+                // Ensure 0 is treated as a valid index, not "missing"
+                variationIndex: (rawItem.variationIndex !== undefined && rawItem.variationIndex !== null) 
+                                ? parseInt(rawItem.variationIndex, 10) 
+                                : 0,
+                variation: rawItem.variation || rawItem.size || "Standard"
+            };
 
-        // ⭐ CRITICAL RECONSTRUCTION: satisfy backend schema exactly
-        const sanitizedItem = {
-            productId: rawItem.productId,
-            name: rawItem.name,
-            productType: (!rawItem.productType || String(rawItem.productType) === "undefined") 
-                          ? getCollectionType(rawItem.name) 
-                          : rawItem.productType,
-            size: rawItem.size || "Standard",
-            color: rawItem.color || "Default",
-            price: parseFloat(rawItem.price) || 0,
-            quantity: parseInt(rawItem.quantity) || 1,
-            imageUrl: rawItem.imageUrl || "",
-            variationIndex: parseInt(rawItem.variationIndex, 10) || 0,
-            variation: rawItem.variation || rawItem.size || "Standard"
-        };
+            try {
+                const response = await secureUserFetch(`${API_BASE_URL}/api/orders/calculate-buy-now`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(sanitizedItem) 
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message || 'Server rejected item details.');
+
+                renderCartData(data, paymentBtn);
+                return;
+            } catch (error) {
+                console.error("Buy Now Error:", error);
+                displayMessage(`Checkout Error: ${error.message}`);
+                return;
+            }
+        }
+
+        // Standard Cart Flow
+        if (buyNowItemJSON && isStandardCartCheckout) localStorage.removeItem(BUY_NOW_KEY);
 
         try {
-            const response = await secureUserFetch(`${API_BASE_URL}/api/orders/calculate-buy-now`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(sanitizedItem) 
-            });
-
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.message || 'Server rejected item details.');
-
-            renderCartData(data, paymentBtn);
-            return;
+            const url = isUserLoggedIn() ? `${API_BASE_URL}/api/users/cart` : `${API_BASE_URL}/api/guest/cart`;
+            const response = await (isUserLoggedIn() ? secureUserFetch(url) : fetch(url));
+            if (!response.ok) throw new Error('Failed to fetch cart.');
+            const cartData = await response.json();
+            
+            if (!cartData.items || cartData.items.length === 0) {
+                displayMessage('Your shopping bag is empty.');
+                setTimeout(() => window.location.href = 'homepage.html', 1500);
+                return;
+            }
+            renderCartData(cartData, paymentBtn);
         } catch (error) {
-            console.error("Buy Now Error:", error);
-            displayMessage(`Checkout Error: ${error.message}`);
-            return;
+            displayMessage("Could not load bag.");
         }
     }
-
-    // --- FLOW B: STANDARD CART ---
-    if (buyNowItemJSON && isStandardCartCheckout) sessionStorage.removeItem(BUY_NOW_KEY);
-
-    try {
-        const url = isUserLoggedIn() ? `${API_BASE_URL}/api/users/cart` : `${API_BASE_URL}/api/guest/cart`;
-        const response = await (isUserLoggedIn() ? secureUserFetch(url) : fetch(url));
-        if (!response.ok) throw new Error('Failed to fetch cart.');
-        const cartData = await response.json();
-        
-        if (!cartData.items || cartData.items.length === 0) {
-            displayMessage('Your shopping bag is empty.');
-            setTimeout(() => window.location.href = 'homepage.html', 1500);
-            return;
-        }
-        renderCartData(cartData, paymentBtn);
-    } catch (error) {
-        displayMessage("Could not load bag.");
-    }
-}
 
     function renderCartData(data, paymentBtn) {
         const subtotal = data.subtotal || 0;
@@ -700,20 +673,19 @@ async function fetchInitialCartData() {
         paymentBtn.disabled = false;
     }
 
-    // --- STEP NAVIGATION & VALIDATION ---
-
+    // --- STEP NAVIGATION ---
     function updateCheckoutView() {
         STEPS.forEach(step => {
             const indicator = document.getElementById(`step-indicator-${step.id}`);
             const section = document.getElementById(step.sectionId);
-            section.classList.add('hidden');
+            section.classList.toggle('hidden', step.id !== checkoutStep);
+            
             if (step.id < checkoutStep) {
                 indicator.className = 'step-indicator step-complete';
                 indicator.innerHTML = '<i class="fas fa-check"></i>';
             } else if (step.id === checkoutStep) {
                 indicator.className = 'step-indicator step-active';
                 indicator.textContent = step.id;
-                section.classList.remove('hidden');
             } else {
                 indicator.className = 'step-indicator step-inactive';
                 indicator.textContent = step.id;
@@ -735,44 +707,34 @@ async function fetchInitialCartData() {
         }
     }
 
-   function validateAndProceedToReview() {
-    const form = document.getElementById('shipping-form');
-    
-    // Zip Code specific: Remove 'required' if it exists in HTML
-    const zipInput = document.getElementById('zip-code');
-    if (zipInput) zipInput.removeAttribute('required');
+    function validateAndProceedToReview() {
+        const form = document.getElementById('shipping-form');
+        if (!form.checkValidity()) { form.reportValidity(); return; }
 
-    if (!form.checkValidity()) {
-        form.reportValidity();
-        return;
+        const shippingData = {
+            firstName: document.getElementById('first-name').value.trim(),
+            lastName: document.getElementById('last-name').value.trim(),
+            email: document.getElementById('email').value.trim(),
+            street: document.getElementById('address-line-1').value.trim(),
+            city: document.getElementById('city').value.trim(),
+            state: document.getElementById('state').value,
+            zipCode: document.getElementById('zip-code').value.trim() || "N/A", 
+            country: document.getElementById('country').value,
+        };
+
+        localStorage.setItem('outflickzShippingData', JSON.stringify(shippingData));
+
+        document.getElementById('review-address-name').textContent = `${shippingData.firstName} ${shippingData.lastName}`;
+        document.getElementById('review-address-line1').textContent = shippingData.street;
+        document.getElementById('review-address-line2').textContent = `${shippingData.city}, ${shippingData.state} ${shippingData.zipCode}, ${shippingData.country}`;
+        document.getElementById('review-contact-info').textContent = shippingData.email;
+
+        checkoutStep = 2;
+        updateCheckoutView();
+        window.scrollTo(0, 0);
     }
 
-    const shippingData = {
-        firstName: document.getElementById('first-name').value.trim(),
-        lastName: document.getElementById('last-name').value.trim(),
-        email: document.getElementById('email').value.trim(),
-        street: document.getElementById('address-line-1').value.trim(),
-        city: document.getElementById('city').value.trim(),
-        state: document.getElementById('state').value,
-        // Zip code is collected but can be an empty string
-        zipCode: document.getElementById('zip-code').value.trim() || "N/A", 
-        country: document.getElementById('country').value,
-    };
-
-    localStorage.setItem('outflickzShippingData', JSON.stringify(shippingData));
-
-    // Update the Review UI
-    document.getElementById('review-address-name').textContent = `${shippingData.firstName} ${shippingData.lastName}`;
-    document.getElementById('review-address-line1').textContent = shippingData.street;
-    document.getElementById('review-address-line2').textContent = `${shippingData.city}, ${shippingData.state} ${shippingData.zipCode}, ${shippingData.country}`;
-    document.getElementById('review-contact-info').textContent = shippingData.email;
-
-    checkoutStep = 2;
-    updateCheckoutView();
-    window.scrollTo(0, 0);
-}
     // --- PAYMENT PROCESSING ---
-
     async function handleFinalOrderPlacement() {
         const method = document.querySelector('input[name="payment-method"]:checked');
         if (!method) return displayMessage('Select a payment method.');
@@ -794,8 +756,10 @@ async function fetchInitialCartData() {
         payBtn.disabled = true;
         payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Initializing...';
 
-        const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
-        const itemsToOrder = buyNowItemJSON ? [JSON.parse(buyNowItemJSON)] : JSON.parse(localStorage.getItem('outflickzOrderItems'));
+        const buyNowItemJSON = localStorage.getItem(BUY_NOW_KEY);
+        const itemsToOrder = buyNowItemJSON 
+            ? [JSON.parse(buyNowItemJSON)] 
+            : JSON.parse(localStorage.getItem('outflickzOrderItems'));
 
         try {
             const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/paystack`, {
@@ -840,7 +804,11 @@ async function fetchInitialCartData() {
         payBtn.disabled = true;
         payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Placing Order...';
 
-        const isBuyNow = sessionStorage.getItem(BUY_NOW_KEY) !== null;
+        const buyNowItemJSON = localStorage.getItem(BUY_NOW_KEY);
+        const itemsToOrder = buyNowItemJSON 
+            ? [JSON.parse(buyNowItemJSON)] 
+            : JSON.parse(localStorage.getItem('outflickzOrderItems'));
+
         const formData = new FormData();
         formData.append('receipt', receiptInput.files[0]);
         formData.append('shippingAddress', JSON.stringify(shippingAddress));
@@ -849,71 +817,28 @@ async function fetchInitialCartData() {
         formData.append('subtotal', localStorage.getItem('outflickzOrderSubtotal'));
         formData.append('shippingFee', localStorage.getItem('outflickzOrderShipping'));
         formData.append('tax', localStorage.getItem('outflickzOrderTax'));
-        
-        if (isBuyNow) formData.append('orderItems', localStorage.getItem('outflickzOrderItems'));
+        formData.append('orderItems', JSON.stringify(itemsToOrder));
 
         try {
             const res = await secureUserFetch(`${API_BASE_URL}/api/orders/place/pending`, { method: 'POST', body: formData });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message);
             
-            await finalizeOrderOnServer({ orderId: data.orderId, paymentMethod: 'Bank Transfer', receiptUrl: data.ReceiptUrl }, 'banktransfer');
+            finalizeOrderOnServer({ orderId: data.orderId, paymentMethod: 'Bank Transfer', receiptUrl: data.ReceiptUrl }, 'banktransfer');
         } catch (e) {
             displayMessage(e.message);
             payBtn.disabled = false;
         }
     }
 
-    async function finalizeOrderOnServer(payload, type) {
-        if (type === 'banktransfer') {
-            sendAdminOrderNotification(payload.orderId, payload.paymentMethod, payload.receiptUrl);
-            localStorage.removeItem(LOCAL_CART_KEY);
-            localStorage.setItem(CART_STORAGE_KEY, '0');
-            sessionStorage.removeItem(BUY_NOW_KEY);
-            updateCartBadge();
-            displayMessage('Order placed! Redirecting...');
-            setTimeout(() => window.location.href = `orderconfirmation.html?id=${payload.orderId}&method=banktransfer`, 2000);
-        }
-    }
-
     function handlePaystackSuccessRedirect(mongoId, ref) {
         localStorage.removeItem(LOCAL_CART_KEY);
         localStorage.setItem(CART_STORAGE_KEY, '0');
-        sessionStorage.removeItem(BUY_NOW_KEY);
+        localStorage.removeItem(BUY_NOW_KEY);
         window.location.href = `orderconfirmation.html?id=${mongoId}&method=paystack`;
     }
 
-    async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl) {
-        fetch(`${API_BASE_URL}/api/notifications/admin-order-email`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                orderId, paymentMethod, receiptUrl,
-                shippingDetails: JSON.parse(localStorage.getItem('outflickzShippingData')),
-                items: JSON.parse(localStorage.getItem('outflickzOrderItems')),
-                totalAmount: localStorage.getItem('outflickzOrderTotal'),
-                adminEmail: DEFAULT_ADMIN_EMAIL
-            })
-        });
-    }
-
-    // --- BANK DETAILS UI LOGIC ---
-
-    function showBankTransferDetails() {
-        const isBank = document.getElementById('payment-bank').checked;
-        document.getElementById('bank-details-info').style.display = isBank ? 'block' : 'none';
-        document.getElementById('bank-transfer-receipt-upload').classList.toggle('hidden', !isBank);
-    }
-
-    function toggleBankDetails(targetId) {
-        const target = document.getElementById(targetId);
-        const isVisible = target.style.display === 'block';
-        document.querySelectorAll('.bank-details-content').forEach(c => c.style.display = 'none');
-        target.style.display = isVisible ? 'none' : 'block';
-    }
-
     // --- INITIALIZATION ---
-
     document.addEventListener('DOMContentLoaded', () => {
         if (isUserLoggedIn()) {
             secureUserFetch(`${API_BASE_URL}/api/users/account`).then(res => res.json()).then(userData => {
@@ -934,12 +859,6 @@ async function fetchInitialCartData() {
         updateCartBadge();
         fetchInitialCartData();
         updateCheckoutView();
-
-        document.getElementById('payment-bank').onclick = showBankTransferDetails;
-        document.getElementById('payment-paystack').onclick = showBankTransferDetails;
-        
-        document.getElementById('edit-shipping-btn').onclick = () => { checkoutStep = 1; updateCheckoutView(); };
-        document.getElementById('edit-order-btn').onclick = () => window.location.href = 'cart.html';
     });
 </script>
 </body>
