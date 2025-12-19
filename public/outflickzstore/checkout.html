@@ -1176,6 +1176,7 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
         }
     }
 
+
 async function processPaystackPayment(totalAmount, email) {
     const payBtn = document.getElementById('checkout-next-btn');
     
@@ -1205,6 +1206,16 @@ async function processPaystackPayment(totalAmount, email) {
     payBtn.disabled = true;
     payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Initializing Order...';
 
+    // --- NEW: MINIMUM AMOUNT VALIDATION ---
+    // Paystack requires a minimum of ₦100 for many channels (like Bank Transfer)
+    const finalAmount = parseFloat(totalAmount);
+    if (finalAmount < 100) {
+        displayMessage("The minimum order amount for online payment is ₦100. Please add more items to your cart.");
+        payBtn.disabled = false;
+        payBtn.innerHTML = 'Confirm & Pay Now';
+        return;
+    }
+
     const subtotal = localStorage.getItem('outflickzOrderSubtotal') || '0';
     const shippingFee = localStorage.getItem('outflickzOrderShipping') || '0';
     const tax = localStorage.getItem('outflickzOrderTax') || '0';
@@ -1216,7 +1227,7 @@ async function processPaystackPayment(totalAmount, email) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 shippingAddress, 
-                totalAmount: parseFloat(totalAmount), 
+                totalAmount: finalAmount, 
                 subtotal: parseFloat(subtotal),
                 shippingFee: parseFloat(shippingFee),
                 tax: parseFloat(tax),
@@ -1232,7 +1243,7 @@ async function processPaystackPayment(totalAmount, email) {
         const data = await response.json();
         const mongoOrderId = data.orderId; 
         
-        // Clean unique reference to prevent "400 Bad Request"
+        // Clean unique reference to prevent collisions and "400 Bad Request"
         const uniqueReference = `ref_${data.orderReference}_${Date.now()}`.replace(/\s+/g, '-');
 
         // --- VALIDATION BEFORE PAYSTACK ---
@@ -1248,9 +1259,10 @@ async function processPaystackPayment(totalAmount, email) {
         const handler = PaystackPop.setup({
             key: PAYSTACK_PUBLIC_KEY,
             email: email,
-            amount: Math.round(parseFloat(totalAmount) * 100), // Convert to Kobo
+            amount: Math.round(finalAmount * 100), // Convert Naira to Kobo
             ref: uniqueReference,
             currency: 'NGN',
+            // Note: If Bank Transfer continues to fail, check your Paystack Dashboard settings
             channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'],
             metadata: {
                 orderId: mongoOrderId,
@@ -1262,7 +1274,6 @@ async function processPaystackPayment(totalAmount, email) {
             callback: function(res) {
                 // Check for 'success' status specifically
                 if (res.status === 'success') {
-                    // Use the reference Paystack actually processed (res.reference)
                     handlePaystackSuccessRedirect(mongoOrderId, res.reference); 
                 } else {
                     displayMessage("Payment was not successful (Status: " + res.status + "). Please try again.");

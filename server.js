@@ -6111,6 +6111,7 @@ app.delete('/api/users/cart', verifyUserToken, async (req, res) => {
     }
 });
 
+
 app.post('/api/paystack/webhook', async (req, res) => {
     const secret = process.env.PAYSTACK_SECRET_KEY;
     const paystackSignature = req.headers['x-paystack-signature'];
@@ -6127,7 +6128,6 @@ app.post('/api/paystack/webhook', async (req, res) => {
 
     const event = req.body;
     const transactionData = event.data;
-    // Safely extract orderId from metadata
     const orderId = transactionData.metadata?.order_id || transactionData.metadata?.orderId;
 
     console.log(`[Paystack Webhook] Event: ${event.event} | Ref: ${transactionData.reference} | Order: ${orderId}`);
@@ -6137,6 +6137,20 @@ app.post('/api/paystack/webhook', async (req, res) => {
     // 2. HANDLE SUCCESSFUL PAYMENT
     if (event.event === 'charge.success') {
         try {
+            // Check if order exists and if it's already processed
+            const existingOrder = await OrderModel.findById(orderId);
+            
+            if (!existingOrder) {
+                console.error(`❌ Webhook Error: Order ${orderId} not found.`);
+                return res.status(200).send('Order not found'); 
+            }
+
+            if (existingOrder.paymentStatus === 'Paid') {
+                console.log(`ℹ️ Webhook: Order ${orderId} already processed. Skipping...`);
+                return res.status(200).send('Already processed');
+            }
+
+            // UPDATE ORDER STATUS
             const order = await OrderModel.findByIdAndUpdate(orderId, {
                 paymentStatus: 'Paid',
                 paymentMethod: transactionData.channel || 'Paystack',
@@ -6144,13 +6158,8 @@ app.post('/api/paystack/webhook', async (req, res) => {
                 paidAt: new Date(),
             }, { new: true }).populate('userId');
 
-            if (!order) {
-                console.error(`❌ Webhook Error: Order ${orderId} not found.`);
-                return res.status(200).send('Order not found'); 
-            }
-
             // ATOMIC INVENTORY DEDUCTION
-            console.log(`[Webhook] Deducting inventory for ${orderId}...`);
+            console.log(`[Webhook] Starting Inventory Deduction for ${orderId}...`);
             const completedOrder = await deductInventoryAtomic(orderId);
 
             // NOTIFICATIONS
@@ -6161,20 +6170,20 @@ app.post('/api/paystack/webhook', async (req, res) => {
 
             return res.status(200).send('Webhook Processed');
         } catch (error) {
-            console.error(`❌ Webhook Process Error: ${error.message}`);
+            console.error(`❌ Webhook Success Handling Failed: ${error.message}`);
             return res.status(200).send('Error logged'); 
         }
     }
 
-    // 3. HANDLE FAILED PAYMENT (Critical for the "400 Bad Request" debugging)
+    // 3. HANDLE FAILED PAYMENT
     if (event.event === 'charge.failed' || event.event === 'paymentrequest.pending') {
         const reason = transactionData.gateway_response || 'Unknown gateway error';
-        console.warn(`⚠️ Payment Issue: Ref ${transactionData.reference}. Reason: ${reason}`);
+        console.warn(`⚠️ Payment Failed/Pending: Ref ${transactionData.reference}. Reason: ${reason}`);
         
         try {
             await OrderModel.findByIdAndUpdate(orderId, {
                 paymentStatus: 'Failed',
-                $push: { notes: `Gateway Response (${new Date().toISOString()}): ${reason}` }
+                $push: { notes: `Gateway Response (${new Date().toLocaleString()}): ${reason}` }
             });
         } catch (err) {
             console.error('Error updating failed order status:', err.message);
@@ -6182,13 +6191,7 @@ app.post('/api/paystack/webhook', async (req, res) => {
         return res.status(200).send('Failure logged');
     }
 
-    // 4. LOG ABANDONED TRANSACTIONS
-    // This helps identify if users are getting stuck at the "Unable to process" screen
-    if (event.event === 'request.success') {
-         console.log(`ℹ️ Payment Page Requested: ${transactionData.reference}`);
-    }
-
-    res.status(200).send('Event acknowledged');
+    res.status(200).send('Event received');
 });
 
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
