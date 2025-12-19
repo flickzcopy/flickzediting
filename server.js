@@ -1677,13 +1677,14 @@ async function getAllOrders() {
     }
 }
 
-// This is called by your Webhook route
+/**
+ * HELPER FUNCTION: RECORD PAYMENT ONLY
+ * Used by webhooks to mark an order as paid without touching stock.
+ */
 async function deductInventoryAndCompleteOrder(orderId, transactionData) {
     try {
         const OrderModel = mongoose.models.Order || mongoose.model('Order');
         
-        // ⭐ UPDATE: We only log the payment. We do NOT deduct stock here.
-        // This ensures the Admin must manually click "Confirm" later.
         const order = await OrderModel.findByIdAndUpdate(
             orderId,
             {
@@ -1691,13 +1692,14 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
                 paymentMethod: 'Paystack',
                 paymentTxnId: transactionData.reference,
                 paidAt: new Date(),
-                // We keep status as 'Pending' or 'Processing'
+                // Keep status as 'Pending' so Admin sees it in the "To Confirm" list
+                status: 'Pending', 
+                $push: { notes: `Paystack Payment Verified at ${new Date().toISOString()}` }
             },
             { new: true }
         );
 
         if (!order) throw new Error(`Order ${orderId} not found.`);
-
         console.log(`✅ Paystack Payment Recorded for Order ${orderId}. Awaiting Admin Confirmation.`);
         return order.toObject({ getters: true });
 
@@ -4636,6 +4638,7 @@ app.delete(
         }
     }
 );
+
 app.get('/api/admin/inventory/deductions', verifyToken, async (req, res) => {
     try {
         const categoryFilter = req.query.category ? req.query.category.toLowerCase() : 'all';
@@ -6128,62 +6131,35 @@ app.post('/api/paystack/webhook', async (req, res) => {
     const transactionData = event.data;
     const orderId = transactionData.metadata?.order_id || transactionData.metadata?.orderId;
 
-    console.log(`[Paystack Webhook] Event: ${event.event} | Ref: ${transactionData.reference} | Order: ${orderId}`);
-
     const OrderModel = mongoose.models.Order || mongoose.model('Order');
 
     // 2. HANDLE SUCCESSFUL PAYMENT
     if (event.event === 'charge.success') {
         try {
-            const order = await OrderModel.findByIdAndUpdate(orderId, {
-                paymentStatus: 'Paid',
-                paymentMethod: transactionData.channel || 'Paystack',
-                paymentTxnId: transactionData.reference,
-                paidAt: new Date(),
-            }, { new: true }).populate('userId');
+            // ⭐ CHANGE: We ONLY record the payment. We do NOT deduct stock here.
+            // This leaves the order in 'Pending' status for Admin manual review.
+            const updatedOrder = await deductInventoryAndCompleteOrder(orderId, transactionData);
 
-            if (!order) {
-                console.error(`❌ Webhook Error: Order ${orderId} not found.`);
-                return res.status(200).send('Order not found'); 
-            }
+            // NOTIFICATIONS (Optional: Send a "Payment Received" email instead of "Order Confirmed")
+            // await sendAdminEmailNotificationForAdmin(updatedOrder, transactionData.amount);
 
-            // ATOMIC INVENTORY DEDUCTION
-            console.log(`[Webhook] Deducting inventory for ${orderId}...`);
-            const completedOrder = await deductInventoryAtomic(orderId);
-
-            // NOTIFICATIONS
-            await sendAdminEmailNotificationForAdmin(completedOrder, transactionData.amount);
-            if (completedOrder.userId?.email) {
-                await sendOrderConfirmationEmailForAdmin(completedOrder.userId.email, completedOrder);
-            }
-
-            return res.status(200).send('Webhook Processed');
+            return res.status(200).send('Webhook Processed: Payment Recorded');
         } catch (error) {
             console.error(`❌ Webhook Process Error: ${error.message}`);
             return res.status(200).send('Error logged'); 
         }
     }
 
-    // 3. HANDLE FAILED PAYMENT (Critical for the "400 Bad Request" debugging)
-    if (event.event === 'charge.failed' || event.event === 'paymentrequest.pending') {
+    // 3. HANDLE FAILED PAYMENT
+    if (event.event === 'charge.failed') {
         const reason = transactionData.gateway_response || 'Unknown gateway error';
-        console.warn(`⚠️ Payment Issue: Ref ${transactionData.reference}. Reason: ${reason}`);
-        
         try {
             await OrderModel.findByIdAndUpdate(orderId, {
                 paymentStatus: 'Failed',
-                $push: { notes: `Gateway Response (${new Date().toISOString()}): ${reason}` }
+                $push: { notes: `Paystack Failed (${new Date().toISOString()}): ${reason}` }
             });
-        } catch (err) {
-            console.error('Error updating failed order status:', err.message);
-        }
+        } catch (err) { console.error('Error updating failed status:', err.message); }
         return res.status(200).send('Failure logged');
-    }
-
-    // 4. LOG ABANDONED TRANSACTIONS
-    // This helps identify if users are getting stuck at the "Unable to process" screen
-    if (event.event === 'request.success') {
-         console.log(`ℹ️ Payment Page Requested: ${transactionData.reference}`);
     }
 
     res.status(200).send('Event acknowledged');
