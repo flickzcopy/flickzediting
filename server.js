@@ -1654,30 +1654,6 @@ async function deductInventoryAtomic(orderId) {
 }
 
 /**
- * Retrieves all orders for the admin sales log.
- * Populates the userId field to get customer information.
- */
-async function getAllOrders() {
-    try {
-        const OrderModel = mongoose.models.Order || mongoose.model('Order');
-
-        // Fetch all orders
-        // .populate('userId', 'email username') is critical to display customer info 
-        // without sending back the entire User object (like hashed password).
-        const allOrders = await OrderModel.find({})
-            .sort({ createdAt: -1 }) // Sort by newest order first
-            .populate('userId', 'email username')
-             .sort({ createdAt: -1 })
-            .lean(); // Use .lean() for faster read performance
-
-        return allOrders;
-    } catch (error) {
-        console.error('Error in getAllOrders:', error);
-        throw new Error('Database query failed for sales log.');
-    }
-}
-
-/**
  * HELPER FUNCTION: RECORD PAYMENT ONLY
  * Used by webhooks to mark an order as paid without touching stock.
  */
@@ -1708,6 +1684,31 @@ async function deductInventoryAndCompleteOrder(orderId, transactionData) {
         throw error;
     }
 }
+
+/**
+ * Retrieves all orders for the admin sales log.
+ * Populates the userId field to get customer information.
+ */
+async function getAllOrders() {
+    try {
+        const OrderModel = mongoose.models.Order || mongoose.model('Order');
+
+        // Fetch all orders
+        // .populate('userId', 'email username') is critical to display customer info 
+        // without sending back the entire User object (like hashed password).
+        const allOrders = await OrderModel.find({})
+            .sort({ createdAt: -1 }) // Sort by newest order first
+            .populate('userId', 'email username')
+             .sort({ createdAt: -1 })
+            .lean(); // Use .lean() for faster read performance
+
+        return allOrders;
+    } catch (error) {
+        console.error('Error in getAllOrders:', error);
+        throw new Error('Database query failed for sales log.');
+    }
+}
+
 
 /**
  * ====================================================================================
