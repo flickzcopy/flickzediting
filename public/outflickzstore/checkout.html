@@ -1183,7 +1183,6 @@ async function processPaystackPayment(totalAmount, email) {
     const shippingAddress = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
     
     let itemsToOrder = [];
-    // Ensure we use the constant if available, else the string key
     const buyNowKey = typeof BUY_NOW_KEY !== 'undefined' ? BUY_NOW_KEY : 'outflickzBuyNow';
     const buyNowItemJSON = sessionStorage.getItem(buyNowKey);
 
@@ -1192,11 +1191,9 @@ async function processPaystackPayment(totalAmount, email) {
         item.variationIndex = parseInt(item.variationIndex, 10) || 0;
         item.productType = item.productType || 'Uncategorized';
         itemsToOrder = [item];
-        console.log("Paystack: Using Buy Now item.");
     } else {
         const cartKey = typeof LOCAL_CART_KEY !== 'undefined' ? LOCAL_CART_KEY : 'outflickzCart';
         itemsToOrder = JSON.parse(localStorage.getItem(cartKey) || "[]");
-        console.log("Paystack: Using Standard Cart.");
     }
     
     if (!itemsToOrder || itemsToOrder.length === 0) {
@@ -1234,15 +1231,18 @@ async function processPaystackPayment(totalAmount, email) {
 
         const data = await response.json();
         const mongoOrderId = data.orderId; 
-        const paystackReference = data.orderReference;
+        
+        // FIX: Ensure the reference is unique for Paystack by appending a timestamp.
+        // This prevents the "400 Bad Request" caused by reference collision.
+        const uniqueReference = `${data.orderReference}_${Date.now()}`;
 
         // --- VALIDATION BEFORE PAYSTACK ---
-        if (!email || email === "null" || email === "") {
+        if (!email || email === "" || email === "null") {
             throw new Error("Customer email is missing. Please log in again.");
         }
 
         if (typeof PaystackPop === 'undefined') {
-            throw new Error('Payment gateway failed to load. Check your internet.');
+            throw new Error('Payment gateway failed to load. Please refresh the page.');
         }
 
         // 3. LAUNCH PAYSTACK
@@ -1250,14 +1250,19 @@ async function processPaystackPayment(totalAmount, email) {
             key: PAYSTACK_PUBLIC_KEY,
             email: email,
             amount: Math.round(parseFloat(totalAmount) * 100), // Kobo
-            ref: paystackReference,
+            ref: uniqueReference, // Using the unique timestamped reference
             currency: 'NGN',
+            // Tip: If 'bank_transfer' continues to fail 400, remove it temporarily to test 'card'
             channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'],
             metadata: {
                 orderId: mongoOrderId,
-                custom_fields: [{ display_name: "Order ID", variable_name: "order_id", value: mongoOrderId }]
+                originalReference: data.orderReference, // Keep original ref in metadata
+                custom_fields: [
+                    { display_name: "Order ID", variable_name: "order_id", value: mongoOrderId }
+                ]
             },
             callback: function(res) {
+                // We send the reference Paystack actually processed (res.reference)
                 handlePaystackSuccessRedirect(mongoOrderId, res.reference); 
             },
             onClose: function() {
@@ -1270,7 +1275,7 @@ async function processPaystackPayment(totalAmount, email) {
         handler.openIframe();
 
     } catch (error) {
-        console.error("Paystack Error:", error);
+        console.error("Paystack Initialization Error:", error);
         displayMessage(error.message);
         payBtn.disabled = false;
         payBtn.innerHTML = 'Confirm & Pay Now';
