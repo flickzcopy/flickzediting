@@ -334,24 +334,31 @@
         }
     }
 
-    /**
-     * Filters and renders orders that require Admin Action
+   /**
+     * Filters and renders orders that require Admin Action.
+     * Updated to correctly capture Paystack Paid orders for manual confirmation.
      */
     function renderOrders(orders) {
         ordersTableBody.innerHTML = '';
         
-        // FILTER LOGIC FIX:
-        // 1. If Bank Transfer: Show if status is 'Pending'
-        // 2. If Paystack: Show ONLY if paymentStatus is 'Paid' AND status is 'Pending' (or 'Processing')
-        // 3. Always show 'Inventory Failure' for manual review
+        // --- UPDATED FILTER LOGIC ---
         const filteredOrders = orders.filter(order => {
+            // 1. Manual Bank Transfers awaiting review
             const isBankPending = order.paymentMethod !== 'Paystack' && order.status === 'Pending';
-            const isPaystackPaid = order.paymentMethod === 'Paystack' && order.paymentStatus === 'Paid' && (order.status === 'Pending' || order.status === 'Processing');
+
+            // 2. Paystack orders that are PAID but NOT YET CONFIRMED by admin
+            // This ensures they appear in "User Orders" so you can click the "Confirm" button
+            const isPaystackPaid = order.paymentMethod === 'Paystack' && 
+                                   order.paymentStatus === 'Paid' && 
+                                   (order.status === 'Pending' || order.status === 'Processing');
+
+            // 3. Orders that failed auto-deduction and need manual review
             const isManualReview = order.status === 'Inventory Failure (Manual Review)';
             
             return isBankPending || isPaystackPaid || isManualReview;
         });
 
+        // Update the count UI for the admin dashboard badge
         pendingCountElement.textContent = `${filteredOrders.length} Orders Requiring Review`;
 
         if (filteredOrders.length === 0) {
@@ -367,8 +374,15 @@
             const tr = document.createElement('tr');
             tr.className = 'hover:bg-gray-50 border-b';
             
-            const methodBadge = order.paymentMethod === 'Paystack' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700';
-            const statusBadge = order.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800';
+            // Dynamic badge styling based on method and status
+            const isPaystack = order.paymentMethod === 'Paystack';
+            const methodBadge = isPaystack ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700';
+            
+            // Highlight Inventory Failures in Red
+            let statusBadge = 'bg-yellow-100 text-yellow-800';
+            if (order.status.includes('Failure')) {
+                statusBadge = 'bg-red-100 text-red-800';
+            }
 
             tr.innerHTML = `
                 <td class="px-6 py-4 text-sm font-medium">#${(order.orderReference || order._id).substring(0, 8)}</td>
@@ -377,7 +391,9 @@
                     <div class="text-xs">${order.userId?.email || order.email || ''}</div>
                 </td>
                 <td class="px-6 py-4 text-sm">
-                    <span class="px-2 py-0.5 text-[10px] font-bold rounded-full ${methodBadge}">${order.paymentMethod.toUpperCase()}</span>
+                    <span class="px-2 py-0.5 text-[10px] font-bold rounded-full ${methodBadge}">
+                        ${order.paymentMethod.toUpperCase()} ${isPaystack ? ' (PAID)' : ''}
+                    </span>
                 </td>
                 <td class="px-6 py-4 text-sm font-semibold text-emerald-600">${formatNaira(order.totalAmount)}</td>
                 <td class="px-6 py-4 text-sm">
@@ -392,7 +408,7 @@
             ordersTableBody.appendChild(tr);
         });
     }
-
+    
     async function handleViewDetails(orderId) {
         const token = localStorage.getItem('adminToken');
         const response = await fetch(`/api/admin/orders/${orderId}`, {

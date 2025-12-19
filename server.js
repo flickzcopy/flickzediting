@@ -3250,26 +3250,39 @@ app.put('/api/admin/orders/:orderId/status', verifyToken, async (req, res) => {
     const { orderId } = req.params;
     const { newStatus } = req.body; 
     
-    // Define the logical flow of your store
-  const validTransitions = {
+    // 1. Define the strict logical flow of the store
+    const validTransitions = {
+        'Pending': ['Confirmed', 'Cancelled'],
+        'Processing': ['Confirmed', 'Cancelled'],
+        'Inventory Failure (Manual Review)': ['Confirmed', 'Cancelled'],
         'Confirmed': ['Shipped', 'Cancelled'], 
         'Shipped': ['Delivered'],
-        'Delivered': [], // End of the road
-        'Cancelled': []
+        'Delivered': [], // Final state
+        'Cancelled': []  // Final state
     };
     
     try {
         const order = await Order.findById(orderId);
         if (!order) return res.status(404).json({ message: 'Order not found.' });
 
-        // BLOCKER: If the admin tries to skip the "Confirm" button
-        if (['Pending', 'Processing'].includes(order.status) && newStatus !== 'Cancelled') {
+        // 2. BLOCKER: Force use of the "Confirm" button for inventory deduction
+        // This ensures the stock is actually removed before shipping starts
+        if (['Pending', 'Processing', 'Inventory Failure (Manual Review)'].includes(order.status) && 
+            !['Confirmed', 'Cancelled'].includes(newStatus)) {
             return res.status(400).json({ 
-                message: `Order must be Confirmed (Inventory Deducted) before moving to ${newStatus}. Please click the Confirm button first.` 
+                message: `Order must be Confirmed (Inventory Deducted) before moving to ${newStatus}. Please click the 'Confirm' button on the User Orders page first.` 
+            });
+        }
+
+        // 3. LOGIC CHECK: Ensure the transition is allowed based on current status
+        const allowedNext = validTransitions[order.status] || [];
+        if (order.status !== newStatus && !allowedNext.includes(newStatus)) {
+            return res.status(400).json({ 
+                message: `Invalid movement. You cannot move an order from ${order.status} directly to ${newStatus}.` 
             });
         }
         
-        // Update fields based on status
+        // 4. Update order fields
         order.status = newStatus;
         order.updatedAt = Date.now();
         
@@ -3278,20 +3291,23 @@ app.put('/api/admin/orders/:orderId/status', verifyToken, async (req, res) => {
 
         const updatedOrder = await order.save();
 
-        // Trigger Emails (Shipped/Delivered only)
+        // 5. Trigger Customer Notifications
         const user = await User.findById(updatedOrder.userId).select('email').lean();
         if (user?.email) {
             try {
                 if (newStatus === 'Shipped') await sendShippingUpdateEmail(user.email, updatedOrder); 
                 else if (newStatus === 'Delivered') await sendDeliveredEmail(user.email, updatedOrder);
-            } catch (e) { console.error("Fulfillment email failed:", e.message); }
+            } catch (e) { 
+                console.error("Fulfillment email failed:", e.message); 
+            }
         }
         
-        // Log for Audit
+        // 6. Log for Admin Audit Trail
         await logAdminStatusUpdate(updatedOrder, req.adminId, `ORDER_${newStatus.toUpperCase()}`); 
 
-        res.status(200).json({ message: `Order moved to ${newStatus}.`, order: updatedOrder });
+        res.status(200).json({ message: `Order successfully moved to ${newStatus}.`, order: updatedOrder });
     } catch (error) {
+        console.error("Status Update Error:", error);
         res.status(500).json({ message: 'Server error during status update.' });
     }
 });
