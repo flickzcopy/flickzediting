@@ -6115,7 +6115,6 @@ app.post('/api/paystack/webhook', async (req, res) => {
     const secret = process.env.PAYSTACK_SECRET_KEY;
     const paystackSignature = req.headers['x-paystack-signature'];
     
-    // 1. VERIFY SIGNATURE
     const hash = crypto.createHmac('sha512', secret)
                        .update(JSON.stringify(req.body))
                        .digest('hex');
@@ -6127,7 +6126,6 @@ app.post('/api/paystack/webhook', async (req, res) => {
 
     const event = req.body;
     const transactionData = event.data;
-    // Safely extract orderId from metadata
     const orderId = transactionData.metadata?.order_id || transactionData.metadata?.orderId;
 
     console.log(`[Paystack Webhook] Event: ${event.event} | Ref: ${transactionData.reference} | Order: ${orderId}`);
