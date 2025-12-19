@@ -1232,9 +1232,8 @@ async function processPaystackPayment(totalAmount, email) {
         const data = await response.json();
         const mongoOrderId = data.orderId; 
         
-        // FIX: Ensure the reference is unique for Paystack by appending a timestamp.
-        // This prevents the "400 Bad Request" caused by reference collision.
-        const uniqueReference = `${data.orderReference}_${Date.now()}`;
+        // Clean unique reference to prevent "400 Bad Request"
+        const uniqueReference = `ref_${data.orderReference}_${Date.now()}`.replace(/\s+/g, '-');
 
         // --- VALIDATION BEFORE PAYSTACK ---
         if (!email || email === "" || email === "null") {
@@ -1249,21 +1248,27 @@ async function processPaystackPayment(totalAmount, email) {
         const handler = PaystackPop.setup({
             key: PAYSTACK_PUBLIC_KEY,
             email: email,
-            amount: Math.round(parseFloat(totalAmount) * 100), // Kobo
-            ref: uniqueReference, // Using the unique timestamped reference
+            amount: Math.round(parseFloat(totalAmount) * 100), // Convert to Kobo
+            ref: uniqueReference,
             currency: 'NGN',
-            // Tip: If 'bank_transfer' continues to fail 400, remove it temporarily to test 'card'
             channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'],
             metadata: {
                 orderId: mongoOrderId,
-                originalReference: data.orderReference, // Keep original ref in metadata
+                originalReference: data.orderReference,
                 custom_fields: [
                     { display_name: "Order ID", variable_name: "order_id", value: mongoOrderId }
                 ]
             },
             callback: function(res) {
-                // We send the reference Paystack actually processed (res.reference)
-                handlePaystackSuccessRedirect(mongoOrderId, res.reference); 
+                // Check for 'success' status specifically
+                if (res.status === 'success') {
+                    // Use the reference Paystack actually processed (res.reference)
+                    handlePaystackSuccessRedirect(mongoOrderId, res.reference); 
+                } else {
+                    displayMessage("Payment was not successful (Status: " + res.status + "). Please try again.");
+                    payBtn.disabled = false;
+                    payBtn.innerHTML = 'Confirm & Pay Now';
+                }
             },
             onClose: function() {
                 displayMessage('Payment window closed. Your order is saved as pending.');
