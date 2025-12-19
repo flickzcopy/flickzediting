@@ -6111,16 +6111,13 @@ app.delete('/api/users/cart', verifyUserToken, async (req, res) => {
     }
 });
 
-
-// Ensure you have express.json({ verify: ... }) in your main app.js to capture req.rawBody
 app.post('/api/paystack/webhook', async (req, res) => {
     const secret = process.env.PAYSTACK_SECRET_KEY;
     const paystackSignature = req.headers['x-paystack-signature'];
     
-    // 1. VERIFY SIGNATURE USING RAW BODY
-    // Using req.rawBody ensures the hash matches the signature sent by Paystack
+    // 1. VERIFY SIGNATURE
     const hash = crypto.createHmac('sha512', secret)
-                       .update(req.rawBody || JSON.stringify(req.body)) 
+                       .update(JSON.stringify(req.body))
                        .digest('hex');
     
     if (hash !== paystackSignature) {
@@ -6130,25 +6127,16 @@ app.post('/api/paystack/webhook', async (req, res) => {
 
     const event = req.body;
     const transactionData = event.data;
-    // Check both metadata and reference as fallback
+    // Safely extract orderId from metadata
     const orderId = transactionData.metadata?.order_id || transactionData.metadata?.orderId;
+
+    console.log(`[Paystack Webhook] Event: ${event.event} | Ref: ${transactionData.reference} | Order: ${orderId}`);
 
     const OrderModel = mongoose.models.Order || mongoose.model('Order');
 
+    // 2. HANDLE SUCCESSFUL PAYMENT
     if (event.event === 'charge.success') {
         try {
-            const existingOrder = await OrderModel.findById(orderId);
-            
-            if (!existingOrder) {
-                console.error(`❌ Webhook Error: Order ${orderId} not found.`);
-                return res.status(200).send('Order not found'); 
-            }
-
-            if (existingOrder.paymentStatus === 'Paid') {
-                return res.status(200).send('Already processed');
-            }
-
-            // UPDATE ORDER STATUS
             const order = await OrderModel.findByIdAndUpdate(orderId, {
                 paymentStatus: 'Paid',
                 paymentMethod: transactionData.channel || 'Paystack',
@@ -6156,23 +6144,51 @@ app.post('/api/paystack/webhook', async (req, res) => {
                 paidAt: new Date(),
             }, { new: true }).populate('userId');
 
+            if (!order) {
+                console.error(`❌ Webhook Error: Order ${orderId} not found.`);
+                return res.status(200).send('Order not found'); 
+            }
+
             // ATOMIC INVENTORY DEDUCTION
-            await deductInventoryAtomic(orderId);
+            console.log(`[Webhook] Deducting inventory for ${orderId}...`);
+            const completedOrder = await deductInventoryAtomic(orderId);
 
             // NOTIFICATIONS
-            await sendAdminEmailNotificationForAdmin(order, transactionData.amount);
-            if (order.userId?.email) {
-                await sendOrderConfirmationEmailForAdmin(order.userId.email, order);
+            await sendAdminEmailNotificationForAdmin(completedOrder, transactionData.amount);
+            if (completedOrder.userId?.email) {
+                await sendOrderConfirmationEmailForAdmin(completedOrder.userId.email, completedOrder);
             }
 
             return res.status(200).send('Webhook Processed');
         } catch (error) {
-            console.error(`❌ Webhook Success Handling Failed: ${error.message}`);
-            return res.status(500).send('Internal Error'); 
+            console.error(`❌ Webhook Process Error: ${error.message}`);
+            return res.status(200).send('Error logged'); 
         }
     }
-    
-    res.status(200).send('Event ignored');
+
+    // 3. HANDLE FAILED PAYMENT (Critical for the "400 Bad Request" debugging)
+    if (event.event === 'charge.failed' || event.event === 'paymentrequest.pending') {
+        const reason = transactionData.gateway_response || 'Unknown gateway error';
+        console.warn(`⚠️ Payment Issue: Ref ${transactionData.reference}. Reason: ${reason}`);
+        
+        try {
+            await OrderModel.findByIdAndUpdate(orderId, {
+                paymentStatus: 'Failed',
+                $push: { notes: `Gateway Response (${new Date().toISOString()}): ${reason}` }
+            });
+        } catch (err) {
+            console.error('Error updating failed order status:', err.message);
+        }
+        return res.status(200).send('Failure logged');
+    }
+
+    // 4. LOG ABANDONED TRANSACTIONS
+    // This helps identify if users are getting stuck at the "Unable to process" screen
+    if (event.event === 'request.success') {
+         console.log(`ℹ️ Payment Page Requested: ${transactionData.reference}`);
+    }
+
+    res.status(200).send('Event acknowledged');
 });
 
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {

@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-<script src="https://js.paystack.co/v1/inline.js" crossorigin="anonymous"></script>
+    <script src="https://js.paystack.co/v1/inline.js"></script> 
     <script>
         // Custom Tailwind Configuration (for colors like ash-red, ash-dark, etc.)
         tailwind.config = {
@@ -1179,26 +1179,32 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
 async function processPaystackPayment(totalAmount, email) {
     const payBtn = document.getElementById('checkout-next-btn');
     
-    // Prevent multiple clicks if already initializing
-    if (payBtn.disabled) return; 
-
     // 1. COLLECT & PARSE DATA
     const shippingAddress = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
     
+    // --- CRITICAL FIX: Determine the correct items to send ---
     let itemsToOrder = [];
     const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
 
     if (buyNowItemJSON) {
+        // FLOW A: Buy Now Item
         const item = JSON.parse(buyNowItemJSON);
+        // Ensure data types match backend schema (Numbers stayed as Numbers)
         item.variationIndex = parseInt(item.variationIndex, 10) || 1;
         item.productType = item.productType || 'Uncategorized';
-        itemsToOrder = [item];
+        itemsToOrder = [item]; // Backend expects an array of items
+        console.log("Paystack Flow: Using Buy Now item data.");
     } else {
+        // FLOW B: Standard Cart
         itemsToOrder = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
+        console.log("Paystack Flow: Using Standard Cart data.");
     }
     
+    // Ensure we aren't sending an empty order
     if (itemsToOrder.length === 0) {
         displayMessage("Your cart is empty. Cannot proceed with payment.");
+        payBtn.disabled = false;
+        payBtn.innerHTML = 'Confirm & Pay Now';
         return;
     }
 
@@ -1206,13 +1212,11 @@ async function processPaystackPayment(totalAmount, email) {
     const shippingFee = localStorage.getItem('outflickzOrderShipping') || '0';
     const tax = localStorage.getItem('outflickzOrderTax') || '0';
     
-    // Disable UI immediately
     payBtn.disabled = true;
     payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Initializing Order...';
 
     let mongoOrderId;
     let paystackReference; 
-    let customerEmail;
     
     try {
         // 2. CREATE PENDING ORDER IN DATABASE
@@ -1237,8 +1241,6 @@ async function processPaystackPayment(totalAmount, email) {
         const data = await response.json();
         mongoOrderId = data.orderId; 
         paystackReference = data.orderReference;
-        // Use email from database if available, otherwise fallback to passed parameter
-        customerEmail = (data.email || email).trim().toLowerCase();
 
     } catch (error) {
         console.error("Order Creation Error:", error);
@@ -1255,26 +1257,24 @@ async function processPaystackPayment(totalAmount, email) {
         return;
     }
 
-    // 3. LAUNCH PAYSTACK
+    // 3. CONFIGURE CHANNELS
+    let allowedChannels = ['card', 'qr', 'mobile_money', 'bank_transfer', 'ussd', 'bank']; 
+
+    // 4. LAUNCH PAYSTACK
     const handler = PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
-        email: customerEmail, 
-        amount: Math.round(parseFloat(totalAmount) * 100), 
-        ref: paystackReference, 
+        email: email,
+        amount: Math.round(totalAmount * 100), // Kobo conversion
+        ref: paystackReference,
         currency: 'NGN',
-        channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'],
-        // Pass metadata to make identification easier in webhooks
-        metadata: {
-            order_id: mongoOrderId,
-            custom_fields: [
-                { display_name: "Order ID", variable_name: "order_id", value: mongoOrderId }
-            ]
-        },
+        channels: allowedChannels,
+        
         callback: function(response){
+            // Runs AFTER successful payment
             handlePaystackSuccessRedirect(mongoOrderId, response.reference); 
         },
         onClose: function(){
-            displayMessage('Payment window closed. You can try again.');
+            displayMessage('Payment window closed. Your order is still pending.');
             payBtn.disabled = false;
             payBtn.innerHTML = 'Confirm & Pay Now';
         }
