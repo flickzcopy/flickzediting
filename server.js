@@ -2319,14 +2319,8 @@ const app = express();
 // To allow both JSON and multipart/form-data parsing
 
 app.use(cors(corsOptions));
-app.use(express.json({
-    verify: (req, res, buf) => {
-        // Only capture raw body for the Paystack webhook route
-        if (req.originalUrl && req.originalUrl.includes('/api/paystack/webhook')) {
-            req.rawBody = buf; 
-        }
-    }
-}));app.use(cookieParser());
+app.use(express.json()); 
+app.use(cookieParser());
 
 app.use(visitorLogger);
 
@@ -6117,14 +6111,16 @@ app.delete('/api/users/cart', verifyUserToken, async (req, res) => {
     }
 });
 
+
+// Ensure you have express.json({ verify: ... }) in your main app.js to capture req.rawBody
 app.post('/api/paystack/webhook', async (req, res) => {
     const secret = process.env.PAYSTACK_SECRET_KEY;
     const paystackSignature = req.headers['x-paystack-signature'];
     
-    // VERIFY SIGNATURE USING RAW BODY
-    // If rawBody exists, use it; otherwise fallback to stringify
+    // 1. VERIFY SIGNATURE USING RAW BODY
+    // Using req.rawBody ensures the hash matches the signature sent by Paystack
     const hash = crypto.createHmac('sha512', secret)
-                       .update(req.rawBody || JSON.stringify(req.body))
+                       .update(req.rawBody || JSON.stringify(req.body)) 
                        .digest('hex');
     
     if (hash !== paystackSignature) {
@@ -6134,7 +6130,7 @@ app.post('/api/paystack/webhook', async (req, res) => {
 
     const event = req.body;
     const transactionData = event.data;
-    // Safely extract orderId from metadata
+    // Check both metadata and reference as fallback
     const orderId = transactionData.metadata?.order_id || transactionData.metadata?.orderId;
 
     const OrderModel = mongoose.models.Order || mongoose.model('Order');
@@ -6143,11 +6139,16 @@ app.post('/api/paystack/webhook', async (req, res) => {
         try {
             const existingOrder = await OrderModel.findById(orderId);
             
-            if (!existingOrder || existingOrder.paymentStatus === 'Paid') {
-                return res.status(200).send('Processed or Not Found');
+            if (!existingOrder) {
+                console.error(`❌ Webhook Error: Order ${orderId} not found.`);
+                return res.status(200).send('Order not found'); 
             }
 
-            // Update Order and Deduct Inventory
+            if (existingOrder.paymentStatus === 'Paid') {
+                return res.status(200).send('Already processed');
+            }
+
+            // UPDATE ORDER STATUS
             const order = await OrderModel.findByIdAndUpdate(orderId, {
                 paymentStatus: 'Paid',
                 paymentMethod: transactionData.channel || 'Paystack',
@@ -6155,9 +6156,10 @@ app.post('/api/paystack/webhook', async (req, res) => {
                 paidAt: new Date(),
             }, { new: true }).populate('userId');
 
+            // ATOMIC INVENTORY DEDUCTION
             await deductInventoryAtomic(orderId);
-            
-            // Notifications
+
+            // NOTIFICATIONS
             await sendAdminEmailNotificationForAdmin(order, transactionData.amount);
             if (order.userId?.email) {
                 await sendOrderConfirmationEmailForAdmin(order.userId.email, order);
@@ -6169,7 +6171,8 @@ app.post('/api/paystack/webhook', async (req, res) => {
             return res.status(500).send('Internal Error'); 
         }
     }
-    res.status(200).send('Event Received');
+    
+    res.status(200).send('Event ignored');
 });
 
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
