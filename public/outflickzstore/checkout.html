@@ -1182,41 +1182,32 @@ async function processPaystackPayment(totalAmount, email) {
     // 1. COLLECT & PARSE DATA
     const shippingAddress = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
     
-    // --- CRITICAL FIX: Determine the correct items to send ---
     let itemsToOrder = [];
-    const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
+    const buyNowKey = typeof BUY_NOW_KEY !== 'undefined' ? BUY_NOW_KEY : 'outflickzBuyNow';
+    const buyNowItemJSON = sessionStorage.getItem(buyNowKey);
 
-    if (buyNowItemJSON) {
-        // FLOW A: Buy Now Item
+    if (buyNowItemJSON && buyNowItemJSON !== "null") {
         const item = JSON.parse(buyNowItemJSON);
-        // Ensure data types match backend schema (Numbers stayed as Numbers)
-        item.variationIndex = parseInt(item.variationIndex, 10) || 1;
+        item.variationIndex = parseInt(item.variationIndex, 10) || 0;
         item.productType = item.productType || 'Uncategorized';
-        itemsToOrder = [item]; // Backend expects an array of items
-        console.log("Paystack Flow: Using Buy Now item data.");
+        itemsToOrder = [item];
     } else {
-        // FLOW B: Standard Cart
-        itemsToOrder = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
-        console.log("Paystack Flow: Using Standard Cart data.");
+        const cartKey = typeof LOCAL_CART_KEY !== 'undefined' ? LOCAL_CART_KEY : 'outflickzCart';
+        itemsToOrder = JSON.parse(localStorage.getItem(cartKey) || "[]");
     }
     
-    // Ensure we aren't sending an empty order
-    if (itemsToOrder.length === 0) {
+    if (!itemsToOrder || itemsToOrder.length === 0) {
         displayMessage("Your cart is empty. Cannot proceed with payment.");
-        payBtn.disabled = false;
-        payBtn.innerHTML = 'Confirm & Pay Now';
         return;
     }
+
+    // UI Feedback
+    payBtn.disabled = true;
+    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Initializing Order...';
 
     const subtotal = localStorage.getItem('outflickzOrderSubtotal') || '0';
     const shippingFee = localStorage.getItem('outflickzOrderShipping') || '0';
     const tax = localStorage.getItem('outflickzOrderTax') || '0';
-    
-    payBtn.disabled = true;
-    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Initializing Order...';
-
-    let mongoOrderId;
-    let paystackReference; 
     
     try {
         // 2. CREATE PENDING ORDER IN DATABASE
@@ -1225,11 +1216,10 @@ async function processPaystackPayment(totalAmount, email) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 shippingAddress, 
-                totalAmount, 
-                subtotal,
-                shippingFee,
-                tax,
-                // Send the itemsToOrder array we built above
+                totalAmount: parseFloat(totalAmount), 
+                subtotal: parseFloat(subtotal),
+                shippingFee: parseFloat(shippingFee),
+                tax: parseFloat(tax),
                 orderItems: itemsToOrder 
             })
         });
@@ -1240,140 +1230,127 @@ async function processPaystackPayment(totalAmount, email) {
         }
 
         const data = await response.json();
-        mongoOrderId = data.orderId; 
-        paystackReference = data.orderReference;
+        const mongoOrderId = data.orderId; 
+        
+        // FIX: Ensure the reference is unique for Paystack by appending a timestamp.
+        // This prevents the "400 Bad Request" caused by reference collision.
+        const uniqueReference = `${data.orderReference}_${Date.now()}`;
+
+        // --- VALIDATION BEFORE PAYSTACK ---
+        if (!email || email === "" || email === "null") {
+            throw new Error("Customer email is missing. Please log in again.");
+        }
+
+        if (typeof PaystackPop === 'undefined') {
+            throw new Error('Payment gateway failed to load. Please refresh the page.');
+        }
+
+        // 3. LAUNCH PAYSTACK
+        const handler = PaystackPop.setup({
+            key: PAYSTACK_PUBLIC_KEY,
+            email: email,
+            amount: Math.round(parseFloat(totalAmount) * 100), // Kobo
+            ref: uniqueReference, // Using the unique timestamped reference
+            currency: 'NGN',
+            // Tip: If 'bank_transfer' continues to fail 400, remove it temporarily to test 'card'
+            channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'],
+            metadata: {
+                orderId: mongoOrderId,
+                originalReference: data.orderReference, // Keep original ref in metadata
+                custom_fields: [
+                    { display_name: "Order ID", variable_name: "order_id", value: mongoOrderId }
+                ]
+            },
+            callback: function(res) {
+                // We send the reference Paystack actually processed (res.reference)
+                handlePaystackSuccessRedirect(mongoOrderId, res.reference); 
+            },
+            onClose: function() {
+                displayMessage('Payment window closed. Your order is saved as pending.');
+                payBtn.disabled = false;
+                payBtn.innerHTML = 'Confirm & Pay Now';
+            }
+        });
+        
+        handler.openIframe();
 
     } catch (error) {
-        console.error("Order Creation Error:", error);
-        displayMessage(`Order setup failed: ${error.message}`);
+        console.error("Paystack Initialization Error:", error);
+        displayMessage(error.message);
         payBtn.disabled = false;
         payBtn.innerHTML = 'Confirm & Pay Now';
-        return;
     }
-    
-    if (typeof PaystackPop === 'undefined') {
-        displayMessage('Payment gateway (Paystack) failed to load.');
-        payBtn.disabled = false;
-        payBtn.innerHTML = 'Confirm & Pay Now';
-        return;
-    }
-
-    // 3. CONFIGURE CHANNELS
-    let allowedChannels = ['card', 'qr', 'mobile_money', 'bank_transfer', 'ussd', 'bank']; 
-
-    // 4. LAUNCH PAYSTACK
-    const handler = PaystackPop.setup({
-        key: PAYSTACK_PUBLIC_KEY,
-        email: email,
-        amount: Math.round(totalAmount * 100), // Kobo conversion
-        ref: paystackReference,
-        currency: 'NGN',
-        channels: allowedChannels,
-        
-        callback: function(response){
-            // Runs AFTER successful payment
-            handlePaystackSuccessRedirect(mongoOrderId, response.reference); 
-        },
-        onClose: function(){
-            displayMessage('Payment window closed. Your order is still pending.');
-            payBtn.disabled = false;
-            payBtn.innerHTML = 'Confirm & Pay Now';
-        }
-    });
-    
-    handler.openIframe();
 }
 
-    /**
-     * ⭐ CORRECTED: Handles Bank Transfer Receipt Upload and Pending Order Creation.
-     * Combines data and receipt into a single FormData POST to /api/orders/place/pending.
-     */
-    async function processBankTransferOrder(totalAmount, shippingAddress) {
-        const payBtn = document.getElementById('checkout-next-btn');
-        const paymentMethod = 'Bank Transfer';
-        const receiptInput = document.getElementById('bank-receipt-upload');
-        const isBuyNow = sessionStorage.getItem(BUY_NOW_KEY) !== null; // Check Buy Now flag
+   async function processBankTransferOrder(totalAmount, shippingAddress) {
+    const payBtn = document.getElementById('checkout-next-btn');
+    const paymentMethod = 'Bank Transfer';
+    const receiptInput = document.getElementById('bank-receipt-upload');
+    
+    // Harmonized Buy Now Check
+    const buyNowKey = typeof BUY_NOW_KEY !== 'undefined' ? BUY_NOW_KEY : 'outflickzBuyNow';
+    const isBuyNow = sessionStorage.getItem(buyNowKey) !== null;
 
-        // ... (Receipt validation and loading text remain the same) ...
+    if (!receiptInput || !receiptInput.files || receiptInput.files.length === 0) {
+        displayMessage('Please upload the payment receipt image to complete the bank transfer order.');
+        if (receiptInput) receiptInput.focus();
+        return;
+    }
+    
+    payBtn.disabled = true;
+    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Uploading & Placing Order...';
+    
+    // Prepare FormData
+    const orderFormData = new FormData();
+    orderFormData.append('receipt', receiptInput.files[0]);
+    orderFormData.append('shippingAddress', JSON.stringify(shippingAddress));
+    orderFormData.append('paymentMethod', paymentMethod);
+    orderFormData.append('totalAmount', parseFloat(totalAmount).toFixed(2));
+    orderFormData.append('subtotal', localStorage.getItem('outflickzOrderSubtotal') || '0');
+    orderFormData.append('shippingFee', localStorage.getItem('outflickzOrderShipping') || '0');
+    orderFormData.append('tax', localStorage.getItem('outflickzOrderTax') || '0');
+    
+    if (isBuyNow) {
+        // Logic: Buy Now items are stored as a JSON string in 'outflickzOrderItems' during the checkout step
+        const orderItems = localStorage.getItem('outflickzOrderItems'); 
+        if (!orderItems) {
+            displayMessage("Error: Buy Now data corrupted. Please restart checkout.");
+            payBtn.disabled = false;
+            payBtn.innerHTML = 'Confirm & Pay Now';
+            return;
+        }
+        orderFormData.append('orderItems', orderItems);
+    }
 
-        if (!receiptInput || !receiptInput.files || receiptInput.files.length === 0) {
-            displayMessage('Please upload the payment receipt image to complete the bank transfer order.');
-            payBtn.disabled = false;
-            payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
-            if (receiptInput) receiptInput.focus();
-            return;
-        }
-        
-        payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Uploading & Placing Pending Order...';
-        
-        // --- Create a single FormData object for the unified API ---
-        // NOTE: The 'orderItems' variable is still collected from localStorage 
-        // but its value is ONLY appended if isBuyNow is true.
-        const orderItems = localStorage.getItem('outflickzOrderItems'); // May be null/empty for standard cart setup
-        
-        const orderFormData = new FormData();
-        orderFormData.append('receipt', receiptInput.files[0]); // The file itself
-        
-        // Append all order details as form fields (as the backend expects strings for JSON/float parsing)
-        orderFormData.append('shippingAddress', JSON.stringify(shippingAddress));
-        orderFormData.append('paymentMethod', paymentMethod);
-        orderFormData.append('totalAmount', totalAmount.toFixed(2));
-        orderFormData.append('subtotal', localStorage.getItem('outflickzOrderSubtotal'));
-        orderFormData.append('shippingFee', localStorage.getItem('outflickzOrderShipping'));
-        orderFormData.append('tax', localStorage.getItem('outflickzOrderTax'));
-        
-        // ⭐ NO CHANGE NEEDED HERE - THIS IS CORRECT! ⭐
-        // For Standard Cart (isBuyNow = false), we rely on the server's Cart model.
-        // For Buy Now (isBuyNow = true), we must send the items to override the cart.
-        if (isBuyNow) {
-            // CRITICAL: Ensure the Buy Now item data is actually present
-            if (!orderItems) {
-                console.error("Buy Now item data is missing from local storage.");
-                displayMessage("Error: Buy Now data corrupted. Please restart checkout.");
-                // Reset button state and exit early
-                payBtn.disabled = false;
-                payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
-                return;
-            }
-            orderFormData.append('orderItems', orderItems);
-        }
-        // --- End FormData setup ---
+    try {
+        const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/pending`, {
+            method: 'POST',
+            body: orderFormData // Browser sets boundary automatically
+        });
 
-        let pendingOrderRef = `bank_${Date.now()}`; // Client-side reference
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.message || 'Failed to place bank transfer order.');
+        }
+        
+        const payload = {
+            paymentMethod: paymentMethod,
+            orderRef: `bank_${Date.now()}`, 
+            receiptUrl: data.ReceiptUrl, 
+            orderId: data.orderId 
+        };
 
-        try {
-            // ⭐ FIX: Using secureUserFetch for authenticated endpoint, which handles token refresh.
-            const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/pending`, {
-                method: 'POST',
-                // Do NOT set Content-Type for FormData, the browser handles it.
-                body: orderFormData 
-            });
+        // Finalize (Clears cart/session and redirects)
+        await finalizeOrderOnServer(payload, 'banktransfer');
 
-            const data = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(data.message || 'Failed to place pending bank transfer order.');
-            }
-            
-            // Prepare payload for the centralized finalizer to handle notification & cleanup
-            const payload = {
-                paymentMethod: paymentMethod,
-                orderRef: pendingOrderRef, 
-                receiptUrl: data.ReceiptUrl, // Get the permanent URL back from the server
-                orderId: data.orderId // Use the actual server-created Order ID
-            };
-
-            // Use the centralized finalizer. The 'banktransfer' flag ensures it only does client cleanup/redirect.
-            await finalizeOrderOnServer(payload, 'banktransfer');
-
-        } catch (error) {
-            console.error('Bank Transfer Order Error:', error);
-            displayMessage(error.message || 'Error placing bank transfer order. Please try again.');
-            payBtn.disabled = false;
-            payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
-            return;
-        }
-    }
+    } catch (error) {
+        console.error('Bank Transfer Error:', error);
+        displayMessage(error.message);
+        payBtn.disabled = false;
+        payBtn.innerHTML = 'Confirm & Pay Now';
+    }
+}
 
     /**
      * Handles the final step: Payment confirmation and order creation (Router). (Unchanged)
