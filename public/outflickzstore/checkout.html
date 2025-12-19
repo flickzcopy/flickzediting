@@ -1257,28 +1257,26 @@ async function processPaystackPayment(totalAmount, email) {
         return;
     }
 
-    // 3. CONFIGURE CHANNELS
-    let allowedChannels = ['card', 'qr', 'mobile_money', 'bank_transfer', 'ussd', 'bank']; 
-
-    // 4. LAUNCH PAYSTACK
-    const handler = PaystackPop.setup({
-        key: PAYSTACK_PUBLIC_KEY,
-        email: email,
-        amount: Math.round(totalAmount * 100), // Kobo conversion
-        ref: paystackReference,
-        currency: 'NGN',
-        channels: allowedChannels,
-        
-        callback: function(response){
-            // Runs AFTER successful payment
-            handlePaystackSuccessRedirect(mongoOrderId, response.reference); 
-        },
-        onClose: function(){
-            displayMessage('Payment window closed. Your order is still pending.');
-            payBtn.disabled = false;
-            payBtn.innerHTML = 'Confirm & Pay Now';
-        }
-    });
+   // 4. LAUNCH PAYSTACK
+const handler = PaystackPop.setup({
+    key: PAYSTACK_PUBLIC_KEY,
+    email: email.trim(), 
+    // Ensure we send a whole number in Kobo
+    amount: Math.round(parseFloat(totalAmount) * 100), 
+    // Ensure this reference is UNIQUE every time this function runs
+    ref: paystackReference, 
+    currency: 'NGN',
+    channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'],
+    
+    callback: function(response){
+        handlePaystackSuccessRedirect(mongoOrderId, response.reference); 
+    },
+    onClose: function(){
+        displayMessage('Payment window closed. You can try again.');
+        payBtn.disabled = false;
+        payBtn.innerHTML = 'Confirm & Pay Now';
+    }
+});
     
     handler.openIframe();
 }
