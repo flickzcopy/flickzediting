@@ -2319,8 +2319,14 @@ const app = express();
 // To allow both JSON and multipart/form-data parsing
 
 app.use(cors(corsOptions));
-app.use(express.json()); 
-app.use(cookieParser());
+app.use(express.json({
+    verify: (req, res, buf) => {
+        // Only capture raw body for the Paystack webhook route
+        if (req.originalUrl && req.originalUrl.includes('/api/paystack/webhook')) {
+            req.rawBody = buf; 
+        }
+    }
+}));app.use(cookieParser());
 
 app.use(visitorLogger);
 
@@ -6111,14 +6117,14 @@ app.delete('/api/users/cart', verifyUserToken, async (req, res) => {
     }
 });
 
-
 app.post('/api/paystack/webhook', async (req, res) => {
     const secret = process.env.PAYSTACK_SECRET_KEY;
     const paystackSignature = req.headers['x-paystack-signature'];
     
-    // 1. VERIFY SIGNATURE
+    // VERIFY SIGNATURE USING RAW BODY
+    // If rawBody exists, use it; otherwise fallback to stringify
     const hash = crypto.createHmac('sha512', secret)
-                       .update(JSON.stringify(req.body))
+                       .update(req.rawBody || JSON.stringify(req.body))
                        .digest('hex');
     
     if (hash !== paystackSignature) {
@@ -6128,29 +6134,20 @@ app.post('/api/paystack/webhook', async (req, res) => {
 
     const event = req.body;
     const transactionData = event.data;
+    // Safely extract orderId from metadata
     const orderId = transactionData.metadata?.order_id || transactionData.metadata?.orderId;
-
-    console.log(`[Paystack Webhook] Event: ${event.event} | Ref: ${transactionData.reference} | Order: ${orderId}`);
 
     const OrderModel = mongoose.models.Order || mongoose.model('Order');
 
-    // 2. HANDLE SUCCESSFUL PAYMENT
     if (event.event === 'charge.success') {
         try {
-            // Check if order exists and if it's already processed
             const existingOrder = await OrderModel.findById(orderId);
             
-            if (!existingOrder) {
-                console.error(`❌ Webhook Error: Order ${orderId} not found.`);
-                return res.status(200).send('Order not found'); 
+            if (!existingOrder || existingOrder.paymentStatus === 'Paid') {
+                return res.status(200).send('Processed or Not Found');
             }
 
-            if (existingOrder.paymentStatus === 'Paid') {
-                console.log(`ℹ️ Webhook: Order ${orderId} already processed. Skipping...`);
-                return res.status(200).send('Already processed');
-            }
-
-            // UPDATE ORDER STATUS
+            // Update Order and Deduct Inventory
             const order = await OrderModel.findByIdAndUpdate(orderId, {
                 paymentStatus: 'Paid',
                 paymentMethod: transactionData.channel || 'Paystack',
@@ -6158,40 +6155,21 @@ app.post('/api/paystack/webhook', async (req, res) => {
                 paidAt: new Date(),
             }, { new: true }).populate('userId');
 
-            // ATOMIC INVENTORY DEDUCTION
-            console.log(`[Webhook] Starting Inventory Deduction for ${orderId}...`);
-            const completedOrder = await deductInventoryAtomic(orderId);
-
-            // NOTIFICATIONS
-            await sendAdminEmailNotificationForAdmin(completedOrder, transactionData.amount);
-            if (completedOrder.userId?.email) {
-                await sendOrderConfirmationEmailForAdmin(completedOrder.userId.email, completedOrder);
+            await deductInventoryAtomic(orderId);
+            
+            // Notifications
+            await sendAdminEmailNotificationForAdmin(order, transactionData.amount);
+            if (order.userId?.email) {
+                await sendOrderConfirmationEmailForAdmin(order.userId.email, order);
             }
 
             return res.status(200).send('Webhook Processed');
         } catch (error) {
             console.error(`❌ Webhook Success Handling Failed: ${error.message}`);
-            return res.status(200).send('Error logged'); 
+            return res.status(500).send('Internal Error'); 
         }
     }
-
-    // 3. HANDLE FAILED PAYMENT
-    if (event.event === 'charge.failed' || event.event === 'paymentrequest.pending') {
-        const reason = transactionData.gateway_response || 'Unknown gateway error';
-        console.warn(`⚠️ Payment Failed/Pending: Ref ${transactionData.reference}. Reason: ${reason}`);
-        
-        try {
-            await OrderModel.findByIdAndUpdate(orderId, {
-                paymentStatus: 'Failed',
-                $push: { notes: `Gateway Response (${new Date().toLocaleString()}): ${reason}` }
-            });
-        } catch (err) {
-            console.error('Error updating failed order status:', err.message);
-        }
-        return res.status(200).send('Failure logged');
-    }
-
-    res.status(200).send('Event received');
+    res.status(200).send('Event Received');
 });
 
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
