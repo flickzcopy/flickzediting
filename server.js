@@ -6111,56 +6111,87 @@ app.delete('/api/users/cart', verifyUserToken, async (req, res) => {
     }
 });
 
+
 app.post('/api/paystack/webhook', async (req, res) => {
-    const secret = process.env.PAYSTACK_SECRET_KEY; 
-    const hash = crypto.createHmac('sha512', secret).update(JSON.stringify(req.body)).digest('hex');
+    const secret = process.env.PAYSTACK_SECRET_KEY;
+    const paystackSignature = req.headers['x-paystack-signature'];
     
-    if (hash !== req.headers['x-paystack-signature']) return res.status(401).send('Unauthorized');
+    // 1. VERIFY SIGNATURE
+    const hash = crypto.createHmac('sha512', secret)
+                       .update(JSON.stringify(req.body))
+                       .digest('hex');
+    
+    if (hash !== paystackSignature) {
+        console.error('❌ Webhook Error: Invalid Signature');
+        return res.status(401).send('Unauthorized');
+    }
 
     const event = req.body;
+    const transactionData = event.data;
+    const orderId = transactionData.metadata?.order_id || transactionData.metadata?.orderId;
 
+    console.log(`[Paystack Webhook] Event: ${event.event} | Ref: ${transactionData.reference} | Order: ${orderId}`);
+
+    const OrderModel = mongoose.models.Order || mongoose.model('Order');
+
+    // 2. HANDLE SUCCESSFUL PAYMENT
     if (event.event === 'charge.success') {
-        const transactionData = event.data;
-        const orderId = transactionData.metadata?.orderId; 
-
         try {
-            const OrderModel = mongoose.models.Order || mongoose.model('Order');
+            // Check if order exists and if it's already processed
+            const existingOrder = await OrderModel.findById(orderId);
+            
+            if (!existingOrder) {
+                console.error(`❌ Webhook Error: Order ${orderId} not found.`);
+                return res.status(200).send('Order not found'); 
+            }
 
-            // 1. UPDATE PAYMENT INFO FIRST
-            // We use findByIdAndUpdate to record the payment details immediately.
+            if (existingOrder.paymentStatus === 'Paid') {
+                console.log(`ℹ️ Webhook: Order ${orderId} already processed. Skipping...`);
+                return res.status(200).send('Already processed');
+            }
+
+            // UPDATE ORDER STATUS
             const order = await OrderModel.findByIdAndUpdate(orderId, {
                 paymentStatus: 'Paid',
-                paymentMethod: 'Paystack',
+                paymentMethod: transactionData.channel || 'Paystack',
                 paymentTxnId: transactionData.reference,
                 paidAt: new Date(),
             }, { new: true }).populate('userId');
 
-            if (!order) throw new Error(`Order ${orderId} not found during webhook.`);
-
-            // 2. ATOMIC INVENTORY DEDUCTION (Swift Flow)
-            // Instead of just logging, we now trigger the full deduction logic.
-            console.log(`[Webhook] Payment confirmed for ${orderId}. Starting Atomic Inventory Deduction...`);
+            // ATOMIC INVENTORY DEDUCTION
+            console.log(`[Webhook] Starting Inventory Deduction for ${orderId}...`);
             const completedOrder = await deductInventoryAtomic(orderId);
 
-            // 3. NOTIFY ADMIN & CUSTOMER
-            // Now that inventory is safe, send notifications.
+            // NOTIFICATIONS
             await sendAdminEmailNotificationForAdmin(completedOrder, transactionData.amount);
-            
-            // Send customer confirmation since order.status is now 'Completed'
             if (completedOrder.userId?.email) {
                 await sendOrderConfirmationEmailForAdmin(completedOrder.userId.email, completedOrder);
             }
 
-            console.log(`✅ Webhook: Order ${orderId} fully processed and stock deducted.`);
             return res.status(200).send('Webhook Processed');
-
         } catch (error) {
-            console.error(`❌ Webhook Swift Flow Failed: ${error.message}`);
-            // Note: deductInventoryAtomic already handles inventoryRollback() internally.
+            console.error(`❌ Webhook Success Handling Failed: ${error.message}`);
             return res.status(200).send('Error logged'); 
         }
     }
-    res.status(200).send('Event ignored');
+
+    // 3. HANDLE FAILED PAYMENT
+    if (event.event === 'charge.failed' || event.event === 'paymentrequest.pending') {
+        const reason = transactionData.gateway_response || 'Unknown gateway error';
+        console.warn(`⚠️ Payment Failed/Pending: Ref ${transactionData.reference}. Reason: ${reason}`);
+        
+        try {
+            await OrderModel.findByIdAndUpdate(orderId, {
+                paymentStatus: 'Failed',
+                $push: { notes: `Gateway Response (${new Date().toLocaleString()}): ${reason}` }
+            });
+        } catch (err) {
+            console.error('Error updating failed order status:', err.message);
+        }
+        return res.status(200).send('Failure logged');
+    }
+
+    res.status(200).send('Event received');
 });
 
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
