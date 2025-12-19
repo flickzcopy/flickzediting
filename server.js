@@ -6135,6 +6135,7 @@ app.post('/api/paystack/webhook', async (req, res) => {
     const secret = process.env.PAYSTACK_SECRET_KEY;
     const paystackSignature = req.headers['x-paystack-signature'];
     
+    // 1. Verify Signature
     const hash = crypto.createHmac('sha512', secret)
                        .update(JSON.stringify(req.body))
                        .digest('hex');
@@ -6146,6 +6147,7 @@ app.post('/api/paystack/webhook', async (req, res) => {
 
     const event = req.body;
     const transactionData = event.data;
+    // Ensure you are passing order_id in metadata during PaystackPop.setup
     const orderId = transactionData.metadata?.order_id || transactionData.metadata?.orderId;
 
     const OrderModel = mongoose.models.Order || mongoose.model('Order');
@@ -6153,17 +6155,34 @@ app.post('/api/paystack/webhook', async (req, res) => {
     // 2. HANDLE SUCCESSFUL PAYMENT
     if (event.event === 'charge.success') {
         try {
-            // ⭐ CHANGE: We ONLY record the payment. We do NOT deduct stock here.
-            // This leaves the order in 'Pending' status for Admin manual review.
-            const updatedOrder = await deductInventoryAndCompleteOrder(orderId, transactionData);
+            // ⭐ CRITICAL UPDATE: 
+            // We DO NOT deduct inventory here. We only record that the money was received.
+            // This keeps the order "Pending" so the Admin can manually confirm it later.
+            const updatedOrder = await OrderModel.findByIdAndUpdate(
+                orderId,
+                {
+                    paymentStatus: 'Paid',           // Money is in
+                    paymentMethod: 'Paystack',
+                    paymentTxnId: transactionData.reference,
+                    // We keep status: 'Pending' so it stays in the Admin "To-Do" list
+                    $push: { 
+                        notes: `Paystack Payment Successful (${new Date().toLocaleString()}): Ref ${transactionData.reference}` 
+                    }
+                },
+                { new: true }
+            );
 
-            // NOTIFICATIONS (Optional: Send a "Payment Received" email instead of "Order Confirmed")
-            // await sendAdminEmailNotificationForAdmin(updatedOrder, transactionData.amount);
+            if (!updatedOrder) {
+                console.error(`❌ Webhook Error: Order ${orderId} not found in database.`);
+                return res.status(404).send('Order not found');
+            }
 
+            console.log(`✅ Payment Recorded for Order ${orderId}. Awaiting Admin Confirmation.`);
             return res.status(200).send('Webhook Processed: Payment Recorded');
+
         } catch (error) {
             console.error(`❌ Webhook Process Error: ${error.message}`);
-            return res.status(200).send('Error logged'); 
+            return res.status(500).send('Internal Server Error'); 
         }
     }
 
@@ -6175,7 +6194,9 @@ app.post('/api/paystack/webhook', async (req, res) => {
                 paymentStatus: 'Failed',
                 $push: { notes: `Paystack Failed (${new Date().toISOString()}): ${reason}` }
             });
-        } catch (err) { console.error('Error updating failed status:', err.message); }
+        } catch (err) { 
+            console.error('Error updating failed status:', err.message); 
+        }
         return res.status(200).send('Failure logged');
     }
 
@@ -6252,6 +6273,7 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             shippingFee: parseFloat(shippingFee || 0),
             tax: parseFloat(tax || 0),
             status: 'Pending',
+            paymentStatus: 'Pending',
             paymentMethod: 'Paystack',
             orderReference: orderRef,
             amountPaidKobo: Math.round(parseFloat(totalAmount) * 100), // 100.00 becomes 10000 kobo

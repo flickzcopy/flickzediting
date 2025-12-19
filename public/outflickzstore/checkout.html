@@ -1182,29 +1182,20 @@ async function processPaystackPayment(totalAmount, email) {
     // 1. COLLECT & PARSE DATA
     const shippingAddress = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
     
-    // --- CRITICAL FIX: Determine the correct items to send ---
     let itemsToOrder = [];
     const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
 
     if (buyNowItemJSON) {
-        // FLOW A: Buy Now Item
         const item = JSON.parse(buyNowItemJSON);
-        // Ensure data types match backend schema (Numbers stayed as Numbers)
         item.variationIndex = parseInt(item.variationIndex, 10) || 1;
         item.productType = item.productType || 'Uncategorized';
-        itemsToOrder = [item]; // Backend expects an array of items
-        console.log("Paystack Flow: Using Buy Now item data.");
+        itemsToOrder = [item];
     } else {
-        // FLOW B: Standard Cart
         itemsToOrder = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
-        console.log("Paystack Flow: Using Standard Cart data.");
     }
     
-    // Ensure we aren't sending an empty order
     if (itemsToOrder.length === 0) {
         displayMessage("Your cart is empty. Cannot proceed with payment.");
-        payBtn.disabled = false;
-        payBtn.innerHTML = 'Confirm & Pay Now';
         return;
     }
 
@@ -1212,6 +1203,7 @@ async function processPaystackPayment(totalAmount, email) {
     const shippingFee = localStorage.getItem('outflickzOrderShipping') || '0';
     const tax = localStorage.getItem('outflickzOrderTax') || '0';
     
+    // UI State
     payBtn.disabled = true;
     payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Initializing Order...';
 
@@ -1257,17 +1249,26 @@ async function processPaystackPayment(totalAmount, email) {
         return;
     }
 
-    // 3. CONFIGURE CHANNELS
-    let allowedChannels = ['card', 'qr', 'mobile_money', 'bank_transfer', 'ussd', 'bank']; 
-
-    // 4. LAUNCH PAYSTACK
+    // 3. LAUNCH PAYSTACK WITH METADATA
     const handler = PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
         email: email,
         amount: Math.round(totalAmount * 100), // Kobo conversion
         ref: paystackReference,
         currency: 'NGN',
-        channels: allowedChannels,
+        channels: ['card', 'qr', 'mobile_money', 'bank_transfer', 'ussd', 'bank'],
+        
+        // ⭐ CRITICAL: The metadata links the Paystack Transaction to your MongoDB Order ID
+        metadata: {
+            order_id: mongoOrderId,
+            custom_fields: [
+                {
+                    display_name: "Order ID",
+                    variable_name: "order_id",
+                    value: mongoOrderId
+                }
+            ]
+        },
         
         callback: function(response){
             // Runs AFTER successful payment
