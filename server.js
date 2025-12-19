@@ -6127,17 +6127,16 @@ app.post('/api/paystack/webhook', async (req, res) => {
 
     const event = req.body;
     const transactionData = event.data;
-    const orderId = transactionData.metadata?.orderId;
+    // Safely extract orderId from metadata
+    const orderId = transactionData.metadata?.order_id || transactionData.metadata?.orderId;
 
-    // --- GLOBAL LOGGING FOR DEBUGGING ---
     console.log(`[Paystack Webhook] Event: ${event.event} | Ref: ${transactionData.reference} | Order: ${orderId}`);
+
+    const OrderModel = mongoose.models.Order || mongoose.model('Order');
 
     // 2. HANDLE SUCCESSFUL PAYMENT
     if (event.event === 'charge.success') {
         try {
-            const OrderModel = mongoose.models.Order || mongoose.model('Order');
-
-            // UPDATE PAYMENT INFO
             const order = await OrderModel.findByIdAndUpdate(orderId, {
                 paymentStatus: 'Paid',
                 paymentMethod: transactionData.channel || 'Paystack',
@@ -6146,54 +6145,50 @@ app.post('/api/paystack/webhook', async (req, res) => {
             }, { new: true }).populate('userId');
 
             if (!order) {
-                console.error(`❌ Webhook Error: Order ${orderId} not found in database.`);
+                console.error(`❌ Webhook Error: Order ${orderId} not found.`);
                 return res.status(200).send('Order not found'); 
             }
 
             // ATOMIC INVENTORY DEDUCTION
-            console.log(`[Webhook] Starting Atomic Inventory Deduction for ${orderId}...`);
+            console.log(`[Webhook] Deducting inventory for ${orderId}...`);
             const completedOrder = await deductInventoryAtomic(orderId);
 
             // NOTIFICATIONS
             await sendAdminEmailNotificationForAdmin(completedOrder, transactionData.amount);
-            
             if (completedOrder.userId?.email) {
                 await sendOrderConfirmationEmailForAdmin(completedOrder.userId.email, completedOrder);
             }
 
-            console.log(`✅ Webhook: Order ${orderId} fully processed.`);
             return res.status(200).send('Webhook Processed');
-
         } catch (error) {
-            console.error(`❌ Webhook Success Handling Failed: ${error.message}`);
+            console.error(`❌ Webhook Process Error: ${error.message}`);
             return res.status(200).send('Error logged'); 
         }
     }
 
-    // 3. HANDLE FAILED PAYMENT (Crucial for Debugging)
-    if (event.event === 'charge.failed') {
-        console.warn(`⚠️ Payment Failed: Ref ${transactionData.reference}. Reason: ${transactionData.gateway_response}`);
+    // 3. HANDLE FAILED PAYMENT (Critical for the "400 Bad Request" debugging)
+    if (event.event === 'charge.failed' || event.event === 'paymentrequest.pending') {
+        const reason = transactionData.gateway_response || 'Unknown gateway error';
+        console.warn(`⚠️ Payment Issue: Ref ${transactionData.reference}. Reason: ${reason}`);
         
         try {
-            const OrderModel = mongoose.models.Order || mongoose.model('Order');
             await OrderModel.findByIdAndUpdate(orderId, {
                 paymentStatus: 'Failed',
-                notes: `Gateway Response: ${transactionData.gateway_response}`
+                $push: { notes: `Gateway Response (${new Date().toISOString()}): ${reason}` }
             });
         } catch (err) {
             console.error('Error updating failed order status:', err.message);
         }
-        
         return res.status(200).send('Failure logged');
     }
 
-    // 4. HANDLE TRANSFER SPECIFIC LOGS (Useful for "Pay with Transfer" issues)
-    if (event.event === 'transfer.failed' || event.event === 'transfer.reversed') {
-        console.error(`🚨 Bank Transfer Issue: ${event.event} for Order ${orderId}`);
+    // 4. LOG ABANDONED TRANSACTIONS
+    // This helps identify if users are getting stuck at the "Unable to process" screen
+    if (event.event === 'request.success') {
+         console.log(`ℹ️ Payment Page Requested: ${transactionData.reference}`);
     }
 
-    // Default response for ignored events (like charge.dispute.create, etc)
-    res.status(200).send('Event received');
+    res.status(200).send('Event acknowledged');
 });
 
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
