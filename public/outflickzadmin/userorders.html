@@ -246,8 +246,9 @@
     }
     
     function formatDate(dateString) {
+        if(!dateString) return 'N/A';
         const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     }
 
     function formatNaira(amount) {
@@ -284,16 +285,45 @@
     async function fetchOrders() {
         const token = localStorage.getItem('adminToken');
         try {
-            // We use the 'all' endpoint to get the full list, then filter for "actionable" orders locally
             const response = await fetch('/api/admin/orders/all', { 
                 method: 'GET',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!response.ok) throw new Error('Fetch failed');
-            return await response.json();
+            const data = await response.json();
+            return Array.isArray(data) ? data : (data.orders || []);
         } catch (error) {
             showToast('Failed to load orders.', 'bg-red-500');
             return [];
+        }
+    }
+
+    // NEW: Wrapper function to fix the ReferenceError in the UI
+    async function confirmOrderFromDetails() {
+        if (!currentDetailOrderId) return showToast("Order ID missing", "bg-red-500");
+        await confirmOrder(currentDetailOrderId);
+    }
+
+    // NEW: Handle Order Cancellation
+    async function cancelOrderFromDetails() {
+        if (!currentDetailOrderId) return;
+        if (!confirm("Are you sure you want to cancel this order?")) return;
+
+        const token = localStorage.getItem('adminToken');
+        try {
+            const response = await fetch(`/api/admin/orders/${currentDetailOrderId}/cancel`, {
+                method: 'PUT',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                showToast("Order cancelled successfully", "bg-gray-700");
+                await loadUserOrders();
+                showContent('userorders');
+            } else {
+                throw new Error("Failed to cancel");
+            }
+        } catch (err) {
+            showToast(err.message, "bg-red-500");
         }
     }
 
@@ -328,140 +358,161 @@
             showToast(error.message, 'bg-red-500');
             if (button) {
                 button.disabled = false;
-                button.textContent = '✅ Confirm Order';
+                button.textContent = '✅ Confirm Payment & Process Order';
                 button.classList.remove('opacity-50');
             }
         }
     }
 
-   /**
- * UPDATED: Filters and renders orders that require Admin Action.
- * Now correctly checks amountPaidKobo for Paystack verification.
- */
-function renderOrders(orders) {
-    ordersTableBody.innerHTML = '';
-    
-    const filteredOrders = orders.filter(order => {
-        // --- 1. DEFINE PAYMENT TRUTH ---
-        // Verify Paystack by checking if amountPaidKobo matches totalAmount * 100
-        const isPaystackVerified = order.paymentMethod === 'Paystack' && 
-                                   order.amountPaidKobo >= (order.totalAmount * 100);
-
-        // --- 2. DEFINE FILTER CATEGORIES ---
-        // A: Bank Transfers awaiting manual verification
-        const isBankPending = order.paymentMethod !== 'Paystack' && order.status === 'Pending';
-
-        // B: Paystack orders that are paid but need the Admin to confirm stock/fulfillment
-        const isPaystackAwaitingAdmin = order.paymentMethod === 'Paystack' && 
-                                        isPaystackVerified && 
-                                        ['Pending', 'Processing'].includes(order.status);
-
-        // C: Urgent failures
-        const isManualReview = order.status === 'Inventory Failure (Manual Review)';
+    function renderOrders(orders) {
+        ordersTableBody.innerHTML = '';
         
-        return isBankPending || isPaystackAwaitingAdmin || isManualReview;
-    });
+        const filteredOrders = orders.filter(order => {
+            const isPaystackVerified = order.paymentMethod === 'Paystack' && 
+                                       order.amountPaidKobo >= (order.totalAmount * 100);
+            const isBankPending = order.paymentMethod !== 'Paystack' && order.status === 'Pending';
+            const isPaystackAwaitingAdmin = order.paymentMethod === 'Paystack' && 
+                                            isPaystackVerified && 
+                                            ['Pending', 'Processing'].includes(order.status);
+            const isManualReview = order.status === 'Inventory Failure (Manual Review)';
+            
+            return isBankPending || isPaystackAwaitingAdmin || isManualReview;
+        });
 
-    pendingCountElement.textContent = `${filteredOrders.length} Orders Requiring Action`;
+        pendingCountElement.textContent = `${filteredOrders.length} Orders Requiring Action`;
 
-    if (filteredOrders.length === 0) {
-        ordersTableContainer.classList.add('hidden');
-        emptyState.classList.remove('hidden');
-        return;
+        if (filteredOrders.length === 0) {
+            ordersTableContainer.classList.add('hidden');
+            emptyState.classList.remove('hidden');
+            return;
+        }
+
+        emptyState.classList.add('hidden');
+        ordersTableContainer.classList.remove('hidden');
+
+        filteredOrders.forEach(order => {
+            const tr = document.createElement('tr');
+            tr.className = 'hover:bg-gray-50 border-b transition-colors';
+            
+            const isPaid = (order.paymentMethod === 'Paystack' && order.amountPaidKobo >= (order.totalAmount * 100));
+
+            let methodBadgeClass = order.paymentMethod === 'Paystack' 
+                ? (isPaid ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600')
+                : 'bg-purple-100 text-purple-700';
+
+            let statusBadgeClass = order.status.includes('Failure') 
+                ? 'bg-red-600 text-white animate-pulse' 
+                : (order.status === 'Processing' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800');
+
+            tr.innerHTML = `
+                <td class="px-6 py-4 text-sm font-mono font-bold text-gray-600">
+                    #${(order.orderReference || order._id).substring(0, 8)}
+                </td>
+                <td class="px-6 py-4 text-sm">
+                    <div class="font-bold text-gray-800">${order.userId?.username || order.customerName || 'Guest'}</div>
+                    <div class="text-xs text-gray-500">${order.userId?.email || order.email || ''}</div>
+                </td>
+                <td class="px-6 py-4 text-sm">
+                    <span class="px-2.5 py-1 text-[10px] font-extrabold rounded-full uppercase tracking-wider ${methodBadgeClass}">
+                        ${order.paymentMethod} ${isPaid ? '✔ PAID' : '⌛ AWAITING'}
+                    </span>
+                </td>
+                <td class="px-6 py-4 text-sm font-bold text-emerald-700">
+                    ${formatNaira(order.totalAmount)}
+                </td>
+                <td class="px-6 py-4 text-sm">
+                    <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${statusBadgeClass}">
+                        ${order.status}
+                    </span>
+                </td>
+                <td class="px-6 py-4 text-center">
+                    <button 
+                        onclick="handleViewDetails('${order._id}')" 
+                        class="bg-blue-600 text-white py-2 px-4 rounded-lg text-xs font-bold hover:bg-blue-700 shadow-sm transition-all active:scale-95"
+                    >
+                        View & Confirm
+                    </button>
+                </td>
+            `;
+            ordersTableBody.appendChild(tr);
+        });
     }
-
-    emptyState.classList.add('hidden');
-    ordersTableContainer.classList.remove('hidden');
-
-    filteredOrders.forEach(order => {
-        const tr = document.createElement('tr');
-        tr.className = 'hover:bg-gray-50 border-b transition-colors';
-        
-        // Re-calculate verified status for the UI badges
-        const isPaid = (order.paymentMethod === 'Paystack' && order.amountPaidKobo >= (order.totalAmount * 100));
-
-        let methodBadgeClass = order.paymentMethod === 'Paystack' 
-            ? (isPaid ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600')
-            : 'bg-purple-100 text-purple-700';
-
-        let statusBadgeClass = order.status.includes('Failure') 
-            ? 'bg-red-600 text-white animate-pulse' 
-            : (order.status === 'Processing' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800');
-
-        tr.innerHTML = `
-            <td class="px-6 py-4 text-sm font-mono font-bold text-gray-600">
-                #${(order.orderReference || order._id).substring(0, 8)}
-            </td>
-            <td class="px-6 py-4 text-sm">
-                <div class="font-bold text-gray-800">${order.userId?.username || order.customerName || 'Guest'}</div>
-                <div class="text-xs text-gray-500">${order.userId?.email || order.email || ''}</div>
-            </td>
-            <td class="px-6 py-4 text-sm">
-                <span class="px-2.5 py-1 text-[10px] font-extrabold rounded-full uppercase tracking-wider ${methodBadgeClass}">
-                    ${order.paymentMethod} ${isPaid ? '✔ PAID' : '⌛ AWAITING'}
-                </span>
-            </td>
-            <td class="px-6 py-4 text-sm font-bold text-emerald-700">
-                ${formatNaira(order.totalAmount)}
-            </td>
-            <td class="px-6 py-4 text-sm">
-                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${statusBadgeClass}">
-                    ${order.status}
-                </span>
-            </td>
-            <td class="px-6 py-4 text-center">
-                <button 
-                    onclick="handleViewDetails('${order._id}')" 
-                    class="bg-blue-600 text-white py-2 px-4 rounded-lg text-xs font-bold hover:bg-blue-700 shadow-sm transition-all active:scale-95"
-                >
-                    View & Confirm
-                </button>
-            </td>
-        `;
-        ordersTableBody.appendChild(tr);
-    });
-}
-   
+    
     async function handleViewDetails(orderId) {
         const token = localStorage.getItem('adminToken');
-        const response = await fetch(`/api/admin/orders/${orderId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const data = await response.json();
-        if (data.order) renderOrderDetail(data.order);
+        try {
+            const response = await fetch(`/api/admin/orders/${orderId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await response.json();
+            if (data.order) renderOrderDetail(data.order);
+        } catch (err) {
+            showToast("Error loading details", "bg-red-500");
+        }
     }
 
-  function renderOrderDetail(order) {
-    currentDetailOrderId = order._id;
-    showContent('orderdetails');
+    function renderOrderDetail(order) {
+        currentDetailOrderId = order._id;
+        showContent('orderdetails');
 
-    document.getElementById('detail-order-id').textContent = (order.orderReference || order._id).substring(0, 8);
-    document.getElementById('detail-customer-name').textContent = order.userId?.username || order.customerName || 'Guest';
-    document.getElementById('detail-payment-method').textContent = order.paymentMethod;
-    document.getElementById('detail-total').textContent = formatNaira(order.totalAmount);
-    
-    // --- UPDATED RECEIPT LOGIC ---
-    const receiptContainer = document.getElementById('receipt-container');
-    const isPaystackPaid = order.paymentMethod === 'Paystack' && order.amountPaidKobo >= (order.totalAmount * 100);
+        // Basic Info
+        document.getElementById('detail-order-id').textContent = (order.orderReference || order._id).substring(0, 8);
+        document.getElementById('detail-customer-name').textContent = order.userId?.username || order.customerName || 'Guest';
+        document.getElementById('detail-customer-email').textContent = order.userId?.email || order.email || 'N/A';
+        document.getElementById('detail-date').textContent = formatDate(order.createdAt);
+        document.getElementById('detail-payment-method').textContent = order.paymentMethod;
+        
+        // Pricing Info
+        document.getElementById('detail-subtotal').textContent = formatNaira(order.subtotal || order.totalAmount);
+        document.getElementById('detail-shipping').textContent = formatNaira(order.shippingFee || 0);
+        document.getElementById('detail-tax').textContent = formatNaira(order.tax || 0);
+        document.getElementById('detail-total').textContent = formatNaira(order.totalAmount);
+        
+        // --- FIX: Populate Items Table ---
+        detailItemsBody.innerHTML = '';
+        if (order.items && order.items.length > 0) {
+            order.items.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="px-4 py-3 text-sm text-gray-800 font-medium">${item.name}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">${item.variant || 'Default'}</td>
+                    <td class="px-4 py-3 text-sm text-right">${formatNaira(item.price)}</td>
+                    <td class="px-4 py-3 text-sm text-center">${item.quantity}</td>
+                    <td class="px-4 py-3 text-sm text-right font-bold">${formatNaira(item.price * item.quantity)}</td>
+                `;
+                detailItemsBody.appendChild(row);
+            });
+        } else {
+            detailItemsBody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-400">No items found</td></tr>';
+        }
 
-    if (isPaystackPaid) {
-        receiptContainer.innerHTML = `
-            <div class="p-8 bg-blue-50 border-2 border-dashed border-blue-200 rounded-lg text-center">
-                <p class="text-blue-800 font-bold">Paystack Payment Confirmed</p>
-                <p class="text-blue-600 text-xs mt-1 italic">Reference: ${order.orderReference}</p>
-                <p class="text-blue-500 font-mono text-sm mt-2">Paid: ${formatNaira(order.amountPaidKobo / 100)}</p>
-                <p class="text-[10px] text-blue-400 mt-4">Verification successful. Proceed to confirm stock.</p>
-            </div>`;
-    } else if (order.paymentReceiptUrl) {
-        receiptContainer.innerHTML = `<img src="${order.paymentReceiptUrl}" class="rounded-lg shadow-sm border max-h-72 mx-auto"/>`;
-    } else {
-        receiptContainer.innerHTML = `<p class="text-gray-400 p-8 text-center italic border rounded-lg">No proof of payment found.</p>`;
+        // --- Payment Receipt Logic ---
+        const receiptContainer = document.getElementById('receipt-container');
+        const isPaystackPaid = order.paymentMethod === 'Paystack' && order.amountPaidKobo >= (order.totalAmount * 100);
+
+        if (isPaystackPaid) {
+            receiptContainer.innerHTML = `
+                <div class="p-8 bg-blue-50 border-2 border-dashed border-blue-200 rounded-lg text-center">
+                    <p class="text-blue-800 font-bold">Paystack Payment Confirmed</p>
+                    <p class="text-blue-600 text-xs mt-1 italic">Reference: ${order.orderReference}</p>
+                    <p class="text-blue-500 font-mono text-sm mt-2">Paid: ${formatNaira(order.amountPaidKobo / 100)}</p>
+                    <p class="text-[10px] text-blue-400 mt-4">Verification successful. Proceed to confirm stock.</p>
+                </div>`;
+        } else if (order.paymentReceiptUrl) {
+            receiptContainer.innerHTML = `<img src="${order.paymentReceiptUrl}" class="rounded-lg shadow-sm border max-h-96 mx-auto cursor-zoom-in" onclick="window.open(this.src)"/>`;
+        } else {
+            receiptContainer.innerHTML = `<p class="text-gray-400 p-8 text-center italic border rounded-lg">No proof of payment found.</p>`;
+        }
+
+        const confirmBtn = document.getElementById('detail-confirm-btn');
+        const canConfirm = ['Pending', 'Processing', 'Inventory Failure (Manual Review)'].includes(order.status);
+        confirmBtn.classList.toggle('hidden', !canConfirm);
+        
+        // Reset button state
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = '✅ Confirm Payment & Process Order';
+        confirmBtn.classList.remove('opacity-50');
     }
-
-    const confirmBtn = document.getElementById('detail-confirm-btn');
-    const canConfirm = ['Pending', 'Processing', 'Inventory Failure (Manual Review)'].includes(order.status);
-    confirmBtn.classList.toggle('hidden', !canConfirm);
-}
 
     async function loadUserOrders() {
         loadingIndicator.classList.remove('hidden');
