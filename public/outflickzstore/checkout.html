@@ -907,8 +907,8 @@ async function fetchUserData() {
 
 
 
-   /**
- * Fetches the initial cart data, CHECKING FOR A 'BUY NOW' ITEM FIRST. (UPDATED FOR PRIORITIZATION)
+    /**
+ * Fetches the initial cart data, CHECKING FOR A 'BUY NOW' ITEM FIRST.
  */
 async function fetchInitialCartData() {
     const subtotalEl = document.getElementById('summary-subtotal');
@@ -930,7 +930,6 @@ async function fetchInitialCartData() {
 
     let cartData;
     
-    // Determine if the user has a local cart with items (Standard Checkout intention)
     const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
     const isStandardCartCheckout = localCart.length > 0;
     const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
@@ -941,44 +940,36 @@ async function fetchInitialCartData() {
     if (buyNowItemJSON && !isStandardCartCheckout) { 
         console.log("Processing Buy Now flow...");
         
-        // 1. Parse the JSON (which is an array [ {...} ])
         const storedData = JSON.parse(buyNowItemJSON);
         
-        // 2. Extract the actual item object from the array
+        // ⭐ UNWRAP THE ARRAY: The backend destructures req.body directly
+        // It needs { productId: ... } NOT [ { productId: ... } ]
         let item = Array.isArray(storedData) ? storedData[0] : storedData;
 
         if (!item) {
-            console.error("Buy Now item is missing or malformed.");
+            itemsListEl.innerHTML = '<div class="text-center py-6 text-red-500">Item details missing.</div>';
             return;
         }
 
-        // ⭐ CRITICAL FIXES FOR SERVER VALIDATION ⭐
+        // ⭐ CRITICAL SANITIZATION FOR BACKEND VALIDATION
+        item.productType = (item.productType && item.productType !== "undefined" && item.productType !== "Uncategorized") 
+                           ? item.productType 
+                           : 'Wears'; 
         
-        // Ensure productType is valid (Backend needs this for shipping/tax)
-        if (!item.productType || item.productType === "undefined" || item.productType === "Uncategorized") {
-            // Fallback to 'Wears' or similar category if 'Uncategorized' triggers 400
-            item.productType = 'Wears'; 
-            console.warn(`Fixed invalid productType to '${item.productType}'`);
-        }
-        
-        // Fix empty 'size' field using the variation string
-        if (!item.size && item.variation) {
-            item.size = item.variation; 
+        // Ensure size is never empty (backend requirement)
+        if (!item.size || item.size === "") {
+            item.size = item.variation || 'Standard';
         }
 
-        // Ensure variationIndex is a Number, not a string
+        // Ensure variationIndex is a number
         item.variationIndex = parseInt(item.variationIndex, 10) || 1;
 
-        // 🎯 PAYLOAD PREPARATION
-        // If your backend calculate-buy-now expects an ARRAY (like the cart), use [item].
-        // If it expects a SINGLE OBJECT, use item.
-        const payload = Array.isArray(storedData) ? [item] : item;
-
         try {
+            // 🎯 THE FIX: Send 'item' (Object), not 'storedData' (Array)
             const response = await secureUserFetch(`${API_BASE_URL}/api/orders/calculate-buy-now`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload) 
+                body: JSON.stringify(item) 
             });
             
             if (!response.ok) {
@@ -997,38 +988,30 @@ async function fetchInitialCartData() {
             return;
         }
     }
+
     // =========================================================================
     // --- STANDARD CART LOGIC START ---
-    
-    // If Buy Now flag existed but was ignored (because isStandardCartCheckout was true), 
-    // ensure the flag is cleared before proceeding to prevent issues on subsequent pages.
+    // =========================================================================
     if (buyNowItemJSON && isStandardCartCheckout) {
           console.warn('Clearing residual BUY_NOW_KEY to proceed with Standard Cart.');
           sessionStorage.removeItem(BUY_NOW_KEY); 
     }
 
-    // Check for empty local cart if user is NOT logged in 
-    if (!isUserLoggedIn()) {
-        // Re-check localCart here, though it should be caught by isStandardCartCheckout 
-        if (localCart.length === 0) { 
-            displayMessage('Your cart is empty. Redirecting to home.');
-            setTimeout(() => window.location.href = 'homepage.html', 1500);
-            return;
-        } 
+    if (!isUserLoggedIn() && localCart.length === 0) {
+        displayMessage('Your cart is empty. Redirecting to home.');
+        setTimeout(() => window.location.href = 'homepage.html', 1500);
+        return;
     }
 
     try {
-        // === REAL API CALL FOR STANDARD CART ===
         const url = isUserLoggedIn() ? `${API_BASE_URL}/api/users/cart` : `${API_BASE_URL}/api/guest/cart`;
-        
-        // If the user is logged in, use secureUserFetch. Otherwise, use standard fetch.
         const fetcher = isUserLoggedIn() ? secureUserFetch : fetch;
         
         const response = await fetcher(url, { method: 'GET' });
 
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to fetch cart data from API.');
+            throw new Error(errorData.message || 'Failed to fetch cart data.');
         }
 
         cartData = await response.json();
@@ -1039,13 +1022,12 @@ async function fetchInitialCartData() {
             return;
         }
         
-        // Render the data received from the API (which should now be ₦70,000.00)
         renderCartData(cartData, paymentBtn);
         
     } catch (error) {
-        console.error('Error fetching cart data for checkout:', error);
-        itemsListEl.innerHTML = '<div class="text-center py-6 text-red-500">Error loading cart. Please go back to cart.</div>';
-        displayMessage(error.message || 'An error occurred loading your cart. Please try again.');
+        console.error('Error fetching cart data:', error);
+        itemsListEl.innerHTML = '<div class="text-center py-6 text-red-500">Error loading cart.</div>';
+        displayMessage(error.message);
         paymentBtn.disabled = true;
     }
 }
