@@ -936,60 +936,64 @@ async function fetchInitialCartData() {
     const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
     
     // =========================================================================
-    // 🎯 BUY NOW / PRE-ORDER LOGIC START: (Only proceed if NO standard cart items exist)
+    // 🎯 BUY NOW / PRE-ORDER LOGIC START
     // =========================================================================
-    
-    if (buyNowItemJSON && !isStandardCartCheckout) { // ⭐ CRITICAL CHANGE HERE: ADD `&& !isStandardCartCheckout`
+    if (buyNowItemJSON && !isStandardCartCheckout) { 
         console.log("Processing Buy Now flow...");
         
-        let item = JSON.parse(buyNowItemJSON);
-
-        // ⭐ CRITICAL FIXES FOR SERVER VALIDATION (Addressing 400 Bad Request) ⭐
+        // 1. Parse the JSON (which is an array [ {...} ])
+        const storedData = JSON.parse(buyNowItemJSON);
         
-        // 1. FIX: Ensure productType is present (Correcting faulty assignment from previous versions)
-        if (!item.productType || item.productType === "undefined" || item.productType === null) {
-            item.productType = 'Uncategorized'; // *** FIX: Use assignment = ***
-            console.warn(`Fixed invalid productType to '${item.productType}' for Buy Now item.`);
+        // 2. Extract the actual item object from the array
+        let item = Array.isArray(storedData) ? storedData[0] : storedData;
+
+        if (!item) {
+            console.error("Buy Now item is missing or malformed.");
+            return;
+        }
+
+        // ⭐ CRITICAL FIXES FOR SERVER VALIDATION ⭐
+        
+        // Ensure productType is valid (Backend needs this for shipping/tax)
+        if (!item.productType || item.productType === "undefined" || item.productType === "Uncategorized") {
+            // Fallback to 'Wears' or similar category if 'Uncategorized' triggers 400
+            item.productType = 'Wears'; 
+            console.warn(`Fixed invalid productType to '${item.productType}'`);
         }
         
-        // 2. Fix empty 'size' field (Critical for Caps which use variation as size identifier)
+        // Fix empty 'size' field using the variation string
         if (!item.size && item.variation) {
             item.size = item.variation; 
-            console.warn("Fixed empty size by using variation value for Buy Now item (Cap fix).");
         }
 
-        // 3. FIX: Ensure variationIndex is a positive integer or set a safe default of 1
-        const variationIndexNum = parseInt(item.variationIndex, 10);
-        if (isNaN(variationIndexNum) || variationIndexNum <= 0) {
-            item.variationIndex = 1; 
-            console.warn(`Fixed invalid variationIndex to 1 for Buy Now item.`);
-        } else {
-            item.variationIndex = variationIndexNum; // Ensure it's treated as a number
-        }
-        
-        // --- END CRITICAL FIXES ---
+        // Ensure variationIndex is a Number, not a string
+        item.variationIndex = parseInt(item.variationIndex, 10) || 1;
+
+        // 🎯 PAYLOAD PREPARATION
+        // If your backend calculate-buy-now expects an ARRAY (like the cart), use [item].
+        // If it expects a SINGLE OBJECT, use item.
+        const payload = Array.isArray(storedData) ? [item] : item;
 
         try {
-            // ⭐ FIX: Using secureUserFetch for protected API endpoint (handles token refresh)
             const response = await secureUserFetch(`${API_BASE_URL}/api/orders/calculate-buy-now`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(item) // Send the corrected item object
+                body: JSON.stringify(payload) 
             });
             
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.message || 'Failed to calculate Buy Now totals from API.');
+                throw new Error(errorData.message || 'Failed to calculate Buy Now totals.');
             }
 
             cartData = await response.json(); 
             renderCartData(cartData, paymentBtn);
-            return; // EXIT: Buy Now flow complete
+            return; 
 
         } catch (error) {
             console.error('Error fetching Buy Now totals:', error);
-            itemsListEl.innerHTML = '<div class="text-center py-6 text-red-500">Error calculating totals. Please try again.</div>';
-            displayMessage(error.message || 'A critical error occurred. Cannot proceed to checkout.');
+            itemsListEl.innerHTML = `<div class="text-center py-6 text-red-500">${error.message}</div>`;
+            displayMessage(error.message);
             return;
         }
     }
