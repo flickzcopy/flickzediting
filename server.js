@@ -2387,6 +2387,7 @@ const verifyToken = (req, res, next) => {
         
         // 5. Success: Attach admin data and proceed
         req.adminUser = decoded; 
+        req.adminId = decoded.id;
         next();
         
     } catch (err) {
