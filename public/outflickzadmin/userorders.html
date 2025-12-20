@@ -408,56 +408,68 @@
         }
     }
 
-    function renderOrderDetail(order) {
-        currentDetailOrderId = order._id;
-        showContent('orderdetails');
+  function renderOrderDetail(order) {
+    if (!order) return;
+    currentDetailOrderId = order._id;
+    
+    // Switch view to the details section
+    showContent('orderdetails');
 
-        // Header and IDs
-        document.getElementById('detail-order-id').textContent = (order.orderReference || order._id).substring(0, 8);
-        
-        // Customer Info
-        document.getElementById('detail-customer-name').textContent = order.userName || order.shippingAddress?.firstName || 'Guest';
-        document.getElementById('detail-customer-email').textContent = order.email || 'N/A';
-        document.getElementById('detail-date').textContent = formatDate(order.createdAt);
-        document.getElementById('detail-payment-method').textContent = order.paymentMethod;
+    // Update Header ID
+    const orderRef = order.orderReference || order._id || '';
+    document.getElementById('detail-order-id').textContent = orderRef.substring(0, 8);
+    
+    // Customer Info - Added Fallbacks
+    document.getElementById('detail-customer-name').textContent = order.userName || (order.shippingAddress && order.shippingAddress.firstName) || 'Guest';
+    document.getElementById('detail-customer-email').textContent = order.email || 'N/A';
+    document.getElementById('detail-date').textContent = formatDate(order.createdAt);
+    document.getElementById('detail-payment-method').textContent = order.paymentMethod || 'N/A';
 
-        // Pricing Info (Calculating subtotal if not explicitly provided)
-        const items = order.orderItems || order.items || [];
-        const subtotal = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-        
-        document.getElementById('detail-subtotal').textContent = formatNaira(subtotal);
-        document.getElementById('detail-shipping').textContent = formatNaira(order.shippingPrice || 0);
-        document.getElementById('detail-tax').textContent = formatNaira(order.taxPrice || 0);
-        document.getElementById('detail-total').textContent = formatNaira(order.totalAmount);
-        
-        // Table Items
+    // Pricing Info
+    // Try to find items in orderItems or items array
+    const items = order.orderItems || order.items || [];
+    const subtotal = items.reduce((acc, item) => acc + (Number(item.price) * Number(item.quantity)), 0);
+    
+    document.getElementById('detail-subtotal').textContent = formatNaira(subtotal);
+    document.getElementById('detail-shipping').textContent = formatNaira(order.shippingPrice || 0);
+    document.getElementById('detail-tax').textContent = formatNaira(order.taxPrice || 0);
+    document.getElementById('detail-total').textContent = formatNaira(order.totalAmount || subtotal);
+    
+    // Render Table Items
+    const detailItemsBody = document.getElementById('detail-items-body');
+    if (items.length > 0) {
         detailItemsBody.innerHTML = items.map(item => `
             <tr class="border-b">
-                <td class="px-4 py-3 text-sm text-gray-800 font-medium">${item.name}</td>
+                <td class="px-4 py-3 text-sm text-gray-800 font-medium">${item.name || 'Unknown Product'}</td>
                 <td class="px-4 py-3 text-sm text-gray-500">${item.variation || item.size || 'N/A'}</td>
                 <td class="px-4 py-3 text-sm text-right">${formatNaira(item.price)}</td>
                 <td class="px-4 py-3 text-sm text-center">${item.quantity}</td>
                 <td class="px-4 py-3 text-sm text-right font-bold">${formatNaira(item.price * item.quantity)}</td>
             </tr>
-        `).join('') || '<tr><td colspan="5" class="p-4 text-center text-gray-400">No items found</td></tr>';
+        `).join('');
+    } else {
+        detailItemsBody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-400">No items found in this order.</td></tr>';
+    }
 
-        // Receipt Image or Message
-        const receiptContainer = document.getElementById('receipt-container');
-        const isPaid = order.paymentStatus === 'Paid' || (Number(order.amountPaidKobo) > 0);
-        
-        if (isPaid) {
-            receiptContainer.innerHTML = `<div class="p-6 bg-emerald-50 text-emerald-700 border-2 border-dashed border-emerald-200 rounded-lg text-center font-bold">Verified Payment via ${order.paymentMethod}</div>`;
-        } else if (order.paymentReceiptUrl) {
-            receiptContainer.innerHTML = `<img src="${order.paymentReceiptUrl}" class="rounded-lg shadow-sm border max-h-96 mx-auto cursor-zoom-in hover:scale-[1.02] transition-transform" onclick="window.open(this.src)"/>`;
-        } else {
-            receiptContainer.innerHTML = `<p class="text-gray-400 p-8 text-center italic border rounded-lg">No proof of payment provided.</p>`;
-        }
+    // Receipt Section
+    const receiptContainer = document.getElementById('receipt-container');
+    const isPaid = order.paymentStatus === 'Paid' || (order.amountPaidKobo && Number(order.amountPaidKobo) > 0);
+    
+    if (isPaid) {
+        receiptContainer.innerHTML = `<div class="p-6 bg-emerald-50 text-emerald-700 border-2 border-dashed border-emerald-200 rounded-lg text-center font-bold">Verified Payment via ${order.paymentMethod}</div>`;
+    } else if (order.paymentReceiptUrl) {
+        receiptContainer.innerHTML = `<img src="${order.paymentReceiptUrl}" class="rounded-lg shadow-sm border max-h-96 mx-auto cursor-zoom-in" onclick="window.open(this.src)"/>`;
+    } else {
+        receiptContainer.innerHTML = `<p class="text-gray-400 p-8 text-center italic border rounded-lg">No proof of payment provided.</p>`;
+    }
 
-        // Action Buttons Logic
-        const confirmBtn = document.getElementById('detail-confirm-btn');
-        const isConfirmable = ['Pending', 'Inventory Failure (Manual Review)'].includes(order.status);
+    // Visibility of Confirm Button
+    const confirmBtn = document.getElementById('detail-confirm-btn');
+    const isConfirmable = ['Pending', 'Inventory Failure (Manual Review)'].includes(order.status);
+    if (confirmBtn) {
         confirmBtn.classList.toggle('hidden', !isConfirmable);
     }
+}
 
     async function confirmOrderFromDetails() {
         if (!currentDetailOrderId) return;
