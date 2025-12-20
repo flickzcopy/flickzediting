@@ -230,6 +230,11 @@
 
     let currentDetailOrderId = null; 
 
+    // --- SIDEBAR TOGGLE LOGIC ---
+    document.getElementById('sidebar-toggle').addEventListener('click', () => {
+        sidebar.classList.toggle('-translate-x-full');
+    });
+
     // --- NAVIGATION FUNCTIONS ---
     function navigateToDashboard() { if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full'); window.location.href = './admin-dashboard.html'; }
     function navigateToWearsCollection() { if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full'); window.location.href = './wearscollection.html'; }
@@ -328,115 +333,134 @@
         }
     }
 
-   function renderOrders(orders) {
-    const validOrders = orders.filter(order => {
-        // Only hide Paystack orders if they are strictly "Pending" and "Unpaid"
-        // If the webhook or verify route moved it to "Processing", we want to see it!
-        if (order.paymentMethod === 'Paystack') {
-            const isUnreleased = order.isPaystackPending === true;
-            const isPending = order.status === 'Pending';
-            
-            // If it's still stuck in Paystack's "Pending" flow, hide it from Admin
-            if (isUnreleased && isPending) return false;
+    function renderOrders(orders) {
+        const validOrders = orders.filter(order => {
+            if (order.paymentMethod === 'Paystack') {
+                const isUnreleased = order.isPaystackPending === true;
+                const isPending = order.status === 'Pending';
+                if (isUnreleased && isPending) return false;
+            }
+            return true; 
+        });
+
+        ordersTableBody.innerHTML = '';
+        pendingCountElement.textContent = `${validOrders.length} Orders Requiring Action`;
+
+        if (validOrders.length === 0) {
+            ordersTableContainer.classList.add('hidden');
+            emptyState.classList.remove('hidden');
+            return;
         }
-        return true; 
-    });
 
-    ordersTableBody.innerHTML = '';
-    pendingCountElement.textContent = `${validOrders.length} Orders Requiring Action`;
+        emptyState.classList.add('hidden');
+        ordersTableContainer.classList.remove('hidden');
 
-    if (validOrders.length === 0) {
-        ordersTableContainer.classList.add('hidden');
-        emptyState.classList.remove('hidden');
-        return;
+        validOrders.forEach(order => {
+            const tr = document.createElement('tr');
+            tr.className = 'hover:bg-gray-50 transition-colors';
+            
+            const isPaid = order.paymentStatus === 'Paid' || (Number(order.amountPaidKobo) >= (Number(order.totalAmount) * 100));
+            const statusClass = order.status.includes('Failure') ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-800';
+
+            tr.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-mono font-bold text-gray-700">
+                    #${(order.orderReference || order._id).substring(0, 8)}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm font-bold text-gray-900">${order.userName || order.shippingAddress?.firstName || 'Guest'}</div>
+                    <div class="text-xs text-gray-500">${order.email || 'No Email'}</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="px-2 py-1 text-[10px] font-bold rounded-full uppercase ${isPaid ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'}">
+                        ${order.paymentMethod} ${isPaid ? '✔ PAID' : '⌛ AWAITING'}
+                    </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-700">
+                    ${formatNaira(order.totalAmount)}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                    <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${statusClass}">
+                        ${order.status}
+                    </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                    <button onclick="handleViewDetails('${order._id}')" 
+                            class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-bold rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 transition-all">
+                        View & Confirm
+                    </button>
+                </td>
+            `;
+            ordersTableBody.appendChild(tr);
+        });
     }
 
-    emptyState.classList.add('hidden');
-    ordersTableContainer.classList.remove('hidden');
+    // --- FETCH SINGLE ORDER DETAILS ---
+    async function handleViewDetails(orderId) {
+        loadingIndicator.classList.remove('hidden');
+        try {
+            const response = await authorizedFetch(`/api/admin/orders/${orderId}`);
+            if (response && response.ok) {
+                const order = await response.json();
+                renderOrderDetail(order);
+            } else {
+                showToast('Could not fetch order details.', 'bg-red-500');
+            }
+        } catch (error) {
+            console.error("Error fetching order details:", error);
+            showToast('An error occurred while loading details.', 'bg-red-500');
+        } finally {
+            loadingIndicator.classList.add('hidden');
+        }
+    }
 
-    validOrders.forEach(order => {
-        const tr = document.createElement('tr');
-        tr.className = 'hover:bg-gray-50 transition-colors';
+    function renderOrderDetail(order) {
+        currentDetailOrderId = order._id;
+        showContent('orderdetails');
+
+        document.getElementById('detail-order-id').textContent = (order.orderReference || order._id).substring(0, 8);
+        document.getElementById('detail-customer-name').textContent = order.userName || order.shippingAddress?.firstName || 'Guest';
+        document.getElementById('detail-customer-email').textContent = order.email || 'N/A';
+        document.getElementById('detail-date').textContent = formatDate(order.createdAt);
+        document.getElementById('detail-payment-method').textContent = order.paymentMethod;
+        document.getElementById('detail-total').textContent = formatNaira(order.totalAmount);
         
-        // Logical check for "Paid" badge
-        const isPaid = order.paymentStatus === 'Paid' || (Number(order.amountPaidKobo) >= (Number(order.totalAmount) * 100));
-        const statusClass = order.status.includes('Failure') ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-800';
+        // Populating subtotal, shipping, and tax
+        document.getElementById('detail-subtotal').textContent = formatNaira(order.subtotal || 0);
+        document.getElementById('detail-shipping').textContent = formatNaira(order.shippingPrice || 0);
+        document.getElementById('detail-tax').textContent = formatNaira(order.taxPrice || 0);
 
-        tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-mono font-bold text-gray-700">
-                #${(order.orderReference || order._id).substring(0, 8)}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm font-bold text-gray-900">${order.userName || order.shippingAddress?.firstName || 'Guest'}</div>
-                <div class="text-xs text-gray-500">${order.email || 'No Email'}</div>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap">
-                <span class="px-2 py-1 text-[10px] font-bold rounded-full uppercase ${isPaid ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'}">
-                    ${order.paymentMethod} ${isPaid ? '✔ PAID' : '⌛ AWAITING'}
-                </span>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-700">
-                ${formatNaira(order.totalAmount)}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${statusClass}">
-                    ${order.status}
-                </span>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                <button onclick="handleViewDetails('${order._id}')" 
-                        class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-bold rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 transition-all">
-                    View & Confirm
-                </button>
-            </td>
-        `;
-        ordersTableBody.appendChild(tr);
-    });
-}
+        // Render Items
+        detailItemsBody.innerHTML = (order.orderItems || order.items || []).map(item => `
+            <tr class="border-b">
+                <td class="px-4 py-3 text-sm text-gray-800 font-medium">${item.name}</td>
+                <td class="px-4 py-3 text-sm text-gray-800">${item.variantName || 'Default'}</td>
+                <td class="px-4 py-3 text-sm text-right">${formatNaira(item.price)}</td>
+                <td class="px-4 py-3 text-sm text-center">${item.quantity}</td>
+                <td class="px-4 py-3 text-sm text-right font-bold">${formatNaira(item.price * item.quantity)}</td>
+            </tr>
+        `).join('') || '<tr><td colspan="5" class="p-4 text-center text-gray-400">No items found</td></tr>';
 
-  function renderOrderDetail(order) {
-    currentDetailOrderId = order._id;
-    showContent('orderdetails');
+        const receiptContainer = document.getElementById('receipt-container');
+        const isPaid = order.paymentStatus === 'Paid' || (Number(order.amountPaidKobo) > 0);
+        
+        if (isPaid) {
+            receiptContainer.innerHTML = `<div class="p-6 bg-emerald-50 text-emerald-700 border-2 border-dashed border-emerald-200 rounded-lg text-center font-bold">Verified Payment via ${order.paymentMethod}</div>`;
+        } else if (order.paymentReceiptUrl) {
+            receiptContainer.innerHTML = `<img src="${order.paymentReceiptUrl}" class="rounded-lg shadow-sm border max-h-96 mx-auto cursor-zoom-in" onclick="window.open(this.src)"/>`;
+        } else {
+            receiptContainer.innerHTML = `<p class="text-gray-400 p-8 text-center italic border rounded-lg">No proof of payment provided.</p>`;
+        }
 
-    document.getElementById('detail-order-id').textContent = (order.orderReference || order._id).substring(0, 8);
-    document.getElementById('detail-customer-name').textContent = order.userName || order.shippingAddress?.firstName || 'Guest';
-    document.getElementById('detail-customer-email').textContent = order.email || 'N/A';
-    document.getElementById('detail-date').textContent = formatDate(order.createdAt);
-    document.getElementById('detail-payment-method').textContent = order.paymentMethod;
-    document.getElementById('detail-total').textContent = formatNaira(order.totalAmount);
-    
-    // Render Items
-    detailItemsBody.innerHTML = (order.orderItems || order.items || []).map(item => `
-        <tr class="border-b">
-            <td class="px-4 py-3 text-sm text-gray-800 font-medium">${item.name}</td>
-            <td class="px-4 py-3 text-sm text-center">${item.quantity}</td>
-            <td class="px-4 py-3 text-sm text-right">${formatNaira(item.price)}</td>
-            <td class="px-4 py-3 text-sm text-right font-bold">${formatNaira(item.price * item.quantity)}</td>
-        </tr>
-    `).join('') || '<tr><td colspan="4" class="p-4 text-center text-gray-400">No items found</td></tr>';
-
-    const receiptContainer = document.getElementById('receipt-container');
-    const isPaid = order.paymentStatus === 'Paid' || (Number(order.amountPaidKobo) > 0);
-    
-    if (isPaid) {
-        receiptContainer.innerHTML = `<div class="p-6 bg-emerald-50 text-emerald-700 border-2 border-dashed border-emerald-200 rounded-lg text-center font-bold">Verified Payment via ${order.paymentMethod}</div>`;
-    } else if (order.paymentReceiptUrl) {
-        receiptContainer.innerHTML = `<img src="${order.paymentReceiptUrl}" class="rounded-lg shadow-sm border max-h-96 mx-auto cursor-zoom-in" onclick="window.open(this.src)"/>`;
-    } else {
-        receiptContainer.innerHTML = `<p class="text-gray-400 p-8 text-center italic border rounded-lg">No proof of payment provided.</p>`;
+        const confirmBtn = document.getElementById('detail-confirm-btn');
+        const isConfirmable = ['Pending', 'Inventory Failure (Manual Review)'].includes(order.status);
+        confirmBtn.classList.toggle('hidden', !isConfirmable);
     }
-
-    // ⭐ HIDE BUTTON if already confirmed to prevent 409 Conflict
-    const confirmBtn = document.getElementById('detail-confirm-btn');
-    const isConfirmable = ['Pending', 'Inventory Failure (Manual Review)'].includes(order.status);
-    confirmBtn.classList.toggle('hidden', !isConfirmable);
-}
 
     async function confirmOrderFromDetails() {
         if (!currentDetailOrderId) return;
         const btn = document.getElementById('detail-confirm-btn');
         btn.disabled = true;
-        btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Processing...`;
+        btn.innerHTML = `<span class="animate-spin inline-block mr-2">↻</span> Processing...`;
 
         try {
             const response = await authorizedFetch(`/api/admin/orders/${currentDetailOrderId}/confirm`, { 
