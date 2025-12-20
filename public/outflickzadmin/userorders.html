@@ -269,9 +269,11 @@
         }, 3000);
     }
 
-    // --- API Wrapper with Auth Handling ---
+// --- API Wrapper with Auth Handling (Upgraded with Refresh Logic) ---
     async function authorizedFetch(url, options = {}) {
-        const token = localStorage.getItem('adminToken');
+        const REFRESH_ENDPOINT = '/api/admin/refresh-token'; 
+        let token = localStorage.getItem('adminToken');
+
         if (!token) {
             window.location.href = './admin-login.html';
             return null;
@@ -283,48 +285,62 @@
             'Content-Type': 'application/json'
         };
 
-        const response = await fetch(url, { ...options, headers });
+        let response = await fetch(url, { ...options, headers });
 
+        // If unauthorized, check if it's expired and try to refresh
         if (response.status === 401) {
-            const data = await response.json();
-            if (data.expired) {
-                showToast("Session Expired. Please log in again.", "bg-orange-600");
-                setTimeout(logoutAdmin, 2000);
-            } else {
-                logoutAdmin();
+            try {
+                const data = await response.clone().json();
+                
+                if (data.expired === true) {
+                    console.warn('Admin Session Expired. Attempting silent refresh...');
+                    
+                    // Call the refresh endpoint (this uses the secure HTTP-only cookie)
+                    const refreshResponse = await fetch(REFRESH_ENDPOINT, { method: 'POST' });
+                    
+                    if (refreshResponse.ok) {
+                        const refreshData = await refreshResponse.json();
+                        const newToken = refreshData.accessToken || refreshData.token;
+                        
+                        // Save the new token
+                        localStorage.setItem('adminToken', newToken);
+                        
+                        // Retry the original request with the NEW token
+                        headers['Authorization'] = `Bearer ${newToken}`;
+                        console.log('Token refreshed successfully. Retrying request...');
+                        return await fetch(url, { ...options, headers });
+                    }
+                }
+            } catch (e) {
+                console.error("Refresh flow failed:", e);
             }
+
+            // If refresh fails or it wasn't an "expired" error, log out
+            showToast("Session Expired. Please log in again.", "bg-orange-600");
+            setTimeout(logoutAdmin, 2000);
             return null;
         }
+        
         return response;
     }
 
- // --- Core Logic ---
-    async function loadUserOrders() {
-        // 1. UI Setup: Show the loading spinner
+ async function loadUserOrders() {
         loadingIndicator.classList.remove('hidden');
-        
         try {
-            // ⭐️ FIX: Use secureFetch instead of authorizedFetch to handle token refresh
-            // This ensures that if the admin session expires, it refreshes automatically.
-            const response = await secureFetch('/api/admin/orders/pending');
+            // Use the name you ALREADY have in your script
+            const response = await authorizedFetch('/api/admin/orders/pending');
             
-            // If secureFetch initiated a redirect (401/403), exit early
-            if (!response || response.status === 401 || response.status === 403) return;
-
+            if (!response) return; // authorizedFetch handles the redirect/toast
+            
             if (response.ok) {
                 const orders = await response.json();
-                
-                // 2. Data Processing: The renderOrders function now applies the strict check 
-                // to filter out abandoned Paystack checkouts.
+                // renderOrders still handles the strict filtering (Paid vs Awaiting)
                 renderOrders(Array.isArray(orders) ? orders : []);
-            } else {
-                throw new Error(`Server returned status: ${response.status}`);
             }
         } catch (error) {
-            console.error("Fetch Orders Error:", error);
-            showToast('Failed to load orders. Please check your connection.', 'bg-red-500');
+            console.error("Load Orders Error:", error);
+            showToast('Failed to load orders.', 'bg-red-500');
         } finally {
-            // 3. UI Cleanup: Always hide the loading spinner
             loadingIndicator.classList.add('hidden');
         }
     }
