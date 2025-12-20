@@ -6199,12 +6199,12 @@ app.delete('/api/users/cart', verifyUserToken, async (req, res) => {
         res.status(500).json({ message: 'Failed to clear shopping bag.' });
     }
 });
-
+// --- 1. WEBHOOK ENDPOINT ---
 app.post('/api/paystack/webhook', async (req, res) => {
     const secret = process.env.PAYSTACK_SECRET_KEY;
     const paystackSignature = req.headers['x-paystack-signature'];
     
-    // 1. Verify Signature to ensure request is actually from Paystack
+    // Verify Signature
     const hash = crypto.createHmac('sha512', secret)
                        .update(JSON.stringify(req.body))
                        .digest('hex');
@@ -6219,10 +6219,8 @@ app.post('/api/paystack/webhook', async (req, res) => {
     const orderId = transactionData.metadata?.order_id || transactionData.metadata?.orderId;
     const OrderModel = mongoose.models.Order || mongoose.model('Order');
 
-    // 2. HANDLE SUCCESSFUL PAYMENT
     if (event.event === 'charge.success') {
         try {
-            // Find by ID (from metadata) OR by Reference (fallback)
             const updatedOrder = await OrderModel.findOneAndUpdate(
                 { 
                     $or: [
@@ -6232,10 +6230,10 @@ app.post('/api/paystack/webhook', async (req, res) => {
                 },
                 {
                     paymentStatus: 'Paid',           
-                    status: 'Processing',            // Critical: Changes from 'Pending'
+                    status: 'Processing',            
                     amountPaidKobo: transactionData.amount, 
                     paymentTxnId: transactionData.reference,
-                    isPaystackPending: false,        // Release the strict check flag
+                    isPaystackPending: false,        
                     $push: { 
                         notes: `Paystack Verified (${new Date().toLocaleString()}): Ref ${transactionData.reference}` 
                     }
@@ -6244,67 +6242,52 @@ app.post('/api/paystack/webhook', async (req, res) => {
             );
 
             if (!updatedOrder) {
-                console.error(`❌ Webhook Error: Order not found for ID: ${orderId} or Ref: ${transactionData.reference}`);
+                console.error(`❌ Webhook Error: Order not found for Ref: ${transactionData.reference}`);
                 return res.status(404).send('Order not found');
             }
 
-            console.log(`✅ Order ${updatedOrder._id} verified and released to Admin Dashboard.`);
+            console.log(`✅ Order ${updatedOrder._id} released to Dashboard.`);
             return res.status(200).send('Success');
-
         } catch (error) {
             console.error(`❌ Webhook DB Error: ${error.message}`);
             return res.status(500).send('Internal Server Error'); 
         }
     }
-
-    // 3. HANDLE FAILED PAYMENT
-    if (event.event === 'charge.failed') {
-        try {
-            await OrderModel.findOneAndUpdate(
-                { 
-                    $or: [
-                        { _id: mongoose.Types.ObjectId.isValid(orderId) ? orderId : null },
-                        { orderReference: transactionData.reference }
-                    ]
-                },
-                {
-                    paymentStatus: 'Failed',
-                    $push: { notes: `Paystack Failed (${new Date().toLocaleString()}): ${transactionData.gateway_response}` }
-                }
-            );
-        } catch (err) { 
-            console.error('Error logging failure:', err.message); 
-        }
-        return res.status(200).send('Failure logged');
-    }
-
     res.status(200).send('Event acknowledged');
 });
 
+// --- 2. MANUAL VERIFY ROUTE ---
 app.get('/api/orders/verify/:reference', verifyUserToken, async (req, res) => {
     const { reference } = req.params;
+    // ⭐ FIX: Define OrderModel clearly here
+    const OrderModel = mongoose.models.Order || mongoose.model('Order');
 
     try {
-        // 1. Ask Paystack directly if this reference is paid
-        const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
+        const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
             headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }
         });
         const data = await response.json();
 
         if (data.status && data.data.status === 'success') {
-            // 2. Update the DB immediately
-            await Order.findOneAndUpdate(
+            // ⭐ FIX: Changed 'Order' to 'OrderModel' to match definition
+            const updated = await OrderModel.findOneAndUpdate(
                 { orderReference: reference },
                 { 
                     paymentStatus: 'Paid', 
                     status: 'Processing',
-                    amountPaidKobo: data.data.amount 
-                }
+                    amountPaidKobo: data.data.amount,
+                    isPaystackPending: false // Release for Dashboard
+                },
+                { new: true }
             );
-            return res.status(200).json({ message: 'Verified' });
+
+            if (updated) {
+                return res.status(200).json({ message: 'Verified', status: 'Paid' });
+            }
         }
-        res.status(400).json({ message: 'Not verified' });
+        res.status(400).json({ message: 'Payment verification failed at Paystack' });
     } catch (error) {
+        console.error("Manual Verify Error:", error);
         res.status(500).json({ message: error.message });
     }
 });
