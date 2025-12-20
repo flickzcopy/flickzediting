@@ -214,95 +214,67 @@ async function secureUserFetch(url, options = {}) {
     return response;
 }
 
-
 /**
  * Handles the logic for a "Buy Now" action.
- * It bypasses the cart and immediately redirects to checkout with the selected item.
- * @param {object} itemDetails - The product object passed from the button's onclick.
+ * Optimized to ensure data integrity and prevent 400 Bad Request errors.
  */
 function simulateBuyNow(itemDetails) {
-    
-    // Locate the card to find the input elements
     const card = document.querySelector(`.collection-card[data-collection-id="${itemDetails.productId}"]`);
-    if (!card) return; // Exit if product card not found
+    if (!card) return;
 
-    // --- 1. Gather Quantity ---
-    // Use a unified approach to get the quantity input
     const quantityInput = card.querySelector(`#quantity-input-${itemDetails.productId}`);
-    const selectedQuantity = parseInt(quantityInput?.value) || 1; // Use optional chaining for safety
+    const selectedQuantity = parseInt(quantityInput?.value) || 1; 
 
-    // --- 2. Gather Size & Color (Standardized Approach) ---
-    // Use the reliable selectors from simulateAddToCart
     const selectedSizeInput = card.querySelector(`input[name="size-${itemDetails.productId}"]:checked`);
     const selectedColorInput = card.querySelector(`input[name="color-${itemDetails.productId}"]:checked`);
     
-    // Assign the values
+    const sizeOptions = card.querySelectorAll(`input[name="size-${itemDetails.productId}"]`);
+    if (sizeOptions.length > 0 && !selectedSizeInput) {
+        alert("Please select a size before clicking Buy Now.");
+        return;
+    }
+
     const selectedSize = selectedSizeInput ? selectedSizeInput.value : '';
     const selectedColor = selectedColorInput ? selectedColorInput.value : '';
 
-
-    // --- 3. Determine variationIndex and Image (ENHANCED LOGIC) ---
     let variationIndex = 1; 
     let selectedImageUrl = itemDetails.imageUrl;
     
-    // The logic to find colorMapContainer using `card` is now available here:
+    // 3. Logic for Variation Index and Image Updates
     if (selectedColor) { 
         const colorMapContainer = card.querySelector(`#color-map-${itemDetails.productId}`);
-        
         if (colorMapContainer) {
             try {
                 const colorMap = JSON.parse(colorMapContainer.getAttribute('data-color-map'));
-                const colorHex = selectedColor; 
-                
-                const colorMapKeys = Object.keys(colorMap);
-                const inferredIndex = colorMapKeys.indexOf(colorHex);
-                
+                const colorKeys = Object.keys(colorMap);
+                const inferredIndex = colorKeys.indexOf(selectedColor);
                 if (inferredIndex !== -1) {
-                    // ⭐ CRITICAL FIX: Convert 0-based client index to 1-based server index! ⭐
                     variationIndex = inferredIndex + 1; 
-                    
-                    const newImageUrls = colorMap[colorHex];
-                    if (newImageUrls && newImageUrls.frontImageUrl) {
-                        selectedImageUrl = newImageUrls.frontImageUrl;
-                    }
+                    const newImageUrls = colorMap[selectedColor];
+                    if (newImageUrls?.frontImageUrl) selectedImageUrl = newImageUrls.frontImageUrl;
                 }
-            } catch (e) {
-                console.error("Error parsing color map data:", e);
-            }
+            } catch (e) { console.error("Color map error", e); }
         }
     }
 
-    
-    // ⭐ CRITICAL FIX: Standardize fallback to 'Uncategorized' or product name ⭐
-    const safeProductType = itemDetails.productType || itemDetails.name;
-
-    // --- CONSTRUCT THE FINAL CHECKOUT ITEM ---
     const itemToCheckout = {
         productId: itemDetails.productId, 
         name: itemDetails.name,
-        productType: safeProductType, 
-        price: itemDetails.price,
+        productType: itemDetails.productType || 'Wears', 
+        price: parseFloat(itemDetails.price),
         imageUrl: selectedImageUrl, 
         quantity: selectedQuantity,
         size: selectedSize, 
         color: selectedColor, 
         variationIndex: variationIndex,
-        variation: (selectedColor !== '' && selectedSize !== '') 
+        variation: (selectedColor && selectedSize) 
             ? `${selectedColor} / ${selectedSize}`
-            : (selectedColor !== '' ? selectedColor : (selectedSize !== '' ? selectedSize : 'Default Variant')),
-        checkout: true // Flag to indicate this is a "Buy Now" item for the checkout page
+            : (selectedColor || selectedSize || 'Default')
     };
 
-    // 🌟 Console Log 1 (The original log)
-    console.log("Preparing for Buy Now Checkout:", itemToCheckout);
+    console.log("Storing Buy Now payload:", itemToCheckout);
+    sessionStorage.setItem('buyNowItem', JSON.stringify([itemToCheckout])); 
     
-    // 🌟 Console Log 2 (Detailed diagnostic log for the 400 error)
-    console.log(`[BUY NOW DIAGNOSTIC] Product: ${itemToCheckout.name} | Type: ${itemToCheckout.productType} | Variation Index: ${itemToCheckout.variationIndex} | Color: ${itemToCheckout.color}`);
-    
-    // 🎯 CRITICAL STEP: Store the single item in Session Storage for checkout.html to retrieve
-    sessionStorage.setItem('buyNowItem', JSON.stringify(itemToCheckout));
-    
-    // Redirect the user to the checkout page
     window.location.href = 'checkout.html';
 }
 
@@ -1649,7 +1621,7 @@ function closeImageModal() {
         </div>
     </footer>
     
-    <a href="https://t.me/+2347042882706" 
+ <a href="https://t.me/+2349125898200" 
         target="_blank"
         class="fixed bottom-6 right-24 z-50 
                bg-[#24A1DE] text-white 
