@@ -461,7 +461,7 @@ async function handleViewDetails(orderId) {
         }
 
         const confirmBtn = document.getElementById('detail-confirm-btn');
-        const isConfirmable = ['Pending', 'Inventory Failure (Manual Review)'].includes(order.status);
+        const isConfirmable = ['Pending','Processing', 'Inventory Failure (Manual Review)'].includes(order.status);
         confirmBtn.classList.toggle('hidden', !isConfirmable);
     }
 
