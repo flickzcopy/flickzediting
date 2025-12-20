@@ -1531,6 +1531,7 @@ async function processOrderCompletion(orderId, adminId) {
 // ====================================================================================
 // NEW: DEDUCT INVENTORY AND MARK ORDER AS COMPLETED (For Webhooks/Automation)
 // ====================================================================================
+
 /**
  * Executes the inventory deduction and sets the order status to 'Completed'.
  * This is designed to be called by automated systems like webhooks.
@@ -6164,7 +6165,7 @@ app.post('/api/paystack/webhook', async (req, res) => {
                     paymentStatus: 'Paid',           // Money is in
                     paymentMethod: 'Paystack',
                     paymentTxnId: transactionData.reference,
-                    // We keep status: 'Pending' so it stays in the Admin "To-Do" list
+                    status: 'Processing',
                     $push: { 
                         notes: `Paystack Payment Successful (${new Date().toLocaleString()}): Ref ${transactionData.reference}` 
                     }

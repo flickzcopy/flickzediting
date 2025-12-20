@@ -858,35 +858,40 @@ async function viewOrderDetails(orderId, userId) {
         
         // --- ⭐ CRITICAL NEW STATUS TRANSITION LOGIC ---
         newOrderStatusSelect.innerHTML = ''; // Clear existing options
-        
-        let validNextStatuses = [];
-        
-        switch (currentStatus) {
-            case 'Pending':
-            case 'Inventory Failure (Manual Review)':
-            case 'Amount Mismatch (Manual Review)':
-                // Admin must confirm the order (manual path)
-                validNextStatuses.push('Confirmed'); 
-                break;
-            case 'Confirmed':
-                // Confirmed is the step before shipping (manual path)
-                validNextStatuses.push('Shipped');
-                break;
-            case 'Completed':
-                // Completed means it's paid and inventoried (system path). Next step is shipping.
-                validNextStatuses.push('Shipped');
-                break;
-            case 'Shipped':
-                validNextStatuses.push('Delivered');
-                break;
-            case 'Delivered':
-            case 'Cancelled':
-            default:
-                // Final statuses, no further transitions via this form.
-                break;
-        }
+      
 
-        // Add current status as default, disabled option
+let validNextStatuses = [];
+
+switch (currentStatus) {
+    case 'Pending':
+    case 'Inventory Failure (Manual Review)':
+    case 'Amount Mismatch (Manual Review)':
+        // These require Admin to verify payment/stock manually
+        validNextStatuses.push('Confirmed'); 
+        break;
+        
+    case 'Confirmed':
+        // Manual confirmation received, now ready for dispatch
+        validNextStatuses.push('Shipped');
+        break;
+        
+    case 'Completed':
+        // 'Completed' is the system-auto-confirmed state (Paid + Stock OK)
+        // Next logical step for Admin is to ship it.
+        validNextStatuses.push('Shipped');
+        break;
+        
+    case 'Shipped':
+        validNextStatuses.push('Delivered');
+        break;
+
+    case 'Delivered':
+    case 'Cancelled':
+        // No further actions possible
+        break;
+}
+
+      // Add current status as default, disabled option
         const currentOption = new Option(`Current: ${currentStatus}`, currentStatus, true, true);
         currentOption.disabled = true;
         newOrderStatusSelect.add(currentOption);
