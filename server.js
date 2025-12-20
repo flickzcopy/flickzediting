@@ -3207,17 +3207,20 @@ app.put('/api/admin/orders/:orderId/confirm', verifyToken, async (req, res) => {
 
     try {
         // 1. Initial status change from 'Pending' to 'Processing' (The "CLAIM" step.)
-        const updatedOrder = await Order.findOneAndUpdate(
-            { _id: orderId, status: 'Pending' }, 
-            { 
-                $set: { 
-                    status: 'Processing', // Claim the order for this worker thread
-                    confirmedAt: new Date(), 
-                    confirmedBy: adminId 
-                } 
-            },
-            { new: true, select: 'userId status totalAmount items' } 
-        ).lean();
+      const updatedOrder = await Order.findOneAndUpdate(
+    { 
+        _id: orderId, 
+        status: { $in: ['Pending', 'Processing'] } // ✅ Accepts both
+    }, 
+    { 
+        $set: { 
+            status: 'Processing', 
+            confirmedAt: new Date(), 
+            confirmedBy: adminId 
+        } 
+    },
+    { new: true, select: 'userId status totalAmount items' } 
+).lean();
 
         // Check if the order was successfully found and updated.
         if (!updatedOrder) {
