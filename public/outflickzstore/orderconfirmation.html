@@ -656,8 +656,8 @@ function displayConfirmationDetails() {
     const urlParams = new URLSearchParams(window.location.search);
     // ⭐ CRITICAL FIX: Prioritize 'id' (MongoDB ID) first, then fallback to 'ref' (Paystack Ref)
     const orderId = urlParams.get('id') || urlParams.get('ref'); 
-    const method = urlParams.get('method');
-    
+// 2. FIX: Provide a fallback for 'method' so the page doesn't crash
+    const method = urlParams.get('method') || 'paystack';    
     console.log(`[Confirmation] URL Params - ID/Ref: ${orderId}, Method: ${method}`);
 
     const orderRefEl = document.getElementById('order-ref-number');

@@ -1241,18 +1241,18 @@ async function processPaystackPayment(totalAmount, email) {
     handler.openIframe();
 }
 
-// ⭐ Helper function to handle the async verification logic
 async function verifyPayment(reference) {
     try {
         await secureUserFetch(`${API_BASE_URL}/api/orders/verify/${reference}`);
         
-        // Success! Clear cart and redirect
+        // SUCCESS! Update the redirect to include the method
         localStorage.removeItem(LOCAL_CART_KEY);
         sessionStorage.removeItem(BUY_NOW_KEY);
-        window.location.href = `orderconfirmation.html?ref=${reference}`;
+        // FIX: Added &method=paystack
+        window.location.href = `orderconfirmation.html?ref=${reference}&method=paystack`; 
     } catch (err) {
-        // Fallback: Webhook will eventually catch it
-        window.location.href = `orderconfirmation.html?ref=${reference}`;
+        // FALLBACK: Update this redirect as well
+        window.location.href = `orderconfirmation.html?ref=${reference}&method=paystack`;
     }
 }
 

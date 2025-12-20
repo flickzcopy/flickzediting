@@ -493,6 +493,42 @@ async function handleViewDetails(orderId) {
         }
     }
 
+    async function cancelOrderFromDetails() {
+        if (!currentDetailOrderId) return;
+        
+        // Confirmation dialog to prevent accidental clicks
+        if (!confirm("Are you sure you want to cancel this order? This action cannot be undone.")) return;
+
+        const btn = document.getElementById('detail-cancel-btn'); // Ensure your HTML ID matches this
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<span class="animate-spin inline-block mr-2">↻</span> Cancelling...`;
+        }
+
+        try {
+            const response = await authorizedFetch(`/api/admin/orders/${currentDetailOrderId}/cancel`, { 
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if (response && response.ok) {
+                showToast("Order Cancelled successfully.", "bg-gray-700");
+                await loadUserOrders(); 
+                showContent('userorders'); 
+            } else {
+                const err = await response.json();
+                throw new Error(err.message || "Failed to cancel order.");
+            }
+        } catch (error) {
+            showToast(error.message, "bg-red-500");
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = "❌ Cancel Order";
+            }
+        }
+    }
+    
     document.addEventListener('DOMContentLoaded', loadUserOrders);
 </script>
 </body>
