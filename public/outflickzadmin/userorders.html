@@ -228,14 +228,88 @@
     const pendingCountElement = document.getElementById('pending-count');
     const emptyState = document.getElementById('empty-state');
 
+
     let currentDetailOrderId = null; 
 
-    // --- Navigation ---
-    function navigateToDashboard() { window.location.href = './admin-dashboard.html'; }
-    function logoutAdmin() {
-        localStorage.removeItem('adminToken');
-        window.location.href = './admin-login.html'; 
+     // --- NAVIGATION FUNCTIONS (for redirection) ---
+
+    function navigateToUserOrders() {
+        // Close sidebar on mobile before redirecting
+        if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full');
+        window.location.href = './userorders.html';
     }
+    
+    function navigateToWearsCollection() {
+        // Close sidebar on mobile before redirecting
+        if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full');
+        window.location.href = './wearscollection.html';
+    }
+
+    function navigateToCapsCollection() {
+        // Close sidebar on mobile before redirecting
+        if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full');
+        window.location.href = './capscollection.html';
+    }
+    
+    function navigateToNewArrivals() {
+        // Close sidebar on mobile before redirecting
+        if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full');
+        window.location.href = './newarrivals.html';
+    }
+
+    function navigateToPreOrders() {
+        // Close sidebar on mobile before redirecting
+        if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full');
+        window.location.href = './preorders.html';
+    }
+
+    function navigateToMembership() {
+        // Close sidebar on mobile before redirecting
+        if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full');
+        window.location.href = './membership.html'; 
+    }
+
+      function navigateToEmailNews() {
+        // Close sidebar on mobile before redirecting
+        if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full');
+        window.location.href = './emailnews.html'; 
+    }
+    
+         function navigateToSettings() {
+        // Close sidebar on mobile before redirecting
+        if (window.innerWidth < 1024) sidebar.classList.add('-translate-x-full');
+        window.location.href = './settings.html'; 
+    }
+
+  /**
+     * Handles the admin logout process by clearing local state 
+     * and notifying the server to clear secure cookies.
+     */
+    async function logoutAdmin() {
+        console.log("Initiating Admin Logout...");
+
+        try {
+            // 1. Call the backend logout API to clear the secure Refresh Token cookie
+            // We use the standard fetch here or secureFetch
+            await fetch('/api/admin/logout', { 
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+                }
+            });
+        } catch (error) {
+            console.warn("Server-side logout failed or unreachable, proceeding with client-side cleanup.", error);
+        } finally {
+            // 2. Clear the Access Token from LocalStorage regardless of API success
+            localStorage.removeItem('adminToken');
+
+            // 3. Redirect to login page
+            window.location.href = './admin-login.html';
+        }
+    }
+
+    // --- INITIALIZATION AND UI LOGIC ---
+
 
     function showContent(sectionId) {
         document.querySelectorAll('.content-section').forEach(section => section.classList.add('hidden'));
@@ -344,7 +418,7 @@
             loadingIndicator.classList.add('hidden');
         }
     }
-    
+
    function renderOrders(orders) {
     // 1. FILTER: Strict check to hide unpaid/abandoned Paystack checkouts
     const validOrders = orders.filter(order => {

@@ -287,6 +287,33 @@
         }
         return token;
     }
+
+     /**
+     * Handles the admin logout process by clearing local state 
+     * and notifying the server to clear secure cookies.
+     */
+    async function logoutAdmin() {
+        console.log("Initiating Admin Logout...");
+
+        try {
+            // 1. Call the backend logout API to clear the secure Refresh Token cookie
+            // We use the standard fetch here or secureFetch
+            await fetch('/api/admin/logout', { 
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+                }
+            });
+        } catch (error) {
+            console.warn("Server-side logout failed or unreachable, proceeding with client-side cleanup.", error);
+        } finally {
+            // 2. Clear the Access Token from LocalStorage regardless of API success
+            localStorage.removeItem('adminToken');
+
+            // 3. Redirect to login page
+            window.location.href = './admin-login.html';
+        }
+    }
     
     // MODAL IMPLEMENTATION START
     function showModal(modal, messageElement, message) {
@@ -333,13 +360,7 @@
             confirmationCancelBtn.addEventListener('click', handleCancel);
         });
     }
-    // MODAL IMPLEMENTATION END
-    
-    function logoutAdmin() {
-        console.log("Admin logged out and token removed.");
-        localStorage.removeItem('adminToken');
-        // window.location.href = '/admin-login.html'; // Actual redirect
-    }
+   
     
     function updateColorPreview(colorValue, previewId) {
         const previewElement = document.getElementById(previewId);

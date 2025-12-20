@@ -441,12 +441,32 @@ function navigateToSettings() {
     window.location.href = './settings.html';
 }
 
-function logoutAdmin() {
-    console.log("Logging out... Clearing admin token.");
-    localStorage.removeItem('adminToken');
-    window.location.href = './admin-login.html';
-}
+ /**
+     * Handles the admin logout process by clearing local state 
+     * and notifying the server to clear secure cookies.
+     */
+    async function logoutAdmin() {
+        console.log("Initiating Admin Logout...");
 
+        try {
+            // 1. Call the backend logout API to clear the secure Refresh Token cookie
+            // We use the standard fetch here or secureFetch
+            await fetch('/api/admin/logout', { 
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+                }
+            });
+        } catch (error) {
+            console.warn("Server-side logout failed or unreachable, proceeding with client-side cleanup.", error);
+        } finally {
+            // 2. Clear the Access Token from LocalStorage regardless of API success
+            localStorage.removeItem('adminToken');
+
+            // 3. Redirect to login page
+            window.location.href = './admin-login.html';
+        }
+    }
 // --- INITIALIZATION AND UI LOGIC ---
 
 document.addEventListener('DOMContentLoaded', () => {

@@ -200,26 +200,37 @@
     let visitorChart; // Variable to hold the Chart.js instance
 
     // API_BASE_URL is not defined in the provided HTML, assuming it's relative or needs defining.
-    const API_BASE_URL = 'https://outflickz.com';
+    const API_BASE_URL = 'https://outflickzz.netlify.app'; 
 
     // --- UTILITY FUNCTIONS ---
 
-    function logoutAdmin() {
-        console.log("Logging out... Clearing admin token.");
-        localStorage.removeItem('adminToken');
-        window.location.href = './admin-login.html'; 
-    }
+ /**
+     * Handles the admin logout process by clearing local state 
+     * and notifying the server to clear secure cookies.
+     */
+    async function logoutAdmin() {
+        console.log("Initiating Admin Logout...");
 
-    function showPasswordStatusMessage(message, isSuccess) {
-        passwordStatusMessage.textContent = message;
-        passwordStatusMessage.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
-        
-        if (isSuccess) {
-            passwordStatusMessage.classList.add('bg-green-100', 'text-green-700');
-        } else {
-            passwordStatusMessage.classList.add('bg-red-100', 'text-red-700');
+        try {
+            // 1. Call the backend logout API to clear the secure Refresh Token cookie
+            // We use the standard fetch here or secureFetch
+            await fetch('/api/admin/logout', { 
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+                }
+            });
+        } catch (error) {
+            console.warn("Server-side logout failed or unreachable, proceeding with client-side cleanup.", error);
+        } finally {
+            // 2. Clear the Access Token from LocalStorage regardless of API success
+            localStorage.removeItem('adminToken');
+
+            // 3. Redirect to login page
+            window.location.href = './admin-login.html';
         }
     }
+
 
     // --- API DATA FETCHING LOGIC (No changes needed) ---
 
