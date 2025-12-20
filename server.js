@@ -2783,20 +2783,24 @@ app.get('/api/analytics/visitors/:period', verifyToken, async (req, res) => {
     }
 });
 
-// =========================================================
-// GET /api/admin/orders/all - Retrieve Full Sales Log
-// =========================================================
 app.get('/api/admin/orders/all', verifyToken, async (req, res) => {
     try {
-        // Only admins should access this (verifyToken handles this)
-        const orders = await getAllOrders();
+        // Fetch all orders using your existing helper
+        const allOrders = await getAllOrders();
         
-        // Map data if you need to transform any fields before sending to frontend
-        const sanitizedOrders = orders.map(order => ({
+        // ⭐️ STRICT FILTER: Exclude abandoned Paystack checkouts
+        const validOrders = allOrders.filter(order => {
+            if (order.paymentMethod === 'Paystack') {
+                // Show only if Paid, or if it's no longer in 'Pending' status
+                return order.paymentStatus === 'Paid' || order.status !== 'Pending';
+            }
+            // Always include Bank Transfers for the Sales Log
+            return true;
+        });
+
+        const sanitizedOrders = validOrders.map(order => ({
             ...order,
-            // Ensure the frontend always has a reference to display
             displayId: order.orderReference || order._id,
-            // Flag to identify Paystack orders easily
             isAutomated: !!order.paymentTxnId 
         }));
 
@@ -2804,10 +2808,7 @@ app.get('/api/admin/orders/all', verifyToken, async (req, res) => {
         
     } catch (error) {
         console.error("Sales Log API Crash:", error);
-        res.status(500).json({ 
-            message: 'Failed to retrieve order records.',
-            error: error.message 
-        });
+        res.status(500).json({ message: 'Failed to retrieve order records.', error: error.message });
     }
 });
 
@@ -2961,43 +2962,37 @@ app.get('/api/admin/users/:id', verifyToken, async (req, res) => {
     }
 });
 
-// NEW: 2. GET /api/admin/users/:userId/orders (Fetch User Order History - Protected Admin)
 app.get('/api/admin/users/:userId/orders', verifyToken, async (req, res) => {
     try {
         const userId = req.params.userId;
-
-        // 1. Validate the user exists (Optional, but good practice)
         const userExists = await User.exists({ _id: userId });
-        if (!userExists) {
-            return res.status(404).json({ message: 'User not found.' });
-        }
+        if (!userExists) return res.status(404).json({ message: 'User not found.' });
 
-        // 2. Fetch all orders for that user ID
-        // Sort by creation date descending (newest first)
-        const userOrders = await Order.find({ userId: userId }) 
-            .sort({ createdAt: -1 })
-            .lean(); // Returns plain JavaScript objects
+        // ⭐️ STRICT QUERY: Fetch only "Real" orders directly from MongoDB
+        const userOrders = await Order.find({ 
+            userId: userId,
+            $or: [
+                { paymentMethod: { $ne: 'Paystack' } }, // Include Bank Transfers
+                { paymentStatus: 'Paid' },              // Include Paid Paystack
+                { status: { $ne: 'Pending' } }          // Include anything Admin processed
+            ]
+        }) 
+        .sort({ createdAt: -1 })
+        .lean();
 
-        // 3. Simple transformation: Since OrderItemSchema is now denormalized 
-        //    (includes name and imageUrl), we can return the data directly.
         const augmentedOrders = userOrders.map(order => ({
             ...order,
-            // Items already contain name and imageUrl from the denormalized schema
             items: order.items || [], 
         }));
 
-        // Success Response
         return res.status(200).json({ 
             orders: augmentedOrders,
             count: augmentedOrders.length
         });
 
     } catch (error) {
-        if (error.kind === 'ObjectId') {
-            return res.status(400).json({ message: 'Invalid User ID format.' });
-        }
-        console.error('Admin user orders fetch error:', error);
-        return res.status(500).json({ message: 'Server error: Failed to retrieve user order history.' });
+        if (error.kind === 'ObjectId') return res.status(400).json({ message: 'Invalid User ID.' });
+        res.status(500).json({ message: 'Server error: Failed to retrieve user history.' });
     }
 });
 
@@ -6277,20 +6272,15 @@ app.post('/api/paystack/webhook', async (req, res) => {
     res.status(200).send('Event acknowledged');
 });
 
+
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
     const userId = req.userId;
-    // Extract data from request body
     let { shippingAddress, totalAmount, subtotal, shippingFee, tax, orderItems } = req.body;
 
     try {
-        // --- DATA SANITIZATION ---
-        // Ensure shippingAddress is an object (parses if it arrived as a string from localStorage)
         const sanitizedShipping = typeof shippingAddress === 'string' ? JSON.parse(shippingAddress) : shippingAddress;
-        
-        // Ensure orderItems is an array (parses if it arrived as a string)
         let rawItems = typeof orderItems === 'string' ? JSON.parse(orderItems) : orderItems;
 
-        // If no items provided (Standard Cart Flow), fetch from DB Cart
         if (!rawItems || (Array.isArray(rawItems) && rawItems.length === 0)) {
             const userCart = await Cart.findOne({ userId }).lean();
             rawItems = userCart?.items || [];
@@ -6300,13 +6290,11 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             return res.status(400).json({ message: 'Cart is empty.' });
         }
 
-        // --- DYNAMIC COLLECTION LOOKUP ---
         const finalOrderItems = await Promise.all(rawItems.map(async (item) => {
             const allowedCollections = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
             let validatedType = item.productType;
             let typeIsCorrect = false;
 
-            // Search for the product in allowed collections to ensure productType is 100% accurate
             for (const collectionName of allowedCollections) {
                 const Model = getProductModel(collectionName);
                 const exists = await Model.exists({ _id: item.productId });
@@ -6318,7 +6306,7 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             }
 
             if (!typeIsCorrect) {
-                throw new Error(`Product ${item.productId} not found in valid collections.`);
+                throw new Error(`Product ${item.productId} not found.`);
             }
 
             return {
@@ -6335,9 +6323,9 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             };
         }));
 
-        // Generate a unique reference
         const orderRef = `outflickz_${Date.now()}_${Math.floor(Math.random() * 1000)}`; 
 
+        // --- STIRCT CHECK MODIFICATION ---
         const newOrder = await Order.create({
             userId,
             items: finalOrderItems, 
@@ -6347,17 +6335,19 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             shippingFee: parseFloat(shippingFee || 0),
             tax: parseFloat(tax || 0),
             status: 'Pending',
-            paymentStatus: 'Pending',
+            // 🔥 Change from 'Pending' to 'Awaiting Payment' for easier filtering
+            paymentStatus: 'Awaiting Payment', 
             paymentMethod: 'Paystack',
             orderReference: orderRef,
-            amountPaidKobo: Math.round(parseFloat(totalAmount) * 100), // 100.00 becomes 10000 kobo
+            isPaystackPending: true, // New flag for strict filtering
+            amountPaidKobo: 0, // Reset to 0 until webhook confirms payment
             paymentTxnId: orderRef, 
         });
 
         const user = await User.findById(userId).select('email');
 
         res.status(201).json({
-            message: 'Order created successfully.',
+            message: 'Order initialized.',
             orderId: newOrder._id,
             orderReference: newOrder.orderReference,
             totalAmount: newOrder.totalAmount,

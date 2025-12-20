@@ -298,28 +298,55 @@
         return response;
     }
 
-    // --- Core Logic ---
+ // --- Core Logic ---
     async function loadUserOrders() {
+        // 1. UI Setup: Show the loading spinner
         loadingIndicator.classList.remove('hidden');
+        
         try {
-            // Updated to use the pending endpoint as per your backend snippet
-            const response = await authorizedFetch('/api/admin/orders/pending');
-            if (!response) return;
+            // ⭐️ FIX: Use secureFetch instead of authorizedFetch to handle token refresh
+            // This ensures that if the admin session expires, it refreshes automatically.
+            const response = await secureFetch('/api/admin/orders/pending');
             
-            const orders = await response.json();
-            renderOrders(Array.isArray(orders) ? orders : []);
+            // If secureFetch initiated a redirect (401/403), exit early
+            if (!response || response.status === 401 || response.status === 403) return;
+
+            if (response.ok) {
+                const orders = await response.json();
+                
+                // 2. Data Processing: The renderOrders function now applies the strict check 
+                // to filter out abandoned Paystack checkouts.
+                renderOrders(Array.isArray(orders) ? orders : []);
+            } else {
+                throw new Error(`Server returned status: ${response.status}`);
+            }
         } catch (error) {
-            showToast('Failed to load orders.', 'bg-red-500');
+            console.error("Fetch Orders Error:", error);
+            showToast('Failed to load orders. Please check your connection.', 'bg-red-500');
         } finally {
+            // 3. UI Cleanup: Always hide the loading spinner
             loadingIndicator.classList.add('hidden');
         }
     }
-
+    
    function renderOrders(orders) {
-    ordersTableBody.innerHTML = '';
-    pendingCountElement.textContent = `${orders.length} Orders Requiring Action`;
+    // 1. FILTER: Strict check to hide unpaid/abandoned Paystack checkouts
+    const validOrders = orders.filter(order => {
+        if (order.paymentMethod === 'Paystack') {
+            // ONLY show Paystack if Paid OR if admin has already manually moved it past Pending
+            const isActuallyPaid = order.paymentStatus === 'Paid' || (order.amountPaidKobo >= (order.totalAmount * 100));
+            return isActuallyPaid || order.status !== 'Pending';
+        }
+        // Always show Bank Transfers so Admin can verify the receipt
+        return true; 
+    });
 
-    if (orders.length === 0) {
+    // 2. UI RESET: Clear table and update the "Action Required" count
+    ordersTableBody.innerHTML = '';
+    pendingCountElement.textContent = `${validOrders.length} Orders Requiring Action`;
+
+    // 3. EMPTY STATE CHECK
+    if (validOrders.length === 0) {
         ordersTableContainer.classList.add('hidden');
         emptyState.classList.remove('hidden');
         return;
@@ -328,11 +355,12 @@
     emptyState.classList.add('hidden');
     ordersTableContainer.classList.remove('hidden');
 
-    orders.forEach(order => {
+    // 4. RENDER VALID ORDERS ONLY
+    validOrders.forEach(order => {
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-gray-50 transition-colors';
         
-        // Logical Helpers
+        // Logical Helpers for Styling
         const isPaid = order.paymentStatus === 'Paid' || (order.amountPaidKobo >= (order.totalAmount * 100));
         const statusClass = order.status.includes('Failure') ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-800';
 
@@ -372,7 +400,6 @@
         ordersTableBody.appendChild(tr);
     });
 }
-
     async function handleViewDetails(orderId) {
         try {
             // Fetch single order details
@@ -423,29 +450,47 @@
         confirmBtn.classList.toggle('hidden', !['Pending', 'Processing', 'Inventory Failure (Manual Review)'].includes(order.status));
     }
 
-    async function confirmOrderFromDetails() {
+  async function confirmOrderFromDetails() {
         if (!currentDetailOrderId) return;
+        
         const btn = document.getElementById('detail-confirm-btn');
+        const originalText = "✅ Confirm Payment & Process Order";
+        
+        // 1. UI Feedback
         btn.disabled = true;
-        btn.innerHTML = `<svg class="animate-spin h-4 w-4 mr-2 inline" viewBox="0 0 24 24">...</svg> Processing...`;
+        btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Processing...`;
 
         try {
-            const response = await authorizedFetch(`/api/admin/orders/${currentDetailOrderId}/confirm`, { method: 'PUT' });
-            if (!response) return;
+            // ⭐️ CRITICAL FIX: Use 'secureFetch' to handle token refresh and cookies
+            const response = await secureFetch(`/api/admin/orders/${currentDetailOrderId}/confirm`, { 
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            // Handle cases where secureFetch triggers a logout/redirect
+            if (!response || response.status === 401) return;
 
             if (response.ok) {
                 showToast("Order Confirmed & Stock Deducted!", "bg-emerald-600");
-                await loadUserOrders();
-                showContent('userorders');
+                
+                // 2. Refresh the UI
+                if (typeof loadUserOrders === 'function') {
+                    await loadUserOrders(); // Refresh the list in the background
+                }
+                
+                // Close the modal/detail view and return to the main list
+                showContent('userorders'); 
             } else {
                 const err = await response.json();
-                throw new Error(err.message || "Failed to confirm");
+                throw new Error(err.message || "Failed to confirm order.");
             }
         } catch (error) {
+            console.error("Confirmation Error:", error);
             showToast(error.message, "bg-red-500");
         } finally {
+            // 3. Reset UI State
             btn.disabled = false;
-            btn.textContent = "✅ Confirm Payment & Process Order";
+            btn.textContent = originalText;
         }
     }
 
