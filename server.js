@@ -6281,6 +6281,34 @@ app.post('/api/paystack/webhook', async (req, res) => {
     res.status(200).send('Event acknowledged');
 });
 
+app.get('/api/orders/verify/:reference', verifyUserToken, async (req, res) => {
+    const { reference } = req.params;
+
+    try {
+        // 1. Ask Paystack directly if this reference is paid
+        const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
+            headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }
+        });
+        const data = await response.json();
+
+        if (data.status && data.data.status === 'success') {
+            // 2. Update the DB immediately
+            await Order.findOneAndUpdate(
+                { orderReference: reference },
+                { 
+                    paymentStatus: 'Paid', 
+                    status: 'Processing',
+                    amountPaidKobo: data.data.amount 
+                }
+            );
+            return res.status(200).json({ message: 'Verified' });
+        }
+        res.status(400).json({ message: 'Not verified' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
     const userId = req.userId;
     let { shippingAddress, totalAmount, subtotal, shippingFee, tax, orderItems } = req.body;

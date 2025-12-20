@@ -1164,25 +1164,17 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
 
 async function processPaystackPayment(totalAmount, email) {
     const payBtn = document.getElementById('checkout-next-btn');
-    
-    // 1. COLLECT & PARSE DATA
     const shippingAddress = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
     
     let itemsToOrder = [];
     const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
 
     if (buyNowItemJSON) {
-        // Parse the Buy Now data (usually stored as an array [item])
         const storedData = JSON.parse(buyNowItemJSON);
         const item = Array.isArray(storedData) ? storedData[0] : storedData;
-
-        // ⭐ CRITICAL FIX: Explicitly map fields to match the Order Schema 
-        // This prevents the "Product undefined" error on the backend.
-       // ⭐ DYNAMIC MAPPING: Captures 'Caps', 'New Arrivals', etc., correctly
         itemsToOrder = [{
             productId: item.productId, 
             name: item.name,
-            // 1. Use existing type, 2. check name for keywords, 3. fallback to 'Wears'
             productType: item.productType || (item.name.toLowerCase().includes('cap') ? 'Caps' : 'Wears'),
             price: parseFloat(item.price),
             quantity: parseInt(item.quantity) || 1,
@@ -1192,89 +1184,75 @@ async function processPaystackPayment(totalAmount, email) {
             variationIndex: parseInt(item.variationIndex, 10) || 1,
             variation: item.variation || (item.size ? `Size: ${item.size}` : 'Default')
         }];
-
     } else {
         itemsToOrder = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
     }
     
     if (itemsToOrder.length === 0) {
-        displayMessage("Your cart is empty. Cannot proceed with payment.");
+        displayMessage("Your cart is empty.");
         return;
     }
 
-    const subtotal = localStorage.getItem('outflickzOrderSubtotal') || '0';
-    const shippingFee = localStorage.getItem('outflickzOrderShipping') || '0';
-    const tax = localStorage.getItem('outflickzOrderTax') || '0';
-    
-    // UI State
     payBtn.disabled = true;
-    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Initializing Order...';
+    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Initializing...';
 
     let mongoOrderId;
     let paystackReference; 
     
     try {
-        // 2. CREATE PENDING ORDER IN DATABASE
         const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/paystack`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 shippingAddress, 
                 totalAmount, 
-                subtotal,
-                shippingFee,
-                tax,
+                subtotal: localStorage.getItem('outflickzOrderSubtotal') || '0',
+                shippingFee: localStorage.getItem('outflickzOrderShipping') || '0',
+                tax: localStorage.getItem('outflickzOrderTax') || '0',
                 orderItems: itemsToOrder 
             })
         });
 
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: 'Failed to record order.' }));
-            throw new Error(errorData.message || 'Server error during order creation.');
-        }
-
         const data = await response.json();
+        if (!response.ok) throw new Error(data.message);
+        
         mongoOrderId = data.orderId; 
         paystackReference = data.orderReference;
 
     } catch (error) {
-        console.error("Order Creation Error:", error);
-        displayMessage(`Order setup failed: ${error.message}`);
-        payBtn.disabled = false;
-        payBtn.innerHTML = 'Confirm & Pay Now';
-        return;
-    }
-    
-    if (typeof PaystackPop === 'undefined') {
-        displayMessage('Payment gateway (Paystack) failed to load.');
+        displayMessage(`Error: ${error.message}`);
         payBtn.disabled = false;
         payBtn.innerHTML = 'Confirm & Pay Now';
         return;
     }
 
-    // 3. LAUNCH PAYSTACK
     const handler = PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
         email: email,
         amount: Math.round(totalAmount * 100), 
         ref: paystackReference,
         currency: 'NGN',
-        channels: ['card', 'qr', 'mobile_money', 'bank_transfer', 'ussd', 'bank'],
         metadata: {
-            order_id: mongoOrderId,
-            custom_fields: [
-                {
-                    display_name: "Order ID",
-                    variable_name: "order_id",
-                    value: mongoOrderId
-                }
-            ]
+            order_id: mongoOrderId // ⭐ Passed to webhook
         },
-        callback: function(response){
-            handlePaystackSuccessRedirect(mongoOrderId, response.reference); 
+        callback: async function(response) {
+            // ⭐ BACKUP VERIFICATION: Force server to update DB immediately
+            payBtn.innerHTML = '<i class="fas fa-sync fa-spin"></i> Verifying...';
+            
+            try {
+                // Call an endpoint (you should create this) to verify the reference
+                await secureUserFetch(`${API_BASE_URL}/api/orders/verify/${response.reference}`);
+                
+                // Success! Clear cart and redirect
+                localStorage.removeItem(LOCAL_CART_KEY);
+                sessionStorage.removeItem(BUY_NOW_KEY);
+                window.location.href = `order-success.html?ref=${response.reference}`;
+            } catch (err) {
+                // If verification fails but user paid, still redirect; webhook will fix it
+                window.location.href = `order-success.html?ref=${response.reference}`;
+            }
         },
-        onClose: function(){
-            displayMessage('Payment window closed. Your order is still pending.');
+        onClose: function() {
             payBtn.disabled = false;
             payBtn.innerHTML = 'Confirm & Pay Now';
         }
