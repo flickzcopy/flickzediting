@@ -432,6 +432,25 @@
     confirmBtn.classList.toggle('hidden', !isConfirmable);
 }
 
+async function handleViewDetails(orderId) {
+        try {
+            // Show loading state if you have one, or just proceed to fetch
+            const response = await authorizedFetch(`/api/admin/orders/${orderId}`);
+            
+            if (response && response.ok) {
+                const data = await response.json();
+                // Some APIs return { order: {...} }, others return the order directly
+                const orderData = data.order || data;
+                renderOrderDetail(orderData);
+            } else {
+                showToast("Could not retrieve order details.", "bg-red-500");
+            }
+        } catch (err) {
+            console.error("Fetch error:", err);
+            showToast("Error connecting to server.", "bg-red-500");
+        }
+    }
+    
   async function confirmOrderFromDetails() {
     if (!currentDetailOrderId) return;
     const btn = document.getElementById('detail-confirm-btn');
