@@ -2973,18 +2973,13 @@ app.get('/api/admin/users/:userId/orders', verifyToken, async (req, res) => {
     }
 });
 
-// =========================================================
-// 8. GET /api/admin/orders/pending - Fetch All Pending Orders (Admin Protected)
-//    (For Bank Transfers or Orders that require Manual Review)
-// =========================================================
 app.get('/api/admin/orders/pending', verifyToken, async (req, res) => {
     try {
-        // Find all orders that haven't been confirmed yet.
-        // This now includes Bank Transfers AND Paystack orders awaiting the 'Confirm' click.
         const pendingOrders = await Order.find({ 
             status: { $in: ['Pending', 'Processing', 'Inventory Failure (Manual Review)'] } 
         })
-        .select('_id userId totalAmount createdAt status paymentMethod paymentStatus paymentReceiptUrl orderReference')
+        // 📢 ADDED: amountPaidKobo and paymentTxnId to the selection
+        .select('_id userId totalAmount createdAt status paymentMethod paymentStatus paymentReceiptUrl orderReference amountPaidKobo paymentTxnId')
         .sort({ createdAt: 1 })
         .lean();
 
@@ -2997,18 +2992,68 @@ app.get('/api/admin/orders/pending', verifyToken, async (req, res) => {
                 const userName = (user?.profile?.firstName && user?.profile?.lastName) 
                     ? `${user.profile.firstName} ${user.profile.lastName}` 
                     : user?.email || 'N/A';
+
+                // 📢 LOGIC ADDITION: 
+                // Since your DB has amountPaidKobo but status is "Pending",
+                // we tell the frontend this is a "Paid" order if the kobo matches.
+                const isPaystackPaid = order.paymentMethod === 'Paystack' && 
+                                     order.amountPaidKobo >= (order.totalAmount * 100);
                 
                 return {
                     ...order,
                     userName,
                     email: user?.email || 'Unknown User',
+                    // This ensures the frontend 'paymentStatus' check works correctly
+                    paymentStatus: isPaystackPaid ? 'Paid' : (order.paymentStatus || 'Awaiting')
                 };
             })
         );
 
         res.status(200).json(populatedOrders);
     } catch (error) {
+        console.error("Pending Orders Fetch Error:", error);
         res.status(500).json({ message: 'Failed to retrieve pending orders.' });
+    }
+});
+
+// NEW: Fetch orders that are PAID and ready for Shipping/Fulfillment
+app.get('/api/admin/orders/paid', verifyToken, async (req, res) => {
+    try {
+        // 1. Fetch orders that are officially 'Confirmed' OR 
+        //    'Pending' orders that might be Paystack-paid.
+        const orders = await Order.find({ 
+            status: { $in: ['Confirmed', 'Completed', 'Pending'] } 
+        })
+        .select('_id userId totalAmount updatedAt status paymentMethod orderReference amountPaidKobo paymentTxnId')
+        .sort({ updatedAt: -1 })
+        .lean();
+
+        const sanitizedPaidOrders = await Promise.all(orders.map(async (order) => {
+            // Check if Paystack payment is verified (e.g., 10000 kobo for 100 Naira)
+            const isPaystackPaid = order.paymentMethod === 'Paystack' && 
+                                 (order.amountPaidKobo >= (order.totalAmount * 100));
+
+            // Only include in this "Paid" list if it's Confirmed OR a verified Paystack order
+            if (order.status === 'Confirmed' || order.status === 'Completed' || isPaystackPaid) {
+                const user = await User.findById(order.userId).select('email profile').lean();
+                
+                return {
+                    ...order,
+                    paymentStatus: 'Paid', 
+                    userName: user?.profile?.firstName ? `${user.profile.firstName} ${user.profile.lastName}` : (user?.email || 'Guest'),
+                    email: user?.email || 'N/A'
+                };
+            }
+            return null; // Skip non-paid pending orders
+        }));
+
+        // Filter out the nulls from the map
+        const finalOrders = sanitizedPaidOrders.filter(o => o !== null);
+
+        res.status(200).json(finalOrders);
+    } catch (error) {
+        console.error("Paid Orders API Error:", error);
+        res.status(500).json({ message: 'Failed to retrieve paid orders.' });
     }
 });
 

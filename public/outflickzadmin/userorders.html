@@ -334,34 +334,36 @@
         }
     }
 
-   
-    /**
- * Filters and renders orders that require Admin Action.
- * Handles Bank Transfers (Pending) and Paystack (Paid/Processing) for manual confirmation.
+   /**
+ * UPDATED: Filters and renders orders that require Admin Action.
+ * Now correctly checks amountPaidKobo for Paystack verification.
  */
 function renderOrders(orders) {
     ordersTableBody.innerHTML = '';
     
-    // 1. FILTER LOGIC
     const filteredOrders = orders.filter(order => {
-        // A: Bank Transfers awaiting receipt verification
+        // --- 1. DEFINE PAYMENT TRUTH ---
+        // Verify Paystack by checking if amountPaidKobo matches totalAmount * 100
+        const isPaystackVerified = order.paymentMethod === 'Paystack' && 
+                                   order.amountPaidKobo >= (order.totalAmount * 100);
+
+        // --- 2. DEFINE FILTER CATEGORIES ---
+        // A: Bank Transfers awaiting manual verification
         const isBankPending = order.paymentMethod !== 'Paystack' && order.status === 'Pending';
 
-        // B: Paystack orders where money is confirmed by Webhook but Admin hasn't confirmed stock
-        const isPaystackPaid = order.paymentMethod === 'Paystack' && 
-                               order.paymentStatus === 'Paid' && 
-                               (['Pending', 'Processing'].includes(order.status));
+        // B: Paystack orders that are paid but need the Admin to confirm stock/fulfillment
+        const isPaystackAwaitingAdmin = order.paymentMethod === 'Paystack' && 
+                                        isPaystackVerified && 
+                                        ['Pending', 'Processing'].includes(order.status);
 
-        // C: Any order that hit a stock error during the atomic transaction
+        // C: Urgent failures
         const isManualReview = order.status === 'Inventory Failure (Manual Review)';
         
-        return isBankPending || isPaystackPaid || isManualReview;
+        return isBankPending || isPaystackAwaitingAdmin || isManualReview;
     });
 
-    // Update the Dashboard Count Badge
     pendingCountElement.textContent = `${filteredOrders.length} Orders Requiring Action`;
 
-    // 2. EMPTY STATE HANDLING
     if (filteredOrders.length === 0) {
         ordersTableContainer.classList.add('hidden');
         emptyState.classList.remove('hidden');
@@ -371,28 +373,20 @@ function renderOrders(orders) {
     emptyState.classList.add('hidden');
     ordersTableContainer.classList.remove('hidden');
 
-    // 3. RENDER TABLE ROWS
     filteredOrders.forEach(order => {
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-gray-50 border-b transition-colors';
         
-        const isPaid = order.paymentStatus === 'Paid';
-        const isPaystack = order.paymentMethod === 'Paystack';
+        // Re-calculate verified status for the UI badges
+        const isPaid = (order.paymentMethod === 'Paystack' && order.amountPaidKobo >= (order.totalAmount * 100));
 
-        // STYLING: Method & Payment Badge
-        // Paystack Paid = Solid Blue | Paystack Unpaid = Light Gray | Bank = Purple
-        let methodBadgeClass = 'bg-purple-100 text-purple-700'; // Default Bank
-        if (isPaystack) {
-            methodBadgeClass = isPaid ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600';
-        }
+        let methodBadgeClass = order.paymentMethod === 'Paystack' 
+            ? (isPaid ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600')
+            : 'bg-purple-100 text-purple-700';
 
-        // STYLING: Status Badge
-        let statusBadgeClass = 'bg-yellow-100 text-yellow-800'; // Default Pending
-        if (order.status.includes('Failure')) {
-            statusBadgeClass = 'bg-red-600 text-white animate-pulse'; // Urgent Attention
-        } else if (order.status === 'Processing') {
-            statusBadgeClass = 'bg-blue-100 text-blue-800';
-        }
+        let statusBadgeClass = order.status.includes('Failure') 
+            ? 'bg-red-600 text-white animate-pulse' 
+            : (order.status === 'Processing' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800');
 
         tr.innerHTML = `
             <td class="px-6 py-4 text-sm font-mono font-bold text-gray-600">
@@ -427,8 +421,7 @@ function renderOrders(orders) {
         ordersTableBody.appendChild(tr);
     });
 }
-
-    
+   
     async function handleViewDetails(orderId) {
         const token = localStorage.getItem('adminToken');
         const response = await fetch(`/api/admin/orders/${orderId}`, {
@@ -438,35 +431,37 @@ function renderOrders(orders) {
         if (data.order) renderOrderDetail(data.order);
     }
 
-    function renderOrderDetail(order) {
-        currentDetailOrderId = order._id;
-        showContent('orderdetails');
+  function renderOrderDetail(order) {
+    currentDetailOrderId = order._id;
+    showContent('orderdetails');
 
-        document.getElementById('detail-order-id').textContent = (order.orderReference || order._id).substring(0, 8);
-        document.getElementById('detail-customer-name').textContent = order.userId?.username || order.customerName || 'Guest';
-        document.getElementById('detail-payment-method').textContent = order.paymentMethod;
-        document.getElementById('detail-total').textContent = formatNaira(order.totalAmount);
-        
-        // Receipt Section
-        const receiptContainer = document.getElementById('receipt-container');
-        if (order.paymentMethod === 'Paystack' && order.paymentStatus === 'Paid') {
-            receiptContainer.innerHTML = `
-                <div class="p-8 bg-blue-50 border-2 border-dashed border-blue-200 rounded-lg text-center">
-                    <p class="text-blue-800 font-bold">Paystack Payment Confirmed</p>
-                    <p class="text-blue-600 text-xs mt-1 italic">Reference: ${order.paymentTxnId}</p>
-                    <p class="text-[10px] text-blue-400 mt-4">Funds received. Check stock before confirming.</p>
-                </div>`;
-        } else if (order.paymentReceiptUrl) {
-            receiptContainer.innerHTML = `<img src="${order.paymentReceiptUrl}" class="rounded-lg shadow-sm border max-h-72 mx-auto"/>`;
-        } else {
-            receiptContainer.innerHTML = `<p class="text-gray-400 p-8 text-center italic border rounded-lg">No receipt proof found.</p>`;
-        }
+    document.getElementById('detail-order-id').textContent = (order.orderReference || order._id).substring(0, 8);
+    document.getElementById('detail-customer-name').textContent = order.userId?.username || order.customerName || 'Guest';
+    document.getElementById('detail-payment-method').textContent = order.paymentMethod;
+    document.getElementById('detail-total').textContent = formatNaira(order.totalAmount);
+    
+    // --- UPDATED RECEIPT LOGIC ---
+    const receiptContainer = document.getElementById('receipt-container');
+    const isPaystackPaid = order.paymentMethod === 'Paystack' && order.amountPaidKobo >= (order.totalAmount * 100);
 
-        const confirmBtn = document.getElementById('detail-confirm-btn');
-        // Only show confirm button if it's not already 'Confirmed' or 'Cancelled'
-        const canConfirm = ['Pending', 'Processing', 'Inventory Failure (Manual Review)'].includes(order.status);
-        confirmBtn.classList.toggle('hidden', !canConfirm);
+    if (isPaystackPaid) {
+        receiptContainer.innerHTML = `
+            <div class="p-8 bg-blue-50 border-2 border-dashed border-blue-200 rounded-lg text-center">
+                <p class="text-blue-800 font-bold">Paystack Payment Confirmed</p>
+                <p class="text-blue-600 text-xs mt-1 italic">Reference: ${order.orderReference}</p>
+                <p class="text-blue-500 font-mono text-sm mt-2">Paid: ${formatNaira(order.amountPaidKobo / 100)}</p>
+                <p class="text-[10px] text-blue-400 mt-4">Verification successful. Proceed to confirm stock.</p>
+            </div>`;
+    } else if (order.paymentReceiptUrl) {
+        receiptContainer.innerHTML = `<img src="${order.paymentReceiptUrl}" class="rounded-lg shadow-sm border max-h-72 mx-auto"/>`;
+    } else {
+        receiptContainer.innerHTML = `<p class="text-gray-400 p-8 text-center italic border rounded-lg">No proof of payment found.</p>`;
     }
+
+    const confirmBtn = document.getElementById('detail-confirm-btn');
+    const canConfirm = ['Pending', 'Processing', 'Inventory Failure (Manual Review)'].includes(order.status);
+    confirmBtn.classList.toggle('hidden', !canConfirm);
+}
 
     async function loadUserOrders() {
         loadingIndicator.classList.remove('hidden');
