@@ -394,24 +394,33 @@
         });
     }
 
-    // --- FETCH SINGLE ORDER DETAILS ---
-    async function handleViewDetails(orderId) {
-        loadingIndicator.classList.remove('hidden');
-        try {
-            const response = await authorizedFetch(`/api/admin/orders/${orderId}`);
-            if (response && response.ok) {
-                const order = await response.json();
-                renderOrderDetail(order);
-            } else {
-                showToast('Could not fetch order details.', 'bg-red-500');
+async function handleViewDetails(orderId) {
+    loadingIndicator.classList.remove('hidden');
+    try {
+        const response = await authorizedFetch(`/api/admin/orders/${orderId}`);
+        
+        if (response && response.ok) {
+            const data = await response.json();
+            
+            // 🚨 FIX: Extract the order object from the wrapper
+            // Your backend returns { order: { ... } }, so we need data.order
+            const orderToRender = data.order || data; 
+            
+            if (!orderToRender) {
+                throw new Error("Order data is missing in response");
             }
-        } catch (error) {
-            console.error("Error fetching order details:", error);
-            showToast('An error occurred while loading details.', 'bg-red-500');
-        } finally {
-            loadingIndicator.classList.add('hidden');
+
+            renderOrderDetail(orderToRender);
+        } else {
+            showToast('Could not fetch order details.', 'bg-red-500');
         }
+    } catch (error) {
+        console.error("Error fetching order details:", error);
+        showToast('An error occurred while loading details.', 'bg-red-500');
+    } finally {
+        loadingIndicator.classList.add('hidden');
     }
+}
 
     function renderOrderDetail(order) {
         currentDetailOrderId = order._id;
