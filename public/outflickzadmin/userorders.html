@@ -540,49 +540,45 @@
         confirmBtn.classList.toggle('hidden', !['Pending', 'Processing', 'Inventory Failure (Manual Review)'].includes(order.status));
     }
 
-  async function confirmOrderFromDetails() {
-        if (!currentDetailOrderId) return;
-        
-        const btn = document.getElementById('detail-confirm-btn');
-        const originalText = "✅ Confirm Payment & Process Order";
-        
-        // 1. UI Feedback
-        btn.disabled = true;
-        btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Processing...`;
+ async function confirmOrderFromDetails() {
+    if (!currentDetailOrderId) return;
+    
+    const btn = document.getElementById('detail-confirm-btn');
+    const originalText = "✅ Confirm Payment & Process Order";
+    
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Processing...`;
 
-        try {
-            // ⭐️ CRITICAL FIX: Use 'secureFetch' to handle token refresh and cookies
-            const response = await secureFetch(`/api/admin/orders/${currentDetailOrderId}/confirm`, { 
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' }
-            });
+    try {
+        // ✅ CHANGED: replaced secureFetch with authorizedFetch
+        const response = await authorizedFetch(`/api/admin/orders/${currentDetailOrderId}/confirm`, { 
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' }
+        });
 
-            // Handle cases where secureFetch triggers a logout/redirect
-            if (!response || response.status === 401) return;
+        // Handle cases where authorizedFetch triggers a logout/redirect
+        if (!response || response.status === 401) return;
 
-            if (response.ok) {
-                showToast("Order Confirmed & Stock Deducted!", "bg-emerald-600");
-                
-                // 2. Refresh the UI
-                if (typeof loadUserOrders === 'function') {
-                    await loadUserOrders(); // Refresh the list in the background
-                }
-                
-                // Close the modal/detail view and return to the main list
-                showContent('userorders'); 
-            } else {
-                const err = await response.json();
-                throw new Error(err.message || "Failed to confirm order.");
+        if (response.ok) {
+            showToast("Order Confirmed & Stock Deducted!", "bg-emerald-600");
+            
+            if (typeof loadUserOrders === 'function') {
+                await loadUserOrders(); 
             }
-        } catch (error) {
-            console.error("Confirmation Error:", error);
-            showToast(error.message, "bg-red-500");
-        } finally {
-            // 3. Reset UI State
-            btn.disabled = false;
-            btn.textContent = originalText;
+            
+            showContent('userorders'); 
+        } else {
+            const err = await response.json();
+            throw new Error(err.message || "Failed to confirm order.");
         }
+    } catch (error) {
+        console.error("Confirmation Error:", error);
+        showToast(error.message, "bg-red-500");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
     }
+}
 
     document.addEventListener('DOMContentLoaded', loadUserOrders);
 </script>
