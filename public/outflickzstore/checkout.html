@@ -1249,10 +1249,10 @@ async function verifyPayment(reference) {
         // Success! Clear cart and redirect
         localStorage.removeItem(LOCAL_CART_KEY);
         sessionStorage.removeItem(BUY_NOW_KEY);
-        window.location.href = `order-success.html?ref=${reference}`;
+        window.location.href = `orderconfirmation.html?ref=${reference}`;
     } catch (err) {
         // Fallback: Webhook will eventually catch it
-        window.location.href = `order-success.html?ref=${reference}`;
+        window.location.href = `orderconfirmation.html?ref=${reference}`;
     }
 }
 
