@@ -3318,6 +3318,82 @@ app.put('/api/admin/orders/:orderId/confirm', verifyToken, async (req, res) => {
     }
 });
 
+// =========================================================
+// 10. PUT /api/admin/orders/:orderId/cancel - Cancel an Order (Admin Protected)
+// =========================================================
+app.put('/api/admin/orders/:orderId/cancel', verifyToken, async (req, res) => {
+    const orderId = req.params.orderId;
+    const adminId = req.adminId; // Extracted from verifyToken middleware
+
+    if (!orderId) {
+        return res.status(400).json({ message: 'Order ID is required for cancellation.' });
+    }
+
+    try {
+        // 1. Find and Update the order
+        // We only allow cancellation if the order is in a state that hasn't been shipped yet
+        const cancelledOrder = await Order.findOneAndUpdate(
+            { 
+                _id: orderId, 
+                status: { $in: ['Pending', 'Processing', 'Inventory Failure (Manual Review)'] } 
+            }, 
+            { 
+                $set: { 
+                    status: 'Cancelled', 
+                    cancelledAt: new Date(), 
+                    cancelledBy: adminId 
+                } 
+            },
+            { new: true } 
+        ).lean();
+
+        // 2. Check if the order was eligible for cancellation
+        if (!cancelledOrder) {
+            console.warn(`[Cancel Skip] Order ${orderId} not found or status ineligible for cancellation.`);
+            
+            const existingOrder = await Order.findById(orderId).select('status').lean();
+            if (!existingOrder) {
+                return res.status(404).json({ message: 'Order not found.' });
+            }
+            return res.status(409).json({ 
+                message: `Order cannot be cancelled. Current status is: ${existingOrder.status}` 
+            });
+        }
+
+        console.log(`[Admin Action] Order ${orderId} successfully cancelled by Admin ${adminId}.`);
+
+        // 3. OPTIONAL: Send Cancellation Email Notification
+        const user = await User.findById(cancelledOrder.userId).select('email').lean();
+        if (user && user.email) {
+            try {
+                // You would need to create this helper function similar to your confirmation email helper
+                // await sendOrderCancellationEmail(user.email, cancelledOrder);
+                console.log(`[Email] Cancellation notice ready for ${user.email}`);
+            } catch (emailError) {
+                console.error(`[Email Failure] Failed to send cancellation email:`, emailError.message);
+            }
+        }
+
+        // 4. INTEGRATION: Log the admin action
+        // Following your pattern for logAdminOrderAction
+        try {
+            await logAdminOrderAction(cancelledOrder, adminId, 'ORDER_CANCELLED');
+        } catch (logError) {
+            console.error(`[Log Failure] Failed to log admin cancellation:`, logError.message);
+        }
+
+        // 5. Success Response
+        res.status(200).json({ 
+            message: `Order ${orderId} has been successfully cancelled.`,
+            order: cancelledOrder 
+        });
+
+    } catch (error) {
+        console.error(`Error cancelling order ${orderId}:`, error);
+        res.status(500).json({ message: 'Failed to cancel order due to a server error.' });
+    }
+});
+
 app.put('/api/admin/orders/:orderId/status', verifyToken, async (req, res) => {
     const { orderId } = req.params;
     const { newStatus } = req.body; 
