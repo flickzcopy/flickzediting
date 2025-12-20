@@ -2706,6 +2706,33 @@ app.post('/api/admin/refresh-token', async (req, res) => {
     }
 });
 
+/**
+ * POST /api/admin/logout
+ * Clears the secure refresh token cookie to terminate the admin session.
+ */
+app.post('/api/admin/logout', (req, res) => {
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    try {
+        // 1. Clear the Refresh Token Cookie
+        // The options (httpOnly, secure, sameSite) must match those used during Login
+        res.clearCookie('adminRefreshToken', {
+            httpOnly: true,
+            secure: isProduction,
+            sameSite: isProduction ? 'strict' : 'lax',
+            path: '/' // Ensure it clears for the entire application path
+        });
+
+        // 2. Respond to the client
+        // The frontend should also clear the Access Token from its memory/local storage
+        res.status(200).json({ message: 'Admin logged out successfully.' });
+
+    } catch (error) {
+        console.error("Logout error:", error);
+        res.status(500).json({ message: 'Server error during logout.' });
+    }
+});
+
 app.get('/api/admin/dashboard/stats', verifyToken, async (req, res) => {
     try {
         // Log that the request has successfully reached the main API handler
