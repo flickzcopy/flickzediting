@@ -1170,20 +1170,9 @@ async function processPaystackPayment(totalAmount, email) {
     const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
 
     if (buyNowItemJSON) {
-        const storedData = JSON.parse(buyNowItemJSON);
-        const item = Array.isArray(storedData) ? storedData[0] : storedData;
-        itemsToOrder = [{
-            productId: item.productId, 
-            name: item.name,
-            productType: item.productType || (item.name.toLowerCase().includes('cap') ? 'Caps' : 'Wears'),
-            price: parseFloat(item.price),
-            quantity: parseInt(item.quantity) || 1,
-            size: item.size || item.variation || 'Standard',
-            color: item.color || 'N/A',
-            imageUrl: item.imageUrl,
-            variationIndex: parseInt(item.variationIndex, 10) || 1,
-            variation: item.variation || (item.size ? `Size: ${item.size}` : 'Default')
-        }];
+        const item = JSON.parse(buyNowItemJSON);
+        // Ensure itemsToOrder is an array of objects for the backend
+        itemsToOrder = Array.isArray(item) ? item : [item];
     } else {
         itemsToOrder = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
     }
@@ -1226,6 +1215,7 @@ async function processPaystackPayment(totalAmount, email) {
         return;
     }
 
+    // ⭐ FIX: Paystack handler setup
     const handler = PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
         email: email,
@@ -1233,24 +1223,14 @@ async function processPaystackPayment(totalAmount, email) {
         ref: paystackReference,
         currency: 'NGN',
         metadata: {
-            order_id: mongoOrderId // ⭐ Passed to webhook
+            order_id: mongoOrderId 
         },
-        callback: async function(response) {
-            // ⭐ BACKUP VERIFICATION: Force server to update DB immediately
+        // ⭐ FIX: Changed 'async function' to standard function to satisfy Paystack's validator
+        callback: function(response) {
             payBtn.innerHTML = '<i class="fas fa-sync fa-spin"></i> Verifying...';
             
-            try {
-                // Call an endpoint (you should create this) to verify the reference
-                await secureUserFetch(`${API_BASE_URL}/api/orders/verify/${response.reference}`);
-                
-                // Success! Clear cart and redirect
-                localStorage.removeItem(LOCAL_CART_KEY);
-                sessionStorage.removeItem(BUY_NOW_KEY);
-                window.location.href = `order-success.html?ref=${response.reference}`;
-            } catch (err) {
-                // If verification fails but user paid, still redirect; webhook will fix it
-                window.location.href = `order-success.html?ref=${response.reference}`;
-            }
+            // Execute the async verification inside the callback
+            verifyPayment(response.reference);
         },
         onClose: function() {
             payBtn.disabled = false;
@@ -1261,68 +1241,21 @@ async function processPaystackPayment(totalAmount, email) {
     handler.openIframe();
 }
 
-async function processBankTransferOrder(totalAmount, shippingAddress) {
-    const payBtn = document.getElementById('checkout-next-btn');
-    const paymentMethod = 'Bank Transfer';
-    const receiptInput = document.getElementById('bank-receipt-upload');
-    const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY); 
-
-    if (!receiptInput || !receiptInput.files || receiptInput.files.length === 0) {
-        displayMessage('Please upload the payment receipt image.');
-        payBtn.disabled = false;
-        payBtn.innerHTML = 'Confirm & Pay Now';
-        return;
-    }
-    
-    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Uploading Receipt...';
-    
-    const orderFormData = new FormData();
-    orderFormData.append('receipt', receiptInput.files[0]); 
-    orderFormData.append('shippingAddress', JSON.stringify(shippingAddress));
-    orderFormData.append('paymentMethod', paymentMethod);
-    orderFormData.append('totalAmount', totalAmount.toFixed(2));
-    orderFormData.append('subtotal', localStorage.getItem('outflickzOrderSubtotal'));
-    orderFormData.append('shippingFee', localStorage.getItem('outflickzOrderShipping'));
-    orderFormData.append('tax', localStorage.getItem('outflickzOrderTax'));
-    
-    // ⭐ THE FIX: Determine if we use Buy Now (Session) or Cart (Local)
-    let itemsToOrder;
-    if (buyNowItemJSON) {
-        itemsToOrder = JSON.parse(buyNowItemJSON); // Already an array
-    } else {
-        itemsToOrder = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
-    }
-
-    // Append items only if they exist
-    if (itemsToOrder && itemsToOrder.length > 0) {
-        orderFormData.append('orderItems', JSON.stringify(itemsToOrder));
-    }
-
+// ⭐ Helper function to handle the async verification logic
+async function verifyPayment(reference) {
     try {
-        const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/pending`, {
-            method: 'POST',
-            body: orderFormData 
-        });
-
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Failed to place order.');
+        await secureUserFetch(`${API_BASE_URL}/api/orders/verify/${reference}`);
         
-        const payload = {
-            paymentMethod: paymentMethod,
-            orderRef: `bank_${Date.now()}`, 
-            receiptUrl: data.ReceiptUrl, 
-            orderId: data.orderId 
-        };
-
-        await finalizeOrderOnServer(payload, 'banktransfer');
-
-    } catch (error) {
-        console.error('Bank Transfer Error:', error);
-        displayMessage(error.message);
-        payBtn.disabled = false;
-        payBtn.innerHTML = 'Confirm & Pay Now';
+        // Success! Clear cart and redirect
+        localStorage.removeItem(LOCAL_CART_KEY);
+        sessionStorage.removeItem(BUY_NOW_KEY);
+        window.location.href = `order-success.html?ref=${reference}`;
+    } catch (err) {
+        // Fallback: Webhook will eventually catch it
+        window.location.href = `order-success.html?ref=${reference}`;
     }
 }
+
     /**
      * Handles the final step: Payment confirmation and order creation (Router). (Unchanged)
      */
