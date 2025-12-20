@@ -6204,7 +6204,7 @@ app.post('/api/paystack/webhook', async (req, res) => {
     const secret = process.env.PAYSTACK_SECRET_KEY;
     const paystackSignature = req.headers['x-paystack-signature'];
     
-    // 1. Verify Signature
+    // 1. Verify Signature to ensure request is actually from Paystack
     const hash = crypto.createHmac('sha512', secret)
                        .update(JSON.stringify(req.body))
                        .digest('hex');
@@ -6216,62 +6216,70 @@ app.post('/api/paystack/webhook', async (req, res) => {
 
     const event = req.body;
     const transactionData = event.data;
-    // Ensure you are passing order_id in metadata during PaystackPop.setup
     const orderId = transactionData.metadata?.order_id || transactionData.metadata?.orderId;
-
     const OrderModel = mongoose.models.Order || mongoose.model('Order');
 
     // 2. HANDLE SUCCESSFUL PAYMENT
     if (event.event === 'charge.success') {
         try {
-            // ⭐ CRITICAL UPDATE: 
-            // We DO NOT deduct inventory here. We only record that the money was received.
-            // This keeps the order "Pending" so the Admin can manually confirm it later.
-            const updatedOrder = await OrderModel.findByIdAndUpdate(
-                orderId,
+            // Find by ID (from metadata) OR by Reference (fallback)
+            const updatedOrder = await OrderModel.findOneAndUpdate(
+                { 
+                    $or: [
+                        { _id: mongoose.Types.ObjectId.isValid(orderId) ? orderId : null },
+                        { orderReference: transactionData.reference }
+                    ]
+                },
                 {
-                    paymentStatus: 'Paid',           // Money is in
-                    paymentMethod: 'Paystack',
+                    paymentStatus: 'Paid',           
+                    status: 'Processing',            // Critical: Changes from 'Pending'
+                    amountPaidKobo: transactionData.amount, 
                     paymentTxnId: transactionData.reference,
-                    status: 'Processing',
+                    isPaystackPending: false,        // Release the strict check flag
                     $push: { 
-                        notes: `Paystack Payment Successful (${new Date().toLocaleString()}): Ref ${transactionData.reference}` 
+                        notes: `Paystack Verified (${new Date().toLocaleString()}): Ref ${transactionData.reference}` 
                     }
                 },
                 { new: true }
             );
 
             if (!updatedOrder) {
-                console.error(`❌ Webhook Error: Order ${orderId} not found in database.`);
+                console.error(`❌ Webhook Error: Order not found for ID: ${orderId} or Ref: ${transactionData.reference}`);
                 return res.status(404).send('Order not found');
             }
 
-            console.log(`✅ Payment Recorded for Order ${orderId}. Awaiting Admin Confirmation.`);
-            return res.status(200).send('Webhook Processed: Payment Recorded');
+            console.log(`✅ Order ${updatedOrder._id} verified and released to Admin Dashboard.`);
+            return res.status(200).send('Success');
 
         } catch (error) {
-            console.error(`❌ Webhook Process Error: ${error.message}`);
+            console.error(`❌ Webhook DB Error: ${error.message}`);
             return res.status(500).send('Internal Server Error'); 
         }
     }
 
     // 3. HANDLE FAILED PAYMENT
     if (event.event === 'charge.failed') {
-        const reason = transactionData.gateway_response || 'Unknown gateway error';
         try {
-            await OrderModel.findByIdAndUpdate(orderId, {
-                paymentStatus: 'Failed',
-                $push: { notes: `Paystack Failed (${new Date().toISOString()}): ${reason}` }
-            });
+            await OrderModel.findOneAndUpdate(
+                { 
+                    $or: [
+                        { _id: mongoose.Types.ObjectId.isValid(orderId) ? orderId : null },
+                        { orderReference: transactionData.reference }
+                    ]
+                },
+                {
+                    paymentStatus: 'Failed',
+                    $push: { notes: `Paystack Failed (${new Date().toLocaleString()}): ${transactionData.gateway_response}` }
+                }
+            );
         } catch (err) { 
-            console.error('Error updating failed status:', err.message); 
+            console.error('Error logging failure:', err.message); 
         }
         return res.status(200).send('Failure logged');
     }
 
     res.status(200).send('Event acknowledged');
 });
-
 
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
     const userId = req.userId;
@@ -6286,28 +6294,22 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             rawItems = userCart?.items || [];
         }
 
-        if (rawItems.length === 0) {
-            return res.status(400).json({ message: 'Cart is empty.' });
-        }
+        if (rawItems.length === 0) return res.status(400).json({ message: 'Cart is empty.' });
 
         const finalOrderItems = await Promise.all(rawItems.map(async (item) => {
             const allowedCollections = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
             let validatedType = item.productType;
             let typeIsCorrect = false;
 
-            for (const collectionName of allowedCollections) {
-                const Model = getProductModel(collectionName);
-                const exists = await Model.exists({ _id: item.productId });
-                if (exists) {
-                    validatedType = collectionName;
+            for (const col of allowedCollections) {
+                const Model = getProductModel(col);
+                if (await Model.exists({ _id: item.productId })) {
+                    validatedType = col;
                     typeIsCorrect = true;
                     break;
                 }
             }
-
-            if (!typeIsCorrect) {
-                throw new Error(`Product ${item.productId} not found.`);
-            }
+            if (!typeIsCorrect) throw new Error(`Product ${item.productId} not found.`);
 
             return {
                 productId: item.productId,
@@ -6325,7 +6327,7 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
 
         const orderRef = `outflickz_${Date.now()}_${Math.floor(Math.random() * 1000)}`; 
 
-        // --- STIRCT CHECK MODIFICATION ---
+        // CREATE INITIAL RECORD
         const newOrder = await Order.create({
             userId,
             items: finalOrderItems, 
@@ -6335,12 +6337,11 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             shippingFee: parseFloat(shippingFee || 0),
             tax: parseFloat(tax || 0),
             status: 'Pending',
-            // 🔥 Change from 'Pending' to 'Awaiting Payment' for easier filtering
             paymentStatus: 'Awaiting Payment', 
             paymentMethod: 'Paystack',
             orderReference: orderRef,
-            isPaystackPending: true, // New flag for strict filtering
-            amountPaidKobo: 0, // Reset to 0 until webhook confirms payment
+            isPaystackPending: true, // Filter keeps this hidden until webhook flips it
+            amountPaidKobo: 0, 
             paymentTxnId: orderRef, 
         });
 
