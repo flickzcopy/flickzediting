@@ -23,18 +23,17 @@ const allowedOrigins = [
 ];
 
 const corsOptions = {
-    // **1. Keep your existing logic for origin checking (Security)**
     origin: (origin, callback) => {
-        // Allow requests with no origin or requests from the allowed list
         if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
             callback(new Error('Not allowed by CORS'));
         }
     },
-    
     credentials: true, 
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    // ADD THIS LINE:
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     optionsSuccessStatus: 204 
 };
 
@@ -2327,6 +2326,14 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.use(visitorLogger);
+
+app.use((req, res, next) => {
+    // This allows external scripts (like Paystack) to load their own resources
+    res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    next();
+});
 
 // Ensure robots.txt and sitemap.xml are served correctly
 app.get('/robots.txt', (req, res) => {

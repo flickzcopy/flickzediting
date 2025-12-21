@@ -18,6 +18,13 @@
   # This can sometimes force the resolution of 'express' that the system is missing.
   external_node_modules = ["express", "serverless-http"]
 
+  [[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Embedder-Policy = "unsafe-none"
+    Cross-Origin-Opener-Policy = "same-origin-allow-popups"
+    Content-Security-Policy = "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.paystack.co; style-src 'self' 'unsafe-inline' https://paystack.com https://fonts.googleapis.com; img-src 'self' data: https://i.imgur.com https://s3.amazonaws.com;"
+
 # --- Redirects (The standard proxy setup) ---
 
 [[redirects]]
