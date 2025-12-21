@@ -1101,6 +1101,7 @@ const OrderItemSchema = new mongoose.Schema({
     variation: { type: String } 
 }, { _id: false });
 
+
 const OrderSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     items: { type: [OrderItemSchema], required: true },
@@ -1128,9 +1129,7 @@ const OrderSchema = new mongoose.Schema({
             'Inventory Failure (Manual Review)', // Better name for inventory rollback
         ], 
         default: 'Pending'
-    },
-    
-    // --- Fulfillment & Payment Details ---
+    },    
     shippingAddress: { type: Object, required: true },
     paymentMethod: { type: String, required: true },
     orderReference: { type: String, unique: true, sparse: true },
@@ -1138,15 +1137,24 @@ const OrderSchema = new mongoose.Schema({
     paymentTxnId: { type: String, sparse: true },
     paidAt: { type: Date },
     paymentReceiptUrl: { type: String, sparse: true }, // Bank transfer receipt
-
     shippedAt: { type: Date, sparse: true }, 
-    deliveredAt: { type: Date, sparse: true },
-    
-    // --- Admin Confirmation Details ---
+    deliveredAt: { type: Date, sparse: true },    
     confirmedAt: { type: Date, sparse: true },
     confirmedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', sparse: true },
     notes: [String] // For logging manual review notes, inventory failures, etc.
 }, { timestamps: true });
+
+OrderSchema.index(
+    { createdAt: 1 }, 
+    { 
+        expireAfterSeconds: 300, 
+        partialFilterExpression: { 
+            status: 'Pending', 
+            paymentMethod: 'Paystack',
+            amountPaidKobo: { $exists: false } // Only delete if no money was received
+        } 
+    }
+);
 
 const Order = mongoose.models.Order || mongoose.model('Order', OrderSchema);
 

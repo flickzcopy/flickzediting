@@ -333,15 +333,18 @@
         }
     }
 
-    function renderOrders(orders) {
-        const validOrders = orders.filter(order => {
-            if (order.paymentMethod === 'Paystack') {
-                const isUnreleased = order.isPaystackPending === true;
-                const isPending = order.status === 'Pending';
-                if (isUnreleased && isPending) return false;
-            }
-            return true; 
-        });
+   function renderOrders(orders) {
+   const validOrders = orders.filter(order => {
+    const isPaid = order.paymentStatus === 'Paid' || (Number(order.amountPaidKobo) > 0);
+    
+    // Only apply the "hide after 30 mins" rule to unpaid Paystack orders
+    if (order.paymentMethod === 'Paystack' && !isPaid) {
+        const diffInMinutes = (new Date() - new Date(order.createdAt)) / (1000 * 60);
+        return diffInMinutes <= 5; // Keep if under 30 mins, hide if over
+    }
+    
+    return true; // Keep everything else (Paid orders & Bank Transfers)
+});
 
         ordersTableBody.innerHTML = '';
         pendingCountElement.textContent = `${validOrders.length} Orders Requiring Action`;
@@ -528,7 +531,7 @@ async function handleViewDetails(orderId) {
             }
         }
     }
-    
+
     document.addEventListener('DOMContentLoaded', loadUserOrders);
 </script>
 </body>
