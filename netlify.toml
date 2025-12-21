@@ -24,17 +24,27 @@
     Cross-Origin-Embedder-Policy = "unsafe-none"
     Cross-Origin-Opener-Policy = "same-origin-allow-popups"
     # Added cdn.jsdelivr.net to allow Chart.js to load
-    Content-Security-Policy = "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.paystack.co https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://paystack.com https://fonts.googleapis.com https://*.cloudflare.com; img-src 'self' data: https://i.imgur.com https://s3.amazonaws.com https://*.idrivee2.com https://*.idrive.com https://www.idrive.com;"
-    
+    Content-Security-Policy = "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.paystack.co https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://paystack.com https://fonts.googleapis.com https://*.cloudflare.com https://cdnjs.cloudflare.com; img-src 'self' data: https://i.imgur.com https://s3.amazonaws.com https://*.idrivee2.com https://*.idrive.com https://www.idrive.com;"
+
+# 1. Specific files first (Priority)
 [[redirects]]
-  # This maps all requests starting with /api/ to the Netlify function handler.
-  # This is the VITAL step that makes your serverless Express app accessible.
+  from = "/sitemap.xml"
+  to = "/sitemap.xml"
+  status = 200
+
+[[redirects]]
+  from = "/robots.txt"
+  to = "/robots.txt"
+  status = 200
+
+# 2. API requests
+[[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api/:splat"
   status = 200
 
+# 3. Finally, the root redirect (Catch-all for the home page)
 [[redirects]]
-  # This redirects all other root requests to the static index.html file.
   from = "/"
   to = "/index.html"
   status = 200
