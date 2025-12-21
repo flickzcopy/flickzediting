@@ -183,12 +183,11 @@
 
     </main>
 
-    <script>
-    // --- JAVASCRIPT LOGIC (No changes needed, the original JS supports the UI/responsiveness logic) ---
-
+   <script>
+    // --- DOM REFERENCES ---
     const sidebar = document.getElementById('sidebar');
     const sidebarToggle = document.getElementById('sidebar-toggle');
-    const mainContent = document.getElementById('main-content'); // New reference for content shift
+    const mainContent = document.getElementById('main-content');
     const passwordForm = document.getElementById('change-admin-password-form');
     const passwordStatusMessage = document.getElementById('password-status-message');
 
@@ -197,54 +196,54 @@
     const dailyBtn = document.getElementById('chart-daily');
     const monthlyBtn = document.getElementById('chart-monthly');
     const yearlyBtn = document.getElementById('chart-yearly');
-    let visitorChart; // Variable to hold the Chart.js instance
+    let visitorChart = null; 
 
-    // API_BASE_URL is not defined in the provided HTML, assuming it's relative or needs defining.
     const API_BASE_URL = 'https://outflickzz.netlify.app'; 
 
     // --- UTILITY FUNCTIONS ---
 
- /**
-     * Handles the admin logout process by clearing local state 
-     * and notifying the server to clear secure cookies.
+    /**
+     * Displays success/error messages in the password section
      */
+    function showPasswordStatusMessage(message, isSuccess) {
+        if (!passwordStatusMessage) return;
+        passwordStatusMessage.textContent = message;
+        passwordStatusMessage.classList.remove('hidden', 'bg-green-100', 'text-green-700', 'bg-red-100', 'text-red-700');
+        
+        if (isSuccess) {
+            passwordStatusMessage.classList.add('bg-green-100', 'text-green-700');
+        } else {
+            passwordStatusMessage.classList.add('bg-red-100', 'text-red-700');
+        }
+    }
+
     async function logoutAdmin() {
         console.log("Initiating Admin Logout...");
-
         try {
-            // 1. Call the backend logout API to clear the secure Refresh Token cookie
-            // We use the standard fetch here or secureFetch
-            await fetch('/api/admin/logout', { 
+            await fetch(`${API_BASE_URL}/api/admin/logout`, { 
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
                 }
             });
         } catch (error) {
-            console.warn("Server-side logout failed or unreachable, proceeding with client-side cleanup.", error);
+            console.warn("Server-side logout unreachable, cleaning up locally.");
         } finally {
-            // 2. Clear the Access Token from LocalStorage regardless of API success
             localStorage.removeItem('adminToken');
-
-            // 3. Redirect to login page
             window.location.href = './admin-login.html';
         }
     }
 
-
-    // --- API DATA FETCHING LOGIC (No changes needed) ---
+    // --- API DATA FETCHING ---
 
     async function fetchVisitorData(period) {
         const token = localStorage.getItem('adminToken');
         if (!token) {
-            console.error("Authentication token missing for chart data.");
             showPasswordStatusMessage('Session expired. Please log in again.', false);
             setTimeout(logoutAdmin, 2000);
             return { labels: [], data: [] };
         }
         
-        // Construct the endpoint based on the period
-        // NOTE: Backend needs to support /api/analytics/visitors/daily, /monthly, /yearly
         const endpoint = `${API_BASE_URL}/api/analytics/visitors/${period}`; 
 
         try {
@@ -257,169 +256,107 @@
             });
 
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ message: 'Unknown API error' }));
-                console.error(`Error fetching ${period} visitor data:`, errorData.message);
-                
                 if (response.status === 401 || response.status === 403) {
-                     showPasswordStatusMessage('Session expired. Please log in again.', false);
+                     showPasswordStatusMessage('Session expired.', false);
                      setTimeout(logoutAdmin, 2000);
                 }
-                
                 return { labels: [], data: [] }; 
             }
 
-            const data = await response.json();
-            
-            // Assuming the API response structure is { labels: [...], data: [...] }
-            return data; 
-
+            return await response.json(); 
         } catch (error) {
             console.error('Network error fetching visitor data:', error);
             return { labels: [], data: [] };
         }
     }
 
-
-    // --- CHART LOGIC (No changes needed) ---
+    // --- CHART LOGIC ---
 
     async function renderVisitorChart(period) {
+        // Prevent crash if Chart.js CDN is slow to load
+        if (typeof Chart === 'undefined') {
+            console.error("Chart.js is not loaded. Check your internet or script tag.");
+            return;
+        }
+
         const ctx = chartCanvas.getContext('2d');
 
-        // 1. Destroy existing chart instance to clear the canvas/old chart
         if (visitorChart) {
             visitorChart.destroy();
             visitorChart = null;
         }
 
-        // Optional: Display a temporary "Loading..." message
+        // Loading State
         ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
         ctx.font = '16px Inter, sans-serif';
-        ctx.fillStyle = '#6b7280'; // gray-500
+        ctx.fillStyle = '#6b7280';
         ctx.textAlign = 'center';
-        ctx.fillText('Loading visitor data...', chartCanvas.width / 2, chartCanvas.height / 2);
+        ctx.fillText('Loading data...', chartCanvas.width / 2, chartCanvas.height / 2);
 
-
-        // 2. Fetch data from API
         const dataSet = await fetchVisitorData(period); 
         
-        // 3. Check data validity and handle errors
         if (!dataSet || !dataSet.data || dataSet.data.length === 0) {
-            // Clear loading text and display error/no data message
             ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
-            ctx.fillStyle = '#ef4444'; // red-500
-            ctx.fillText('No data available or error loading data.', chartCanvas.width / 2, chartCanvas.height / 2);
+            ctx.fillStyle = '#ef4444';
+            ctx.fillText('No data available.', chartCanvas.width / 2, chartCanvas.height / 2);
             return;
         }
 
-        // 4. Render the new chart instance
         visitorChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: dataSet.labels, // Use fetched labels
+                labels: dataSet.labels,
                 datasets: [{
-                    label: `Total Visitors (${period.charAt(0).toUpperCase() + period.slice(1)})`,
-                    data: dataSet.data, // Use fetched data
-                    borderColor: '#059669', // emerald-600
-                    backgroundColor: 'rgba(5, 150, 105, 0.1)', // Light emerald fill
-                    tension: 0.4, // Smooth curve
-                    pointRadius: 4,
-                    pointHoverRadius: 6,
+                    label: `Visitors (${period})`,
+                    data: dataSet.data,
+                    borderColor: '#059669',
+                    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+                    tension: 0.4,
                     fill: true
                 }]
             },
             options: {
                 responsive: true,
-                maintainAspectRatio: false, // Must be false for the chart wrapper height to take effect
+                maintainAspectRatio: false,
                 plugins: {
-                    legend: {
-                        display: true,
-                        position: 'top',
-                    },
-                    tooltip: {
-                         callbacks: {
-                             label: function(context) {
-                                 let label = context.dataset.label || '';
-                                 if (label) {
-                                     label += ': ';
-                                 }
-                                 if (context.parsed.y !== null) {
-                                     label += new Intl.NumberFormat('en-US').format(context.parsed.y);
-                                 }
-                                 return label;
-                             }
-                         }
-                    }
+                    legend: { display: true, position: 'top' }
                 },
                 scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Number of Visitors'
-                        },
-                        ticks: {
-                            callback: function(value, index, ticks) {
-                                return new Intl.NumberFormat('en-US').format(value);
-                            }
-                        }
-                    }
+                    y: { beginAtZero: true }
                 }
             }
         });
     }
 
-    /**
-     * Updates the UI to highlight the active chart button.
-     * @param {HTMLElement} activeElement 
-     */
     function setActiveButton(activeElement) {
         const buttons = [dailyBtn, monthlyBtn, yearlyBtn];
         buttons.forEach(btn => {
             btn.classList.remove('bg-emerald-600', 'text-white', 'hover:bg-emerald-700');
             btn.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
         });
-        activeElement.classList.remove('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
-        activeElement.classList.add('bg-emerald-600', 'text-white', 'hover:bg-emerald-700');
+        activeElement.classList.replace('bg-gray-200', 'bg-emerald-600');
+        activeElement.classList.replace('text-gray-700', 'text-white');
     }
 
-
-    // --- PASSWORD CHANGE LOGIC (No changes needed) ---
+    // --- PASSWORD CHANGE LOGIC ---
 
     async function submitChangeAdminPassword(event) {
         event.preventDefault();
         const button = document.getElementById('submit-password-btn');
         const originalText = button.textContent;
-        passwordStatusMessage.classList.add('hidden'); 
 
         const currentPassword = document.getElementById('current-password').value;
         const newPassword = document.getElementById('new-password').value;
         const confirmPassword = document.getElementById('confirm-new-password').value;
         const token = localStorage.getItem('adminToken');
 
-        if (!token) {
-            showPasswordStatusMessage('Authentication token missing. Please log in.', false);
-            setTimeout(logoutAdmin, 1500);
-            return;
-        }
-
         if (newPassword !== confirmPassword) {
-            showPasswordStatusMessage('New password and confirmation do not match.', false);
+            showPasswordStatusMessage('Passwords do not match.', false);
             return;
         }
 
-        if (newPassword.length < 8) {
-             showPasswordStatusMessage('New password must be at least 8 characters long.', false);
-             return;
-        }
-
-        // Set loading state
         button.disabled = true;
         button.textContent = 'Updating...';
-
-        const passwordData = {
-            currentPassword: currentPassword,
-            newPassword: newPassword
-        };
 
         try {
             const response = await fetch(`${API_BASE_URL}/api/admin/change-password`, {
@@ -428,114 +365,73 @@
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}` 
                 },
-                body: JSON.stringify(passwordData)
+                body: JSON.stringify({ currentPassword, newPassword })
             });
 
-            const data = await response.json();
+            if (!response.ok) throw new Error('Update failed');
 
-            if (!response.ok) {
-                const errorMessage = data.message || 'Failed to change password.';
-                showPasswordStatusMessage(errorMessage, false);
-                console.error('Password Change Error:', errorMessage);
-                if (response.status === 401 || response.status === 403) {
-                     setTimeout(logoutAdmin, 2000); 
-                }
-                throw new Error(errorMessage);
-            }
-
-            // SUCCESS
-            showPasswordStatusMessage('Password updated successfully! You will be logged out to re-authenticate.', true);
-            
+            showPasswordStatusMessage('Password updated! Logging out...', true);
             setTimeout(logoutAdmin, 3000); 
 
         } catch (error) {
-            console.error('Password Change Error:', error);
-            if (error.message && error.message.includes('Failed to fetch')) {
-                showPasswordStatusMessage('Network error: Could not reach the server.', false);
-            }
-        } finally {
-            if (!document.getElementById('password-status-message').textContent.includes('logged out')) {
-                 button.disabled = false;
-                 button.textContent = originalText;
-            }
+            showPasswordStatusMessage('Error updating password.', false);
+            button.disabled = false;
+            button.textContent = originalText;
         }
     }
 
-
-    // --- INITIALIZATION AND UI LOGIC ---
+    // --- INITIALIZATION ---
 
     document.addEventListener('DOMContentLoaded', () => {
-        // Check for admin token on load, redirect if missing
         if (!localStorage.getItem('adminToken')) {
-            console.log("No token found, redirecting to admin login.");
             window.location.href = './admin-login.html';
             return;
         }
         
-        // Initialize the visitor chart to 'Daily' when the page loads
-        renderVisitorChart('daily');
-        setActiveButton(dailyBtn);
-
-        // Event listeners for Chart Buttons
-        dailyBtn.addEventListener('click', () => {
+        // Small timeout to ensure Chart.js global is ready
+        setTimeout(() => {
             renderVisitorChart('daily');
-            setActiveButton(dailyBtn);
-        });
+        }, 100);
 
-        monthlyBtn.addEventListener('click', () => {
-            renderVisitorChart('monthly');
-            setActiveButton(monthlyBtn);
-        });
+        // Chart Listeners
+        dailyBtn.addEventListener('click', () => { renderVisitorChart('daily'); setActiveButton(dailyBtn); });
+        monthlyBtn.addEventListener('click', () => { renderVisitorChart('monthly'); setActiveButton(monthlyBtn); });
+        yearlyBtn.addEventListener('click', () => { renderVisitorChart('yearly'); setActiveButton(yearlyBtn); });
 
-        yearlyBtn.addEventListener('click', () => {
-            renderVisitorChart('yearly');
-            setActiveButton(yearlyBtn);
-        });
-
-
-        // Sidebar toggle logic
-        sidebarToggle.addEventListener('click', (event) => {
-            event.stopPropagation();
+        // Sidebar Toggle
+        sidebarToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
             sidebar.classList.toggle('-translate-x-full');
-            // Optional: Toggle overlay class for mobile when sidebar is open
         });
 
-        // Event listener for closing sidebar on main content click (mobile)
-        document.querySelector('main').addEventListener('click', (event) => {
+        // Close sidebar on mobile when clicking content
+        mainContent.addEventListener('click', () => {
              if (!sidebar.classList.contains('-translate-x-full') && window.innerWidth < 1024) {
                  sidebar.classList.add('-translate-x-full');
              }
         });
-        
-        // Prevent click inside sidebar from closing it (on mobile)
-        sidebar.addEventListener('click', (event) => {
-            event.stopPropagation();
-        });
 
-        // **NEW** Password visibility toggle logic
+        // Password visibility toggles
         document.querySelectorAll('.view-password-toggle').forEach(button => {
             button.addEventListener('click', () => {
-                const targetId = button.getAttribute('data-target');
-                const targetInput = document.getElementById(targetId);
+                const target = document.getElementById(button.getAttribute('data-target'));
                 const showIcon = button.querySelector('.toggle-icon-show');
                 const hideIcon = button.querySelector('.toggle-icon-hide');
 
-                if (targetInput.type === 'password') {
-                    targetInput.type = 'text';
+                if (target.type === 'password') {
+                    target.type = 'text';
                     showIcon.classList.add('hidden');
                     hideIcon.classList.remove('hidden');
                 } else {
-                    targetInput.type = 'password';
+                    target.type = 'password';
                     showIcon.classList.remove('hidden');
                     hideIcon.classList.add('hidden');
                 }
             });
         });
 
-        // Attach password form submission handler
         passwordForm.addEventListener('submit', submitChangeAdminPassword);
     });
-
-    </script>
+</script>
 </body>
 </html>

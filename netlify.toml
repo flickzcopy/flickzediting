@@ -23,8 +23,8 @@
 [headers.values]
     Cross-Origin-Embedder-Policy = "unsafe-none"
     Cross-Origin-Opener-Policy = "same-origin-allow-popups"
-    # Added idrive.com and expanded idrivee2.com to cover all regions
-    Content-Security-Policy = "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.paystack.co https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://paystack.com https://fonts.googleapis.com https://*.cloudflare.com; img-src 'self' data: https://i.imgur.com https://s3.amazonaws.com https://*.idrivee2.com https://*.idrive.com https://www.idrive.com;"
+    # Added cdn.jsdelivr.net to allow Chart.js to load
+    Content-Security-Policy = "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.paystack.co https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://paystack.com https://fonts.googleapis.com https://*.cloudflare.com; img-src 'self' data: https://i.imgur.com https://s3.amazonaws.com https://*.idrivee2.com https://*.idrive.com https://www.idrive.com;"
     
 [[redirects]]
   # This maps all requests starting with /api/ to the Netlify function handler.
