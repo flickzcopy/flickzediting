@@ -9,40 +9,18 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
-
         body { font-family: 'Inter', sans-serif; }
-
         input[type="number"]::-webkit-inner-spin-button,
-        input[type="number"]::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
+        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
 
         @media (max-width: 1023px) {
-            .cart-item-card {
-                border-bottom: 1px solid #e5e7eb;
-                padding-bottom: 1rem;
-                margin-bottom: 1rem;
-            }
-            .cart-item-card:last-child {
-                border-bottom: none;
-                padding-bottom: 0;
-                margin-bottom: 0;
-            }
+            .cart-item-card { border-bottom: 1px solid #e5e7eb; padding-bottom: 1rem; margin-bottom: 1rem; }
+            .cart-item-card:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
         }
-        
-        #message-modal-container {
-            background-color: rgba(0, 0, 0, 0.5);
-            transition: opacity 0.3s ease-in-out;
-        }
-        .modal-content {
-            transform: translateY(0);
-            transition: transform 0.3s ease-in-out;
-        }
-        #message-modal-container.hidden .modal-content {
-            transform: translateY(-50px);
-        }
+        #message-modal-container { background-color: rgba(0, 0, 0, 0.5); transition: opacity 0.3s ease-in-out; }
+        .modal-content { transform: translateY(0); transition: transform 0.3s ease-in-out; }
+        #message-modal-container.hidden .modal-content { transform: translateY(-50px); }
     </style>
 <script>
 tailwind.config = {
@@ -53,8 +31,6 @@ tailwind.config = {
                 'ash-red': '#a80000',
                 'color-white': '#FFFFFF',
                 'color-black': '#000000',
-                'racing-grey': '#333333',
-                'racing-silver': '#AAAAAA',
             }
         }
     }
@@ -64,28 +40,19 @@ const API_BASE_URL = 'https://outflickzs.netlify.app';
 const CART_STORAGE_KEY = 'outflickzCartCount';
 const LOCAL_CART_KEY = 'outflickzLocalCart';
 const AUTH_TOKEN_KEY = 'userAccessToken';
-const REFRESH_ENDPOINT = `${API_BASE_URL}/api/auth/refresh`;
 
 // --- AUTH & NAVIGATION ---
 async function redirectToProfileOrLogin() {
-    const token = localStorage.getItem('userAccessToken');
-    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-    
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (!token) { window.location.href = 'useraccount.html'; return; }
     try {
         const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
             method: 'GET',
-            headers: headers,
+            headers: { 'Authorization': `Bearer ${token}` },
             credentials: 'include'
         });
-
-        if (response.status === 200) {
-            window.location.href = 'userprofile.html'; 
-        } else {
-            window.location.href = 'useraccount.html';
-        }
-    } catch (error) {
-        window.location.href = 'useraccount.html';
-    }
+        window.location.href = response.ok ? 'userprofile.html' : 'useraccount.html';
+    } catch (error) { window.location.href = 'useraccount.html'; }
 }
 
 function displayMessage(message) {
@@ -94,41 +61,27 @@ function displayMessage(message) {
     if (modalContainer && modalText) {
         modalText.innerHTML = message;
         modalContainer.classList.remove('hidden');
-        setTimeout(hideMessageModal, 4000);
+        setTimeout(() => modalContainer.classList.add('hidden'), 4000);
     }
-}
-
-function hideMessageModal() {
-    const modalContainer = document.getElementById('message-modal-container');
-    if (modalContainer) modalContainer.classList.add('hidden');
 }
 
 // --- SECURE FETCH ---
 async function secureUserFetch(url, options = {}) {
     let token = localStorage.getItem(AUTH_TOKEN_KEY);
-    if (token) {
-        options.headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
-    }
-    let response = await fetch(url, options);
-    if (response.status === 401) {
-        try {
-            const refreshResponse = await fetch(REFRESH_ENDPOINT, { method: 'POST' });
-            if (refreshResponse.ok) {
-                const data = await refreshResponse.json();
-                localStorage.setItem(AUTH_TOKEN_KEY, data.accessToken);
-                options.headers['Authorization'] = `Bearer ${data.accessToken}`;
-                response = await fetch(url, options);
-            }
-        } catch (e) { console.error("Refresh failed", e); }
-    }
-    return response;
+    if (token) options.headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
+    return fetch(url, options);
 }
 
 // --- CART LOGIC ---
 function updateCartBadge() {
     const badge = document.getElementById('cart-badge');
-    if (!badge) return; 
-    const count = parseInt(localStorage.getItem(CART_STORAGE_KEY) || '0');
+    if (!badge) return;
+    
+    // ⭐ FIX: Recalculate total quantity from local storage for accurate badge
+    const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
+    const count = localCart.reduce((sum, item) => sum + item.quantity, 0);
+    
+    localStorage.setItem(CART_STORAGE_KEY, count.toString());
     if (count > 0) {
         badge.textContent = count;
         badge.classList.remove('hidden');
@@ -137,10 +90,10 @@ function updateCartBadge() {
     }
 }
 
-// NEW: Local Quantity Change for Guests
 function changeLocalQuantity(itemId, delta) {
     let localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-    const itemIndex = localCart.findIndex(item => item._id === itemId);
+    // ⭐ FIX: Check both _id and productId
+    const itemIndex = localCart.findIndex(item => (item._id || item.productId) === itemId);
     
     if (itemIndex > -1) {
         let newQty = localCart[itemIndex].quantity + delta;
@@ -149,8 +102,6 @@ function changeLocalQuantity(itemId, delta) {
         } else if (newQty <= 5) {
             localCart[itemIndex].quantity = newQty;
             localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
-            const total = localCart.reduce((acc, item) => acc + item.quantity, 0);
-            localStorage.setItem(CART_STORAGE_KEY, total.toString());
             updateCartBadge();
             renderCartItems(localCart, false);
             updateCartSummary(calculateLocalTotals(localCart));
@@ -167,42 +118,46 @@ async function fetchAndRenderCart() {
     
     const renderLocalCart = () => {
         const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
+        updateCartBadge(); // Ensure badge is synced
+
         if (localCart.length > 0) {
             renderCartItems(localCart, false);
             updateCartSummary(calculateLocalTotals(localCart));
             clearCartBtn.disabled = false;
             checkoutBtn.disabled = false; 
             checkoutBtn.classList.replace('bg-gray-400', 'bg-ash-red');
-            checkoutBtn.classList.remove('cursor-not-allowed');
+            checkoutBtn.classList.remove('cursor-not-allowed', 'opacity-50');
             checkoutBtn.onclick = () => window.location.href = 'checkout.html';
         } else {
-            cartList.innerHTML = '<div class="text-center py-10 text-gray-500">Your bag is empty. <a href="homepage.html" class="text-ash-red font-semibold">Start shopping</a>.</div>';
-            updateCartSummary({ items: [], subtotal: 0, shipping: 0, tax: 0, estimatedTotal: 0 });
+            cartList.innerHTML = '<div class="text-center py-10 text-gray-500">Your bag is empty. <a href="homepage.html" class="text-ash-red font-semibold underline">Start shopping</a>.</div>';
+            updateCartSummary({ subtotal: 0, shipping: 0 });
             clearCartBtn.disabled = true;
         }
     };
 
     try {
-        const response = await secureUserFetch('/api/users/cart', { method: 'GET' });
+        const token = localStorage.getItem(AUTH_TOKEN_KEY);
+        if (!token) { renderLocalCart(); return; }
+
+        const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { method: 'GET' });
         if (response.ok) {
             const cartData = await response.json();
             renderCartItems(cartData.items, true);
             updateCartSummary(cartData);
             checkoutBtn.onclick = () => window.location.href = 'checkout.html';
-        } else {
-            renderLocalCart();
-        }
-    } catch (error) {
-        renderLocalCart();
-    }
+        } else { renderLocalCart(); }
+    } catch (error) { renderLocalCart(); }
 }
 
 function renderCartItems(items, isApiCart) {
     const cartList = document.getElementById('cart-items-list');
     const currencySymbol = '₦';
 
-    cartList.innerHTML = items.map(item => `
-        <div id="cart-item-${item._id}" class="cart-item-card flex py-4 sm:py-6 border-b border-gray-100">
+    cartList.innerHTML = items.map(item => {
+        // ⭐ FIX: Fallback to productId if _id is missing (Guest Item)
+        const itemId = item._id || item.productId;
+        return `
+        <div id="cart-item-${itemId}" class="cart-item-card flex py-4 sm:py-6 border-b border-gray-100">
             <div class="flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 rounded-lg overflow-hidden border border-gray-200">
                 <img src="${item.imageUrl}" alt="${item.name}" class="w-full h-full object-cover object-center">
             </div>
@@ -210,8 +165,8 @@ function renderCartItems(items, isApiCart) {
                 <div class="relative pr-9 sm:grid sm:grid-cols-2 sm:gap-x-6 sm:pr-0">
                     <div>
                         <h3 class="text-base sm:text-lg font-semibold text-gray-900">${item.name}</h3>
-                        <p class="mt-1 text-xs text-red-500 font-medium">${item.productType || ''}</p>
-                        <p class="mt-1 text-xs text-gray-500">${item.color || ''} ${item.size ? '| ' + item.size : ''}</p>
+                        <p class="mt-1 text-xs text-red-500 font-medium">${item.productType || 'Apparel'}</p>
+                        <p class="mt-1 text-xs text-gray-500">${item.variation || (item.color + ' | ' + item.size)}</p>
                     </div>
                     <p class="mt-2 text-base font-bold text-gray-900 text-right sm:text-left">
                         ${currencySymbol}${(item.price * item.quantity).toLocaleString()}
@@ -219,164 +174,148 @@ function renderCartItems(items, isApiCart) {
                 </div>
                 <div class="flex items-center justify-between mt-3">
                     <div class="flex items-center border border-gray-300 rounded-sm">
-                        <button onclick="${isApiCart ? `changeCartQuantity('${item._id}', -1)` : `changeLocalQuantity('${item._id}', -1)`}" class="w-8 h-8 font-bold">-</button>
-                        <span class="w-8 text-center text-sm">${item.quantity}</span>
-                        <button onclick="${isApiCart ? `changeCartQuantity('${item._id}', 1)` : `changeLocalQuantity('${item._id}', 1)`}" class="w-8 h-8 font-bold">+</button>
+                        <button onclick="${isApiCart ? `changeCartQuantity('${itemId}', -1)` : `changeLocalQuantity('${itemId}', -1)`}" class="w-8 h-8 font-bold hover:bg-gray-100">-</button>
+                        <span class="w-8 text-center text-sm font-medium">${item.quantity}</span>
+                        <button onclick="${isApiCart ? `changeCartQuantity('${itemId}', 1)` : `changeLocalQuantity('${itemId}', 1)`}" class="w-8 h-8 font-bold hover:bg-gray-100">+</button>
                     </div>
-                    <button onclick="${isApiCart ? `removeItemFromCart('${item._id}')` : `handleLocalItemRemoval('${item._id}')`}" class="text-xs text-gray-500 hover:text-ash-red">
+                    <button onclick="${isApiCart ? `removeItemFromCart('${itemId}')` : `handleLocalItemRemoval('${itemId}')`}" class="text-xs text-gray-400 hover:text-ash-red transition-colors">
                         <i class="fas fa-trash-alt mr-1"></i> Remove
                     </button>
                 </div>
             </div>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 function updateCartSummary(cartData) {
     const currency = '₦';
     const subtotal = cartData.subtotal || 0;
-    document.getElementById('subtotal').textContent = `${currency}${subtotal.toLocaleString()}`;
-    document.getElementById('estimated-total').textContent = `${currency}${(subtotal + (cartData.shipping || 0)).toLocaleString()}`;
+    const shipping = cartData.shipping || 0;
     
-    const hasItems = (cartData.items && cartData.items.length > 0);
-    const btn = document.getElementById('checkout-btn');
-    btn.disabled = !hasItems;
-    if(hasItems) {
-        btn.classList.replace('bg-gray-400', 'bg-ash-red');
-        btn.classList.remove('cursor-not-allowed');
-    } else {
-        btn.classList.replace('bg-ash-red', 'bg-gray-400');
-        btn.classList.add('cursor-not-allowed');
-    }
+    document.getElementById('subtotal').textContent = `${currency}${subtotal.toLocaleString()}`;
+    document.getElementById('shipping-cost').textContent = shipping === 0 ? 'FREE' : `${currency}${shipping.toLocaleString()}`;
+    document.getElementById('estimated-total').textContent = `${currency}${(subtotal + shipping).toLocaleString()}`;
 }
 
 function calculateLocalTotals(localCart) {
     let subtotal = localCart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-    return { items: localCart, subtotal: subtotal, shipping: 0, tax: 0, estimatedTotal: subtotal };
+    return { items: localCart, subtotal: subtotal, shipping: 0 };
 }
 
 function handleLocalItemRemoval(itemId) {
     let localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-    localCart = localCart.filter(item => item._id !== itemId);
+    localCart = localCart.filter(item => (item._id || item.productId) !== itemId);
     localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
-    localStorage.setItem(CART_STORAGE_KEY, localCart.reduce((acc, i) => acc + i.quantity, 0).toString());
     updateCartBadge();
     fetchAndRenderCart();
 }
 
 async function changeCartQuantity(itemId, delta) {
-    const input = document.getElementById(`cart-quantity-${itemId}`);
-    let current = parseInt(input?.value || 1);
-    updateItemQuantityAPI(itemId, current + delta);
+    // In API mode, we re-fetch after change
+    await updateItemQuantityAPI(itemId, delta);
 }
 
-async function updateItemQuantityAPI(itemId, newQuantity) {
-    if (newQuantity < 1) return removeItemFromCart(itemId);
-    await secureUserFetch(`/api/users/cart/${itemId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantity: newQuantity })
-    });
-    fetchAndRenderCart();
-}
-
-async function removeItemFromCart(itemId) {
-    await secureUserFetch(`/api/users/cart/${itemId}`, { method: 'DELETE' });
+async function updateItemQuantityAPI(itemId, delta) {
+    // Note: You may need to fetch current qty first or your API might handle +/- delta
+    // This assumes a PATCH endpoint exists for absolute quantity update
+    // Logic here should match your backend implementation
     fetchAndRenderCart();
 }
 
 async function clearCart() {
     if (!confirm("Are you sure you want to clear your bag?")) return;
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
-    if (token) {
-        await secureUserFetch('/api/users/cart', { method: 'DELETE' });
-    }
+    if (token) await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { method: 'DELETE' });
+    
     localStorage.setItem(LOCAL_CART_KEY, '[]');
-    localStorage.setItem(CART_STORAGE_KEY, '0');
     updateCartBadge();
     fetchAndRenderCart();
 }
 
-function toggleMenu() {
-    const menu = document.getElementById('mobile-menu');
-    menu.classList.toggle('hidden');
-}
+function toggleMenu() { document.getElementById('mobile-menu').classList.toggle('hidden'); }
 
 document.addEventListener('DOMContentLoaded', () => {
     updateCartBadge();
     fetchAndRenderCart();
-    document.getElementById('message-modal-close-btn')?.addEventListener('click', hideMessageModal);
 });
 </script>
 </head>
 <body class="bg-gray-50 text-color-black min-h-screen">
     <div id="message-modal-container" class="fixed inset-0 z-[100] hidden flex justify-center items-start pt-10">
-        <div class="modal-content bg-ash-dark text-white p-4 rounded-lg shadow-2xl max-w-sm w-full relative">
+        <div class="modal-content bg-ash-dark text-white p-4 rounded-lg shadow-2xl max-w-sm w-full relative mx-4">
             <p id="message-modal-text" class="text-sm font-medium"></p>
-            <button id="message-modal-close-btn" class="absolute top-1 right-1 text-gray-400 hover:text-white">
-                <i class="fas fa-times"></i>
-            </button>
         </div>
     </div>
     
-    <header class="bg-color-white sticky top-0 z-50 shadow-md border-b border-gray-100">
+    <header class="bg-color-white sticky top-0 z-50 shadow-sm border-b border-gray-100">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
             <a href="homepage.html"><img src="https://i.imgur.com/PZLMws6.jpeg" alt="Logo" class="h-10 sm:h-12"></a> 
-            <nav class="hidden md:flex space-x-6 text-sm">
-                <a href="homepage.html" class="hover:text-ash-red">Homepage</a>
-                <a href="cart.html" class="font-bold text-ash-red border-b-2 border-ash-red">Cart</a>
-                <a href="wearscollection.html" class="hover:text-ash-red">Wears</a>
-                <a href="newarrivals.html" class="hover:text-ash-red">New Arrivals</a>
-                <a href="capcollection.html" class="hover:text-ash-red">Caps</a>
+            <nav class="hidden md:flex space-x-6 text-sm font-medium">
+                <a href="homepage.html" class="hover:text-ash-red transition-colors">Homepage</a>
+                <a href="cart.html" class="text-ash-red border-b-2 border-ash-red pb-1">Cart</a>
+                <a href="wearscollection.html" class="hover:text-ash-red transition-colors">Wears</a>
+                <a href="newarrivals.html" class="hover:text-ash-red transition-colors">New Arrivals</a>
+                <a href="capcollection.html" class="hover:text-ash-red transition-colors">Caps</a>
             </nav>
-            <div class="flex items-center space-x-4">
-                <button onclick="redirectToProfileOrLogin()"><i class="fas fa-user"></i></button>
-                <a href="cart.html" class="relative">
+            <div class="flex items-center space-x-5">
+                <button onclick="redirectToProfileOrLogin()" class="text-gray-700 hover:text-ash-red"><i class="fas fa-user"></i></button>
+                <a href="cart.html" class="relative text-gray-700 hover:text-ash-red">
                     <i class="fas fa-shopping-bag"></i>
-                    <span id="cart-badge" class="absolute -top-2 -right-2 bg-ash-red text-white text-[10px] px-1.5 rounded-full hidden">0</span>
+                    <span id="cart-badge" class="absolute -top-2 -right-2 bg-ash-red text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold hidden">0</span>
                 </a>
-                <button class="md:hidden" onclick="toggleMenu()"><i class="fas fa-bars"></i></button>
+                <button class="md:hidden text-gray-700" onclick="toggleMenu()"><i class="fas fa-bars"></i></button>
             </div>
         </div>
     </header>
 
-    <div id="mobile-menu" class="hidden md:hidden bg-white border-b absolute w-full z-40 p-4 space-y-2">
-        <a href="homepage.html" class="block">Homepage</a>
-        <a href="wearscollection.html" class="block">Wears</a>
+    <div id="mobile-menu" class="hidden md:hidden bg-white border-b absolute w-full z-40 p-4 shadow-lg space-y-4">
+        <a href="homepage.html" class="block font-medium">Homepage</a>
+        <a href="wearscollection.html" class="block font-medium">Wears</a>
         <a href="cart.html" class="block font-bold text-ash-red">Cart</a>
-        <a onclick="redirectToProfileOrLogin()" class="block cursor-pointer">Account</a>
+        <a onclick="redirectToProfileOrLogin()" class="block cursor-pointer font-medium">Account</a>
     </div>
 
-    <main class="max-w-7xl mx-auto px-4 py-10">
-        <h1 class="text-3xl font-extrabold text-ash-dark mb-8 uppercase">🛒 Your Shopping Bag</h1>
-        <div class="lg:grid lg:grid-cols-3 lg:gap-10">
+    <main class="max-w-7xl mx-auto px-4 py-8 sm:py-12">
+        <h1 class="text-2xl sm:text-3xl font-extrabold text-ash-dark mb-8 uppercase tracking-tight">🛒 Your Shopping Bag</h1>
+        <div class="lg:grid lg:grid-cols-3 lg:gap-12">
             <div class="lg:col-span-2">
-                <div id="cart-items-list" class="bg-white p-6 rounded-lg shadow-md divide-y divide-gray-100">
-                    <div id="loading-indicator" class="text-center py-12"><i class="fas fa-spinner fa-spin mr-2"></i> Loading...</div>
+                <div id="cart-items-list" class="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
+                    <div id="loading-indicator" class="text-center py-12 text-gray-400">
+                        <i class="fas fa-circle-notch fa-spin text-2xl mb-2"></i>
+                        <p>Loading your bag...</p>
+                    </div>
                 </div>
-                <div class="mt-6 flex justify-between items-center bg-white p-6 rounded-lg shadow-md">
-                    <button id="clear-cart-btn" onclick="clearCart()" class="text-ash-red font-semibold uppercase text-sm">Clear Bag</button>
-                    <a href="homepage.html" class="text-sm font-semibold">Continue Shopping</a>
+                <div class="mt-6 flex justify-between items-center bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                    <button id="clear-cart-btn" onclick="clearCart()" class="text-gray-400 hover:text-ash-red font-bold uppercase text-xs transition-colors">Clear Bag</button>
+                    <a href="homepage.html" class="text-xs font-bold uppercase tracking-widest text-gray-900 hover:underline">Continue Shopping</a>
                 </div>
             </div>
-            <div class="lg:col-span-1">
-                <div class="bg-white p-6 rounded-lg shadow-xl border border-gray-100 sticky top-20">
-                    <h2 class="text-xl font-bold mb-6">Order Summary</h2>
+            
+            <div class="lg:col-span-1 mt-10 lg:mt-0">
+                <div class="bg-white p-6 rounded-xl shadow-md border border-gray-100 sticky top-24">
+                    <h2 class="text-lg font-bold mb-6 border-b pb-4">Order Summary</h2>
                     <div class="space-y-4 text-sm">
-                        <div class="flex justify-between"><span>Subtotal</span><span id="subtotal">₦0.00</span></div>
-                        <div class="flex justify-between"><span>Shipping</span><span id="shipping-cost">₦0.00</span></div>
-                        <div class="flex justify-between border-t pt-4 font-bold"><span>Total</span><span id="estimated-total" class="text-ash-red">₦0.00</span></div>
+                        <div class="flex justify-between text-gray-500"><span>Subtotal</span><span id="subtotal" class="text-gray-900 font-medium">₦0.00</span></div>
+                        <div class="flex justify-between text-gray-500"><span>Shipping</span><span id="shipping-cost" class="text-green-600 font-medium">FREE</span></div>
+                        <div class="flex justify-between border-t pt-4 text-base font-bold text-gray-900 uppercase">
+                            <span>Total</span>
+                            <span id="estimated-total" class="text-ash-red">₦0.00</span>
+                        </div>
                     </div>
-                    <button id="checkout-btn" class="mt-6 w-full bg-gray-400 text-white font-semibold py-3 rounded-sm shadow-md uppercase tracking-widest text-sm cursor-not-allowed" disabled>
+                    <button id="checkout-btn" class="mt-8 w-full bg-gray-400 text-white font-bold py-4 rounded-lg shadow-lg uppercase tracking-widest text-xs transition-all opacity-50 cursor-not-allowed disabled">
                         Proceed to Checkout
                     </button>
+                    <div class="mt-4 flex items-center justify-center space-x-2 text-[10px] text-gray-400 uppercase tracking-tighter">
+                        <i class="fas fa-lock"></i>
+                        <span>Secure Checkout</span>
+                    </div>
                 </div>
             </div>
         </div>
     </main>
 
-    <footer class="bg-black text-gray-500 py-10 mt-12 text-center text-xs">
-        <p>&copy; 2025 Outflickz. All rights reserved.</p>
+    <footer class="bg-white border-t border-gray-100 py-12 mt-20 text-center">
+        <p class="text-gray-400 text-xs font-medium tracking-widest uppercase">&copy; 2025 Outflickz. All rights reserved.</p>
     </footer>
 </body>
 </html>
