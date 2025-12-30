@@ -6311,79 +6311,74 @@ app.delete('/api/users/cart', verifyUserToken, async (req, res) => {
 });
 
 // --- 1. WEBHOOK ENDPOINT ---
+// --- 1. WEBHOOK ENDPOINT ---
 app.post('/api/paystack/webhook', async (req, res) => {
     const secret = process.env.PAYSTACK_SECRET_KEY;
     const paystackSignature = req.headers['x-paystack-signature'];
     
-    // Verify Signature
     const hash = crypto.createHmac('sha512', secret)
                        .update(JSON.stringify(req.body))
                        .digest('hex');
     
-    if (hash !== paystackSignature) {
-        console.error('❌ Webhook Error: Invalid Signature');
-        return res.status(401).send('Unauthorized');
-    }
+    if (hash !== paystackSignature) return res.status(401).send('Unauthorized');
 
     const event = req.body;
     const transactionData = event.data;
-    const orderId = transactionData.metadata?.order_id || transactionData.metadata?.orderId;
     const OrderModel = mongoose.models.Order || mongoose.model('Order');
 
     if (event.event === 'charge.success') {
         try {
             const updatedOrder = await OrderModel.findOneAndUpdate(
-                { 
-                    $or: [
-                        { _id: mongoose.Types.ObjectId.isValid(orderId) ? orderId : null },
-                        { orderReference: transactionData.reference }
-                    ]
-                },
+                { orderReference: transactionData.reference },
                 {
                     paymentStatus: 'Paid',           
                     status: 'Processing',            
                     amountPaidKobo: transactionData.amount, 
                     paymentTxnId: transactionData.reference,
                     isPaystackPending: false,        
-                    $push: { 
-                        notes: `Paystack Verified (${new Date().toLocaleString()}): Ref ${transactionData.reference}` 
-                    }
+                    $push: { notes: `Paystack Webhook Verified (${new Date().toLocaleString()})` }
                 },
                 { new: true }
             );
 
-            if (!updatedOrder) {
-                console.error(`❌ Webhook Error: Order not found for Ref: ${transactionData.reference}`);
-                return res.status(404).send('Order not found');
+            if (updatedOrder) {
+                // ⭐ CORRECTED: Pass Email AND Order Object
+                // If Guest, use guestEmail. If logged in, use shipping address email.
+                const targetEmail = updatedOrder.guestEmail || updatedOrder.shippingAddress?.email;
+                
+                try {
+                    await sendOrderConfirmationEmailForAdmin(targetEmail, updatedOrder);
+                    console.log("✅ Admin Notified via Webhook");
+                } catch (emailErr) {
+                    console.error("❌ Admin Email Error (Webhook):", emailErr);
+                }
+                
+                return res.status(200).send('Success');
             }
-
-            console.log(`✅ Order ${updatedOrder._id} released to Dashboard.`);
-            return res.status(200).send('Success');
         } catch (error) {
-            console.error(`❌ Webhook DB Error: ${error.message}`);
-            return res.status(500).send('Internal Server Error'); 
+            return res.status(500).send('Internal Error'); 
         }
     }
-    res.status(200).send('Event acknowledged');
+    res.status(200).send('Acknowledged');
 });
+
+// --- 2. MANUAL VERIFY ROUTE ---
 app.get('/api/orders/verify/:reference', async (req, res) => {
     const { reference } = req.params;
     const OrderModel = mongoose.models.Order || mongoose.model('Order');
 
     try {
-        // 1. Double check with Paystack API
         const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
             headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }
         });
         const data = await response.json();
 
         if (data.status && data.data.status === 'success') {
-            // 2. Update the Order (Works for both Guests and Users)
             const updated = await OrderModel.findOneAndUpdate(
                 { orderReference: reference },
                 { 
                     paymentStatus: 'Paid', 
-                    status: 'Processing',
+                    status: 'Processing', // Note: status is 'Processing', your function handles 'Confirmed'/'Completed'
                     amountPaidKobo: data.data.amount,
                     isPaystackPending: false,
                     paidAt: new Date()
@@ -6392,6 +6387,16 @@ app.get('/api/orders/verify/:reference', async (req, res) => {
             );
 
             if (updated) {
+                // ⭐ CORRECTED: Pass Email AND Order Object
+                const targetEmail = updated.guestEmail || updated.shippingAddress?.email;
+                
+                try {
+                    await sendOrderConfirmationEmailForAdmin(targetEmail, updated);
+                    console.log("✅ Admin Notified via Verify Route");
+                } catch (emailErr) {
+                    console.error("❌ Admin Email Error (Verify Route):", emailErr);
+                }
+
                 return res.status(200).json({ 
                     message: 'Verified', 
                     status: 'Paid', 
@@ -6399,9 +6404,9 @@ app.get('/api/orders/verify/:reference', async (req, res) => {
                 });
             }
         }
-        res.status(400).json({ message: 'Payment verification failed at Paystack' });
+        res.status(400).json({ message: 'Payment verification failed' });
     } catch (error) {
-        console.error("Manual Verify Error:", error);
+        console.error("Verify Error:", error);
         res.status(500).json({ message: "Internal Server Error" });
     }
 });
@@ -6515,6 +6520,7 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 });
+
 // =========================================================
 // 8. POST /api/notifications/admin-order-email - Send Notification to Admin
 // Modified to include WhatsApp Contact Button for Admin
