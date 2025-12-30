@@ -159,7 +159,10 @@ function renderCartItems(items, isApiCart) {
         const price = item.price || (item.product && item.product.price) || 0;
         const img = item.imageUrl || (item.product && item.product.imageUrl) || 'https://i.imgur.com/PZLMws6.jpeg'; 
         const qty = item.quantity || 1;
+        
         const displaySize = item.size ? item.size : "Standard";
+        // Get color from item or nested product object
+        const displayColor = item.color || (item.product && item.product.color) || null;
 
         return `
         <div class="flex py-6 border-b border-gray-100 last:border-0">
@@ -170,9 +173,10 @@ function renderCartItems(items, isApiCart) {
                 <div class="flex justify-between items-start">
                     <div>
                         <h3 class="text-sm sm:text-base font-bold text-gray-900">${name}</h3>
-                        <div class="flex items-center gap-2 mt-1">
-                            <span class="px-2 py-0.5 bg-gray-100 text-[10px] font-bold uppercase rounded text-gray-600">Size: ${displaySize}</span>
-                            ${item.productType ? `<span class="text-[10px] text-gray-400 uppercase tracking-tighter">${item.productType}</span>` : ''}
+                        <div class="flex flex-wrap items-center gap-2 mt-1">
+                            <span class="text-[10px] font-bold uppercase text-gray-400">Size: <span class="text-gray-900">${displaySize}</span></span>
+                            ${displayColor ? `<span class="text-[10px] font-bold uppercase text-gray-400 ml-2">Color: <span class="text-gray-900">${displayColor}</span></span>` : ''}
+                            ${item.productType ? `<span class="text-[10px] text-gray-300 uppercase tracking-tighter ml-2">${item.productType}</span>` : ''}
                         </div>
                     </div>
                     <p class="text-sm font-bold text-gray-900">${currency}${(price * qty).toLocaleString()}</p>
@@ -257,25 +261,19 @@ async function clearCart() {
     displayMessage("<i class='fas fa-trash-alt mr-2'></i> Bag cleared successfully.");
 }
 
-/**
- * ⭐ UPDATED SUMMARY: Tax row included, Shipping/Tax forced to 0.00
- */
 function updateCartSummary(data) {
     const items = data.items || JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
     const subtotal = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
     
-    // Explicitly set to 0.00
     const shipping = 0.00;
     const tax = 0.00;
     const total = subtotal + shipping + tax;
 
-    // Update UI
     document.getElementById('subtotal').textContent = `₦${subtotal.toLocaleString()}`;
     document.getElementById('shipping-cost').textContent = `₦${shipping.toFixed(2)}`;
     document.getElementById('tax-cost').textContent = `₦${tax.toFixed(2)}`;
     document.getElementById('estimated-total').textContent = `₦${total.toLocaleString()}`;
 
-    // Storage Sync
     localStorage.setItem('outflickzOrderSubtotal', subtotal.toString());
     localStorage.setItem('outflickzOrderShipping', "0");
     localStorage.setItem('outflickzOrderTax', "0");
@@ -357,7 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span id="subtotal" class="text-gray-900 font-semibold">₦0.00</span>
                         </div>
                         <div class="flex justify-between text-gray-500">
-                            <span>Shipping</span>
+                            <span>Shipping Fee</span>
                             <span id="shipping-cost" class="text-gray-900 font-semibold">₦0.00</span>
                         </div>
                         <div class="flex justify-between text-gray-500">
@@ -369,7 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span id="estimated-total" class="text-ash-red">₦0.00</span>
                         </div>
                     </div>
-                    <button id="checkout-btn" class="mt-8 w-full bg-gray-400 text-white font-bold py-4 rounded-lg uppercase tracking-widest text-xs opacity-50 cursor-not-allowed transition-all">
+                    <button id="checkout-btn" class="mt-8 w-full bg-ash-red text-white font-bold py-4 rounded-lg uppercase tracking-widest text-xs transition-all">
                         Checkout Now
                     </button>
                     <p class="text-[9px] text-gray-400 text-center mt-4 uppercase tracking-tighter"><i class="fas fa-shield-alt mr-1"></i> Secure SSL Encrypted Checkout</p>
