@@ -137,23 +137,27 @@ function renderCartItems(items, isApiCart) {
     const cartList = document.getElementById('cart-items-list');
     const currencySymbol = '₦';
 
+    // 1. EXPANDED MAPPING: Add all possible collection names here
     const typeLabels = {
         'WearsCollection': 'Wears',
         'CapCollection': 'Caps',
         'NewArrivals': 'New Arrival',
-        'PreOrderCollection': 'Pre-Order'
+        'PreOrderCollection': 'Pre-Order',
     };
 
     cartList.innerHTML = items.map(item => {
         const itemId = item._id || item.productId;
         
+        // 2. IMPROVED LOGIC: Dynamically handle the category name
         let displayCategory = 'Premium Apparel';
-        if (item.productType && typeLabels[item.productType]) {
-            displayCategory = typeLabels[item.productType];
-        } else if (item.category && typeLabels[item.category]) {
-            displayCategory = typeLabels[item.category];
-        } else if (item.productType && item.productType !== "undefined") {
-            displayCategory = item.productType.replace('Collection', '');
+        
+        const rawType = item.productType || item.category || "";
+
+        if (rawType && typeLabels[rawType]) {
+            displayCategory = typeLabels[rawType];
+        } else if (rawType && rawType !== "undefined") {
+            // This regex removes the word "Collection" and keeps the rest (e.g., "WearsCollection" -> "Wears")
+            displayCategory = rawType.replace(/Collection$/i, '');
         }
 
         const displayName = item.name || "Outflickz Premium";

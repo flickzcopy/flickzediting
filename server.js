@@ -6058,17 +6058,17 @@ app.post('/api/users/cart', verifyUserToken, async (req, res) => {
     }
 
     const newItem = {
-        productId,
-        name,
-        productType,
-        size,
-        color: color,
-        price,
-        quantity,
-        imageUrl,
-        variationIndex,
-        variation: variation || (color ? `Color: ${color}` : `Var Index: ${variationIndex}`), 
-    };
+    productId,
+    name,
+    productType: productType || 'Product', 
+    size,
+    color: color,
+    price,
+    quantity,
+    imageUrl,
+    variationIndex,
+    variation: variation || (color ? `Color: ${color}` : `${productType} Var: ${variationIndex}`), 
+};
 
     try {
         let cart = await Cart.findOne({ userId });

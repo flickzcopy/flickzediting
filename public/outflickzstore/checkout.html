@@ -1255,6 +1255,7 @@ function toggleBankDetails(targetId) {
         if (targetToggle) targetToggle.querySelector('svg').classList.add('rotate-180');
     }
 }
+
 /**
  * ⭐ CONSOLIDATED: Toggles all Bank Transfer UI elements.
  * Handles the main container, the receipt upload requirement, and accordion resets.
@@ -1337,67 +1338,70 @@ function handleBuyNowImmediateLogout() {
     
     return false; // Indicate no redirect happened
 }
-
-    // --- Main Initialization (Modified to handle both Logged-In and Guest users) ---
+// --- Main Initialization (Modified to handle both Logged-In and Guest users) ---
 document.addEventListener('DOMContentLoaded', () => {
-    
-    // ... (Buy Now console logging) ...
-    sessionStorage.getItem(BUY_NOW_KEY); 
-    console.log("CRITICAL FIX APPLIED: Checked 'buyNowItem' from sessionStorage to force standard cart load.");
+    
+    // Check 'buyNowItem' from sessionStorage
+    sessionStorage.getItem(BUY_NOW_KEY); 
+    console.log("Initialization: Checking auth and cart data.");
 
-    // ⭐ SOLUTION 2: The preferred method (Allow Guest, but conditionally fetch user data) ⭐
-    // We only need to pre-fill the form if the user is logged in.
-    if (isUserLoggedIn()) {
-        fetchUserData(); // ONLY run this if logged in to pre-fill the form
-    }
-    
-    // These functions MUST run for both logged-in users and guests to display the cart and steps.
-    updateCartBadge();
-    fetchInitialCartData(); // Loads order summary (handles Buy Now item or local cart for guest)
-    updateCheckoutView(); // Renders step 1
-    
-    // Attach event listener to the main button
-    const nextBtn = document.getElementById('checkout-next-btn');
-    if (nextBtn) {
-        nextBtn.onclick = validateAndProceedToReview; // Starts the flow at step 1
-    }
-    
-    // Attach event listeners to Edit buttons in Review step (Step 2)
-    document.getElementById('edit-shipping-btn').onclick = () => {
-        checkoutStep = 1;
-        updateCheckoutView();
-        window.scrollTo(0, 0); 
-    };
-    
-    document.getElementById('edit-order-btn').onclick = () => {
-        // This should take the user to the cart page to edit items
-        window.location.href = 'cart.html';
-    };
-    
-    // ----------------------------------------------------------------------
-    // ⭐ UPDATED BANK TRANSFER EVENT LISTENERS (CRITICAL FIX FOR UI) ⭐
-    // ----------------------------------------------------------------------
-    const bankRadio = document.getElementById('payment-bank');
-    const paystackRadio = document.getElementById('payment-paystack');
+    // Pre-fill form if logged in
+    if (isUserLoggedIn()) {
+        fetchUserData(); 
+    }
+    
+    updateCartBadge();
+    fetchInitialCartData(); 
+    updateCheckoutView(); // This renders Step 1
+    
+    // --- SAFE EVENT ATTACHMENTS ---
 
-    if (paystackRadio) {
-        // When Paystack is clicked, call the show function to ensure the bank section is closed
-        paystackRadio.onclick = showBankTransferDetails; 
-    }
+    // 1. Next Button
+    const nextBtn = document.getElementById('checkout-next-btn');
+    if (nextBtn) {
+        nextBtn.onclick = validateAndProceedToReview;
+    }
+    
+    // 2. Edit Shipping Button (Fixing the "null" error)
+    const editShippingBtn = document.getElementById('edit-shipping-btn');
+    if (editShippingBtn) {
+        editShippingBtn.onclick = () => {
+            checkoutStep = 1;
+            updateCheckoutView();
+            window.scrollTo(0, 0); 
+        };
+    }
+    
+    // 3. Edit Order Button (Fixing the "null" error)
+    const editOrderBtn = document.getElementById('edit-order-btn');
+    if (editOrderBtn) {
+        editOrderBtn.onclick = () => {
+            window.location.href = 'cart.html';
+        };
+    }
+    
+    // ----------------------------------------------------------------------
+    // BANK TRANSFER UI LOGIC
+    // ----------------------------------------------------------------------
+    const bankRadio = document.getElementById('payment-bank');
+    const paystackRadio = document.getElementById('payment-paystack');
+
+    if (paystackRadio) {
+        paystackRadio.onclick = toggleBankTransferDetails; // Note: Use toggleBankTransferDetails here
+    }
     
     if (bankRadio) {
-        // ⭐ FIX: Add listener to the bank radio button itself to show the details section
-        bankRadio.onclick = showBankTransferDetails; 
+        bankRadio.onclick = toggleBankTransferDetails; 
     }
-    
-    // Initial call to hide bank details
-    showBankTransferDetails(); 
-    
-    // Attach the hideMessageModal function to the close button
-    const closeButton = document.getElementById('message-modal-close-btn');
-    if (closeButton) {
-        closeButton.addEventListener('click', hideMessageModal);
-    }
+    
+    // Hide bank details by default on load
+    toggleBankTransferDetails(); 
+    
+    // 4. Close Modal Button
+    const closeButton = document.getElementById('message-modal-close-btn');
+    if (closeButton) {
+        closeButton.addEventListener('click', hideMessageModal);
+    }
 });
 </script>
 </body>
