@@ -137,29 +137,31 @@ function renderCartItems(items, isApiCart) {
     const cartList = document.getElementById('cart-items-list');
     const currencySymbol = '₦';
 
-    // 1. EXPANDED MAPPING: Add all possible collection names here
+    // 1. IMPROVED MAPPING: Ensures database types match UI labels
     const typeLabels = {
         'WearsCollection': 'Wears',
         'CapCollection': 'Caps',
+        'Caps': 'Caps', // Catch-all for simple strings
         'NewArrivals': 'New Arrival',
-        'PreOrderCollection': 'Pre-Order',
+        'PreOrderCollection': 'Pre-Order'
     };
 
     cartList.innerHTML = items.map(item => {
         const itemId = item._id || item.productId;
         
-        // 2. IMPROVED LOGIC: Dynamically handle the category name
+        // 2. DYNAMIC CATEGORY LOGIC:
+        // Prioritize productType, then fallback to category, then clean the string
         let displayCategory = 'Premium Apparel';
-        
         const rawType = item.productType || item.category || "";
 
         if (rawType && typeLabels[rawType]) {
             displayCategory = typeLabels[rawType];
         } else if (rawType && rawType !== "undefined") {
-            // This regex removes the word "Collection" and keeps the rest (e.g., "WearsCollection" -> "Wears")
+            // Automatically turns "CapCollection" into "Cap" or "SleevelessCollection" into "Sleeveless"
             displayCategory = rawType.replace(/Collection$/i, '');
         }
 
+        // Use the dynamic name from your data (e.g., "Outflickz Brown Baseball Cap")
         const displayName = item.name || "Outflickz Premium";
 
         return `
