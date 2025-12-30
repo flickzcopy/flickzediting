@@ -28,94 +28,36 @@ tailwind.config = {
     }
 }
 
+const API_BASE_URL = 'https://outflickzs.netlify.app';
+const CART_STORAGE_KEY = 'outflickzCartCount';
+const LOCAL_CART_KEY = 'outflickzLocalCart';
+const AUTH_TOKEN_KEY = 'userAccessToken';
 
 // Simple JS for Toggling Mobile Menu
 function toggleMenu() {
     document.getElementById('mobile-menu').classList.toggle('hidden');
 }
 
-// Function to be called when the user clicks the Profile button
 async function redirectToProfileOrLogin() {
     const token = localStorage.getItem('userAccessToken');
-    const headers = token 
-        ? { 'Authorization': `Bearer ${token}` } 
-        : {}; // If no token, headers is empty
-    
-    // NOTE: This approach requires your /api/auth/status endpoint to 
-    // accept the Authorization: Bearer header.
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
     
     try {
         const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
             method: 'GET',
-            headers: headers, // <-- NEW: Sends the Access Token
-            credentials: 'include' // Still sends the cookie if the browser allows it
+            headers: headers,
+            credentials: 'include'
         });
 
-        // If the Access Token is valid, we get 200 immediately.
         if (response.status === 200) {
-            console.log("Profile click: Auth check successful via Token/Cookie. Redirecting to userprofile.html");
             window.location.href = 'userprofile.html'; 
-            
-        } else if (response.status === 401 || response.status === 403) {
-            // The Access Token or Cookie Session is invalid/missing.
-            console.warn(`Profile click: Auth check failed (Status ${response.status}). Redirecting to useraccount.html`);
-            
-            // Note: Since this fetch is simple, it doesn't auto-refresh the token like secureUserFetch.
-            // If the 401 is due to an expired Access Token, the subsequent fetchUserData on the profile page
-            // will catch the 401 and attempt the secure cookie refresh.
-            
-            window.location.href = 'useraccount.html';
         } else {
-            console.error(`Profile click: Unexpected status ${response.status}. Redirecting to useraccount.html`);
             window.location.href = 'useraccount.html';
         }
-
     } catch (error) {
-        // Network failure
-        console.error('Authentication status check failed (Network Error):', error);
         window.location.href = 'useraccount.html';
     }
 }
-
-
-
-/**
- * CONCEPTUAL: This function should be called ONLY after a successful login API response 
- * from your server (in useraccount.html). It sets the login flag and redirects 
- * to the homepage (or profile).
- */
-function onSuccessfulLogin() {
-    // Save the login state to the browser's storage
-    localStorage.setItem('isLoggedIn', 'true');
-    console.log("Login successful! isLoggedIn set to true.");
-
-    // Redirect the user to the homepage after login
-    window.location.href = 'homepage.html'; 
-}
-
-
-// --- SHOP NOW DROPDOWN JS ---
-function toggleShopDropdown() {
-    const dropdown = document.getElementById('shop-dropdown-menu');
-    dropdown.classList.toggle('hidden');
-}
-
-// Optional: Close the dropdown if the user clicks anywhere outside of it
-document.addEventListener('click', function(event) {
-    const dropdown = document.getElementById('shop-dropdown-menu');
-    const button = document.getElementById('shop-now-btn');
-
-    // Check if the click occurred outside the button and outside the dropdown
-    if (dropdown && button && !button.contains(event.target) && !dropdown.contains(event.target)) {
-        dropdown.classList.add('hidden');
-    }
-});
-// --- END SHOP NOW DROPDOWN JS ---
-
-const API_BASE_URL = 'https://outflickzs.netlify.app';
-const CART_STORAGE_KEY = 'outflickzCartCount';
-const LOCAL_CART_KEY = 'outflickzLocalCart';
-const AUTH_TOKEN_KEY = 'userAccessToken';
 
 // --- UI NOTIFICATIONS ---
 function displayMessage(message) {
@@ -189,11 +131,11 @@ async function fetchAndRenderCart() {
         updateCartBadge();
         if (localCart.length > 0) {
             renderCartItems(localCart, false);
-            updateCartSummary(calculateLocalTotals(localCart));
+            updateCartSummary({ items: localCart, subtotal: calculateLocalTotals(localCart).subtotal, shipping: 0 });
             updateUIState(true);
         } else {
             cartList.innerHTML = '<div class="text-center py-10 text-gray-400">Your bag is empty.</div>';
-            updateCartSummary({ subtotal: 0, shipping: 0 });
+            updateCartSummary({ items: [], subtotal: 0, shipping: 0 });
             updateUIState(false);
         }
     };
@@ -212,16 +154,12 @@ async function fetchAndRenderCart() {
     } catch (error) { renderLocalCart(); }
 }
 
-
 function renderCartItems(items, isApiCart) {
     const cartList = document.getElementById('cart-items-list');
     const currency = '₦';
 
     cartList.innerHTML = items.map(item => {
-        // ⭐ FIX: isApiCart uses item._id (the specific row in the database)
-        // Local cart uses the productId.
         const id = isApiCart ? item._id : (item.productId || item._id);
-        
         const name = item.name || (item.product && item.product.name) || 'Premium Product';
         const price = item.price || (item.product && item.product.price) || 0;
         const img = item.imageUrl || (item.product && item.product.imageUrl) || 'https://i.imgur.com/PZLMws6.jpeg'; 
@@ -255,34 +193,24 @@ function renderCartItems(items, isApiCart) {
     }).join('');
 }
 
-// --- SINGLE ITEM REMOVAL ---
 async function removeItemFromCart(itemId) {
     if (!confirm("Remove this item from your bag?")) return;
     try {
-        const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/${itemId}`, { 
-            method: 'DELETE' 
-        });
-
+        const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/${itemId}`, { method: 'DELETE' });
         if (response.ok) {
-            const updatedData = await response.json(); // Backend returns { items, subtotal, etc. }
-            
+            const updatedData = await response.json();
             displayMessage("<i class='fas fa-check-circle mr-2'></i> Item removed.");
-            
-            // ⭐ OPTIMIZATION: Render using the data we already just received
             renderCartItems(updatedData.items, true);
             updateCartSummary(updatedData);
             updateCartBadge(); 
         }
-    } catch (e) { 
-        console.error("Remove failed", e); 
-    }
+    } catch (e) { console.error("Remove failed", e); }
 }
 
 function handleLocalItemRemoval(itemId) {
     let cart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
     cart = cart.filter(item => (item._id || item.productId) !== itemId);
     localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(cart));
-    
     displayMessage("<i class='fas fa-trash-alt mr-2'></i> Item removed from bag.");
     updateCartBadge();
     fetchAndRenderCart();
@@ -290,41 +218,20 @@ function handleLocalItemRemoval(itemId) {
 
 async function changeCartQuantity(cartItemId, delta) {
     try {
-        // 1. Fetch current cart to find the item and calculate new quantity
         const responseFetch = await secureUserFetch(`${API_BASE_URL}/api/users/cart`);
         const cartData = await responseFetch.json();
-        
         const item = cartData.items.find(i => i._id === cartItemId);
         if (!item) return;
-
         const newQuantity = item.quantity + delta;
+        if (newQuantity <= 0) return removeItemFromCart(cartItemId);
 
-        // 2. If quantity drops to 0 or less, remove the item entirely
-        if (newQuantity <= 0) {
-            return removeItemFromCart(cartItemId);
-        }
-
-        // 3. Match backend: PATCH /api/users/cart/:itemId
-        // Note: The itemId goes in the URL, the quantity goes in the body
         const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/${cartItemId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                quantity: newQuantity 
-            }) 
+            body: JSON.stringify({ quantity: newQuantity }) 
         });
-
-        if (response.ok) {
-            // Refresh the UI with the updated data
-            await fetchAndRenderCart();
-        } else {
-            const errorData = await response.json();
-            console.error("Update failed:", errorData.message);
-            displayMessage(errorData.message || "Could not update quantity.");
-        }
-    } catch (e) { 
-        console.error("Network error updating quantity:", e); 
-    }
+        if (response.ok) await fetchAndRenderCart();
+    } catch (e) { console.error("Network error updating quantity:", e); }
 }
 
 function changeLocalQuantity(itemId, delta) {
@@ -332,9 +239,7 @@ function changeLocalQuantity(itemId, delta) {
     const index = cart.findIndex(i => (i._id || i.productId) === itemId);
     if (index !== -1) {
         cart[index].quantity += delta;
-        if (cart[index].quantity <= 0) {
-            cart.splice(index, 1);
-        }
+        if (cart[index].quantity <= 0) cart.splice(index, 1);
         localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(cart));
         updateCartBadge();
         fetchAndRenderCart();
@@ -343,35 +248,21 @@ function changeLocalQuantity(itemId, delta) {
 
 async function clearCart() {
     if (!confirm("Are you sure you want to empty your bag?")) return;
-    
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
-    
     if (token) {
         try {
-            const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { 
-                method: 'DELETE' 
-            });
-            
-            if (!response.ok) {
-                displayMessage("Failed to clear server cart. Please try again.");
-                return; // Stop if the server failed
-            }
-        } catch (error) {
-            console.error("Clear cart error:", error);
-            displayMessage("Network error. Could not clear bag.");
-            return;
-        }
+            const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { method: 'DELETE' });
+            if (!response.ok) return displayMessage("Failed to clear server cart.");
+        } catch (error) { return console.error("Clear cart error:", error); }
     }
-
-    // Clear local data only if server succeeded (or if no token/guest mode)
     localStorage.setItem(LOCAL_CART_KEY, '[]');
     updateCartBadge();
     fetchAndRenderCart();
     displayMessage("<i class='fas fa-trash-alt mr-2'></i> Bag cleared successfully.");
 }
+
 /**
- * ⭐ CRITICAL FIX: This function now saves the totals to localStorage
- * so that checkout.html can read them.
+ * ⭐ CRITICAL FIX: Explicitly saves items and totals for the checkout page.
  */
 function updateCartSummary(data) {
     const subtotal = data.subtotal || 0;
@@ -387,20 +278,16 @@ function updateCartSummary(data) {
     localStorage.setItem('outflickzOrderSubtotal', subtotal.toString());
     localStorage.setItem('outflickzOrderShipping', shipping.toString());
     localStorage.setItem('outflickzOrderTotal', total.toString());
-    
-    // Also store items explicitly for the order payload
-    const localCart = localStorage.getItem(LOCAL_CART_KEY);
-    localStorage.setItem('outflickzOrderItems', localCart);
+    localStorage.setItem('outflickzOrderTax', "0");
+
+    // ⭐ Fix: Save the actual list of items so checkout.html finds them
+    const itemsToSave = data.items || JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
+    localStorage.setItem('outflickzOrderItems', JSON.stringify(itemsToSave));
 }
 
 function calculateLocalTotals(cart) {
     const subtotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
     return { subtotal, shipping: 0 };
-}
-
-function toggleMenu() { 
-    const menu = document.getElementById('mobile-menu');
-    if (menu) menu.classList.toggle('hidden'); 
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -418,28 +305,28 @@ document.addEventListener('DOMContentLoaded', () => {
     
     <header class="bg-color-white sticky top-0 z-50 shadow-md border-b border-gray-100">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
-            <a href="homepage.html" class="flex items-center" aria-label="Outflickz Home">
+            <a href="homepage.html" class="flex items-center">
                 <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-10 sm:h-12 lg:h-10">
             </a>
             <nav class="hidden md:flex flex-grow justify-center space-x-6 lg:space-x-10 text-sm">
-                <a href="homepage.html" class="font-medium text-color-black hover:text-gray-600 transition">Homepage</a>
-                <a href="checkout.html" class="font-bold text-ash-red transition flex items-center border-b-2 border-ash-red">Checkout</a>
-                 <a href="wearscollection.html" class="font-medium text-color-black hover:text-gray-600 transition">Wears Collection</a>
-                <a href="newarrivals.html" class="font-medium text-color-black hover:text-gray-600 transition">New Arrivals</a>
-                <a href="capcollection.html" class="font-medium text-color-black hover:text-gray-600 transition">Cap Collections</a>
-                <a href="preorder.html" class="font-medium text-color-black hover:text-gray-600 transition">Pre Order</a>
+                <a href="homepage.html" class="font-medium text-color-black hover:text-gray-600">Homepage</a>
+                <a href="checkout.html" class="font-bold text-ash-red flex items-center border-b-2 border-ash-red">Checkout</a>
+                <a href="wearscollection.html" class="font-medium text-color-black hover:text-gray-600">Wears Collection</a>
+                <a href="newarrivals.html" class="font-medium text-color-black hover:text-gray-600">New Arrivals</a>
+                <a href="capcollection.html" class="font-medium text-color-black hover:text-gray-600">Cap Collections</a>
+                <a href="preorder.html" class="font-medium text-color-black hover:text-gray-600">Pre Order</a>
             </nav>
 
             <div class="flex items-center space-x-2 sm:space-x-4">
-                <button id="profile-icon" class="p-1 sm:p-2 text-gray-700 hover:text-ash-dark transition rounded-full hidden md:block" onclick="redirectToProfileOrLogin()">
-                    <i class="fas fa-user w-4 h-4 sm:w-5 sm:h-5"></i>
+                <button class="p-1 sm:p-2 text-gray-700 hover:text-ash-dark rounded-full hidden md:block" onclick="redirectToProfileOrLogin()">
+                    <i class="fas fa-user w-4 h-4"></i>
                 </button>
                 <a href="cart.html" class="relative p-1 sm:p-2 text-gray-700 hover:text-ash-dark transition rounded-full">
-                    <i class="fas fa-shopping-bag w-4 h-4 sm:w-5 sm:h-5"></i>
+                    <i class="fas fa-shopping-bag w-4 h-4"></i>
                     <span id="cart-badge" class="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-ash-red rounded-full hidden">0</span>
                 </a>
                 <button class="md:hidden p-1 sm:p-2 text-gray-700 hover:text-ash-dark transition rounded-full" onclick="toggleMenu()">
-                    <i class="fas fa-bars w-5 h-5 sm:w-6 sm:h-6"></i>
+                    <i class="fas fa-bars w-5 h-5"></i>
                 </button>
             </div>
         </div>
