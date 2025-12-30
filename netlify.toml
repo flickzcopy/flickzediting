@@ -20,12 +20,12 @@
 
   [[headers]]
   for = "/*"
-[headers.values]
+  [headers.values]
     Cross-Origin-Embedder-Policy = "unsafe-none"
     Cross-Origin-Opener-Policy = "same-origin-allow-popups"
-    # Added cdn.jsdelivr.net to allow Chart.js to load
-    Content-Security-Policy = "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.paystack.co https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://paystack.com https://fonts.googleapis.com https://*.cloudflare.com https://cdnjs.cloudflare.com; img-src 'self' data: https://i.imgur.com https://s3.amazonaws.com https://*.idrivee2.com https://*.idrive.com https://www.idrive.com;"
-
+    # UPDATED: Added cdn.jsdelivr.net to both script-src and style-src
+    Content-Security-Policy = "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.paystack.co https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://paystack.com https://fonts.googleapis.com https://*.cloudflare.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; img-src 'self' data: https://i.imgur.com https://s3.amazonaws.com https://*.idrivee2.com https://*.idrive.com https://www.idrive.com;"
+    
 # 1. Specific files first (Priority)
 [[redirects]]
   from = "/sitemap.xml"
