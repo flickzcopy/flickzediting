@@ -239,11 +239,9 @@
 <script>
 // --- CONFIGURATION ---
 const API_BASE_URL = 'https://outflickzs.netlify.app';
-const LOCAL_TAX_RATE = 0.00; 
 const LOCAL_CART_KEY = 'outflickzLocalCart'; 
 const CART_STORAGE_KEY = 'outflickzCartCount';
 const AUTH_TOKEN_KEY = 'userAccessToken';
-const REFRESH_ENDPOINT = `${API_BASE_URL}/api/auth/refresh`;
 const CURRENCY_SYMBOL = '₦'; 
 
 // --- AUTH UTILITIES ---
@@ -265,40 +263,16 @@ async function redirectToProfileOrLogin() {
             window.location.href = 'useraccount.html';
         }
     } catch (error) {
-        console.error('Auth check failed:', error);
         window.location.href = 'useraccount.html';
     }
 }
 
 function isUserLoggedIn() {
-    return localStorage.getItem('outflickzAuthStatus') === 'loggedIn';
+    // Check both the token and the status key
+    return !!localStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem('outflickzAuthStatus') === 'loggedIn';
 }
 
-function handleLogout() {
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-    localStorage.removeItem('outflickzAuthStatus');
-    alert("Session expired. Please log in again."); 
-    window.location.href = 'useraccount.html';
-}
-
-// --- UI HELPERS ---
-
-function displayMessage(message) {
-    const modalContainer = document.getElementById('message-modal-container');
-    const modalText = document.getElementById('message-modal-text');
-    if (modalContainer && modalText) {
-        modalText.textContent = message;
-        modalContainer.classList.remove('hidden');
-        setTimeout(hideMessageModal, 4000);
-    }
-}
-
-function hideMessageModal() {
-    const modalContainer = document.getElementById('message-modal-container');
-    if (modalContainer) modalContainer.classList.add('hidden');
-}
-
-const formatNaira = (amount) => amount.toLocaleString(undefined, { minimumFractionDigits: 2 });
+const formatNaira = (amount) => Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2 });
 
 function updateCartBadge() {
     const count = parseInt(localStorage.getItem(CART_STORAGE_KEY) || '0', 10);
@@ -317,79 +291,75 @@ async function updateProfileIconStatus() {
             profileIconBtn.classList.add('text-primary-indigo', 'border-primary-indigo', 'border');
             profileIconBtn.classList.remove('text-gray-700');
         } else {
-            profileIconBtn.classList.add('text-gray-700');
             profileIconBtn.classList.remove('text-primary-indigo', 'border-primary-indigo', 'border');
         }
     }
 }
 
-// --- ⭐ CORE FIX: FETCH ORDER (GUEST & USER COMPATIBLE) ---
+// --- ⭐ IMPROVED FETCH: HANDLES GUESTS & MEMBERS ---
 
 async function fetchOrderCollection(orderId) {
-    console.log(`[OrderFetch] Starting fetch for Order ID: ${orderId}`);
     const itemsListEl = document.getElementById('order-items-list');
     const priceSummaryEl = document.getElementById('price-summary');
     
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     const headers = { 'Content-Type': 'application/json' };
     
+    // If logged in, send token to prove ownership
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;
     }
 
     try {
+        // We use the ID (Mongo ID) for specific order fetching
         const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}`, {
             method: 'GET',
-            headers: headers,
-            credentials: 'include' 
+            headers: headers
         });
 
         if (!response.ok) {
-            // Only show login prompt if the server explicitly requires auth for this specific order
             if (response.status === 401 || response.status === 403) {
-                const currentUrl = window.location.pathname + window.location.search;
                 itemsListEl.innerHTML = `
-                    <div class="text-center py-4 text-orange-600">
-                        <i class="fas fa-lock mr-2"></i> This order is linked to an account. 
-                        <a href="useraccount.html?redirect=${encodeURIComponent(currentUrl)}" class="underline font-bold">Log in to view details.</a>
+                    <div class="text-center py-4 text-orange-600 bg-orange-50 rounded-lg border border-orange-200">
+                        <i class="fas fa-lock mr-2"></i> This order belongs to an account. 
+                        <br><a href="useraccount.html" class="underline font-bold">Log in</a> to see full details.
                     </div>`;
                 return;
             }
-            throw new Error(`Order not found or Server Error (${response.status})`);
+            throw new Error("Order not found");
         }
 
         const orderDetails = await response.json(); 
         
-        // Render Items
+        // Render Summary Items
         itemsListEl.innerHTML = orderDetails.items.map(item => `
-            <div class="flex flex-col sm:flex-row justify-between items-start py-4 border-b border-gray-100 last:border-b-0">
-                <div class="flex items-start flex-grow w-full"> 
-                    <img src="${item.imageUrl || 'https://placehold.co/80x80?text=No+Image'}" class="w-20 h-20 rounded-lg border mr-4 object-cover">
-                    <div class="text-sm">
-                        <p class="font-bold text-gray-900">${item.name}</p>
-                        <p class="text-xs text-gray-500">Size: ${item.size || 'N/A'} | Color: ${item.color || 'N/A'}</p>
-                        <p class="text-xs text-gray-500">Qty: ${item.quantity}</p>
+            <div class="flex justify-between items-center py-4 border-b border-gray-100 last:border-b-0">
+                <div class="flex items-center"> 
+                    <img src="${item.imageUrl || 'https://placehold.co/80x80'}" class="w-16 h-16 rounded border mr-4 object-cover">
+                    <div>
+                        <p class="font-bold text-gray-900 text-sm">${item.name}</p>
+                        <p class="text-xs text-gray-500">Qty: ${item.quantity} | Size: ${item.size || 'N/A'}</p>
                     </div>
                 </div>
-                <div class="mt-2 sm:mt-0 text-right">
+                <div class="text-right">
                     <span class="font-bold text-gray-900">${CURRENCY_SYMBOL}${formatNaira(item.priceAtTimeOfPurchase * item.quantity)}</span>
                 </div>
             </div>
         `).join('');
 
-        // Render Summary
+        // Render Totals
         priceSummaryEl.innerHTML = `
             <div class="space-y-2">
-                <div class="flex justify-between text-sm"><span>Subtotal:</span><span class="font-semibold">${CURRENCY_SYMBOL}${formatNaira(orderDetails.subtotal || 0)}</span></div>
-                <div class="flex justify-between text-sm"><span>Shipping:</span><span class="font-semibold">${CURRENCY_SYMBOL}${formatNaira(orderDetails.shippingFee || 0)}</span></div>
-                <div class="flex justify-between text-xl font-extrabold text-primary-indigo border-t pt-4">
-                    <span>Total:</span><span>${CURRENCY_SYMBOL}${formatNaira(orderDetails.totalAmount || 0)}</span>
+                <div class="flex justify-between text-sm text-gray-600"><span>Subtotal:</span><span>${CURRENCY_SYMBOL}${formatNaira(orderDetails.subtotal)}</span></div>
+                <div class="flex justify-between text-sm text-gray-600"><span>Shipping:</span><span>${CURRENCY_SYMBOL}${formatNaira(orderDetails.shippingFee)}</span></div>
+                <div class="flex justify-between text-lg font-bold text-primary-indigo border-t pt-2 mt-2">
+                    <span>Total Paid:</span><span>${CURRENCY_SYMBOL}${formatNaira(orderDetails.totalAmount)}</span>
                 </div>
             </div>`;
 
     } catch (error) {
-        console.error('[OrderFetch] Error:', error);
-        itemsListEl.innerHTML = `<div class="text-center py-4 text-red-500">Unable to load order details.</div>`;
+        console.error('Fetch Error:', error);
+        itemsListEl.innerHTML = `<div class="text-center py-4 text-gray-400">Order details are still processing. Check your email for a copy.</div>`;
     }
 }
 
@@ -397,38 +367,43 @@ async function fetchOrderCollection(orderId) {
 
 function displayConfirmationDetails() {
     const urlParams = new URLSearchParams(window.location.search);
-    const orderId = urlParams.get('id') || urlParams.get('ref'); 
-    const method = urlParams.get('method') || 'paystack';    
+    const mongoId = urlParams.get('id'); // The Database _id
+    const orderRef = urlParams.get('ref'); // The REF-XXXX string
+    const method = urlParams.get('method');    
 
-    const orderRefEl = document.getElementById('order-ref-number');
+    const orderRefDisplay = document.getElementById('order-ref-number');
     const confTitleEl = document.getElementById('confirmation-title');
     const confIconEl = document.getElementById('confirmation-icon');
     const payMethodMsgEl = document.getElementById('payment-method-message');
     const bankDetailsEl = document.getElementById('bank-transfer-details');
 
-    if (!orderId) {
-        orderRefEl.textContent = 'N/A';
-        return;
-    }
+    // Display the Reference Number (Human readable)
+    orderRefDisplay.textContent = orderRef ? `#${orderRef}` : `#${mongoId}`;
 
-    orderRefEl.textContent = `#${orderId}`;
-
-    // --- CLEAR CART & DATA ---
-    const keysToClear = ['outflickzShippingData', 'outflickzOrderTotal', 'outflickzOrderSubtotal', 'outflickzOrderShipping', 'outflickzOrderTax', LOCAL_CART_KEY];
-    keysToClear.forEach(key => localStorage.removeItem(key));
-    localStorage.setItem(CART_STORAGE_KEY, '0');
-    sessionStorage.removeItem('BUY_NOW_KEY');
-
+    // --- ⭐ HANDLE DIFFERENT PAYMENT STYLES ---
     if (method === 'banktransfer') {
-        confIconEl.className = "fas fa-clock text-yellow-600 text-5xl";
-        confTitleEl.textContent = 'Order Created (Pending)';
-        payMethodMsgEl.textContent = 'Please complete your bank transfer to finalize the order.';
+        confIconEl.className = "fas fa-clock text-5xl text-orange-500 mb-6 animate-pulse";
+        confTitleEl.textContent = 'Order Received!';
+        payMethodMsgEl.textContent = 'We are currently verifying your bank transfer receipt.';
         if (bankDetailsEl) bankDetailsEl.classList.remove('hidden');
+    } else if (method === 'paystack') {
+        confIconEl.className = "fas fa-check-circle text-5xl text-green-500 mb-6";
+        confTitleEl.textContent = 'Payment Confirmed!';
+        payMethodMsgEl.textContent = 'Your payment via Paystack was successful. We are preparing your items.';
+        if (bankDetailsEl) bankDetailsEl.classList.add('hidden');
     }
 
-    // Wait 1 second for Netlify DB consistency then fetch
-    setTimeout(() => fetchOrderCollection(orderId), 1000);
-    updateCartBadge();
+    // --- CLEANUP CART DATA (Only clear after page loads so fetch has the ID) ---
+    localStorage.removeItem(LOCAL_CART_KEY);
+    localStorage.removeItem('outflickzOrderItems');
+    localStorage.removeItem('outflickzShippingData');
+    localStorage.setItem(CART_STORAGE_KEY, '0');
+
+    // Fetch details using the Mongo ID (more reliable)
+    if (mongoId) {
+        // Wait 1.5s for database replication/consistency
+        setTimeout(() => fetchOrderCollection(mongoId), 1500);
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {

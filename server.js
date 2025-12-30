@@ -6770,10 +6770,9 @@ app.post('/api/notifications/admin-order-email', async (req, res) => {
 });
 
 // =========================================================
-// 7. POST /api/orders/place/pending - Unified Member & Guest Order
+// 7. POST /api/orders/place/pending - Updated with Receipt Return
 // =========================================================
 app.post('/api/orders/place/pending', verifyUserToken, (req, res) => {
-    
     singleReceiptUpload(req, res, async (err) => {
         if (err instanceof multer.MulterError) {
              return res.status(400).json({ message: `File upload failed: ${err.message}` });
@@ -6781,11 +6780,10 @@ app.post('/api/orders/place/pending', verifyUserToken, (req, res) => {
              return res.status(500).json({ message: 'Error processing file upload.' });
         }
 
-        // ⭐ CHANGE 1: userId can now be null (Guest)
         const userId = req.userId || null;
         const isGuest = !userId;
         
-       const { 
+        const { 
             shippingAddress: shippingAddressString, 
             paymentMethod, 
             totalAmount: totalAmountString, 
@@ -6799,7 +6797,6 @@ app.post('/api/orders/place/pending', verifyUserToken, (req, res) => {
         const receiptFile = req.file; 
         const totalAmount = parseFloat(totalAmountString);
 
-        // 1. Parse Shipping Address
         let shippingAddress;
         try {
              shippingAddress = shippingAddressString ? JSON.parse(shippingAddressString) : null;
@@ -6807,12 +6804,10 @@ app.post('/api/orders/place/pending', verifyUserToken, (req, res) => {
              return res.status(400).json({ message: 'Invalid shipping address format.' });
         }
         
-        // 2. Critical Validation
         if (!shippingAddress || !totalAmount || totalAmount <= 0) {
              return res.status(400).json({ message: 'Missing shipping address or invalid total amount.' });
         }
 
-        // 3. Handle Payment Receipt
         let paymentReceiptUrl = null;
         if (paymentMethod === 'Bank Transfer') {
             if (!receiptFile) return res.status(400).json({ message: 'Bank payment receipt is required.' });
@@ -6820,16 +6815,11 @@ app.post('/api/orders/place/pending', verifyUserToken, (req, res) => {
         }
 
         try {
-            // ⭐ CHANGE 2: Unified Item Retrieval
-            // Since Guest Cart and Member Cart both send 'orderItems' in the body now
             let finalOrderItems = [];
             if (orderItemsString) {
                 const rawItems = JSON.parse(orderItemsString);
-                
-                // Map and Validate Product Types
                 finalOrderItems = await Promise.all(rawItems.map(async (item) => {
                     let correctedType = item.productType;
-                    // (Same correction logic as before to ensure productType exists in DB)
                     if (!PRODUCT_MODEL_MAP[item.productType]) {
                         for (const type of Object.keys(PRODUCT_MODEL_MAP)) {
                             const Model = getProductModel(type);
@@ -6851,16 +6841,13 @@ app.post('/api/orders/place/pending', verifyUserToken, (req, res) => {
                 return res.status(400).json({ message: 'Order items are missing.' });
             }
 
-            // 4. Generate Reference
             const orderRef = `REF-${Date.now()}-${isGuest ? 'GUEST' : userId.substring(0, 5)}`; 
 
-            // 5. Create Order
-           const newOrder = await Order.create({
+            const newOrder = await Order.create({
                 userId: userId, 
                 items: finalOrderItems, 
                 shippingAddress: shippingAddress,
                 totalAmount: totalAmount,
-                // These must be converted to numbers
                 subtotal: parseFloat(subtotalString) || 0,
                 shippingFee: parseFloat(shippingFeeString) || 0,
                 tax: parseFloat(taxString) || 0,
@@ -6871,15 +6858,16 @@ app.post('/api/orders/place/pending', verifyUserToken, (req, res) => {
                 customerEmail: isGuest ? (shippingAddress.email || guestEmail) : undefined 
             });
 
-            // 6. Clear Database Cart only for Members
             if (!isGuest) {
                 await Cart.findOneAndUpdate({ userId }, { items: [], updatedAt: Date.now() });
             }
             
+            // ⭐ THE KEY FIX: Return paymentReceiptUrl so Frontend can notify Admin
             res.status(201).json({
                 message: 'Order placed successfully.',
                 orderId: newOrder._id,
                 orderReference: orderRef,
+                paymentReceiptUrl: paymentReceiptUrl, 
                 isGuest: isGuest
             });
 

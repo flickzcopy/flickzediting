@@ -1086,16 +1086,14 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
         payBtn.innerHTML = 'Confirm & Pay Now';
     }
 }
-
 /**
- * ⭐ UPDATED: Processes Paystack payment using the items currently in the cart.
- * Ensures productType alignment and proper metadata for webhooks.
+ * ⭐ UPDATED: Processes Paystack payment and triggers Admin Notification upon verification.
  */
 async function processPaystackPayment(totalAmount, email) {
     const payBtn = document.getElementById('checkout-next-btn');
     const shippingAddress = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
     
-    // Get items from local storage
+    // 1. Get items from local storage
     let itemsToOrder = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
     
     if (itemsToOrder.length === 0) {
@@ -1105,7 +1103,7 @@ async function processPaystackPayment(totalAmount, email) {
         return;
     }
 
-    // ⭐ FIX: Ensure every item has a schema-compliant productType before sending to API
+    // 2. Ensure schema-compliant productTypes
     itemsToOrder = itemsToOrder.map(item => {
         let pType = item.productType;
         if (pType === 'Wears') pType = 'WearsCollection';
@@ -1117,7 +1115,7 @@ async function processPaystackPayment(totalAmount, email) {
     payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Initializing...';
 
     try {
-        // Step 1: Create the pending order in the database
+        // 3. Create the pending order
         const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/paystack`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1125,8 +1123,8 @@ async function processPaystackPayment(totalAmount, email) {
                 shippingAddress, 
                 totalAmount, 
                 subtotal: localStorage.getItem('outflickzOrderSubtotal') || '0',
-                shippingFee: '0.00', 
-                tax: '0.00',
+                shippingFee: localStorage.getItem('outflickzOrderShipping') || '0', 
+                tax: localStorage.getItem('outflickzOrderTax') || '0',
                 orderItems: itemsToOrder 
             })
         });
@@ -1134,21 +1132,17 @@ async function processPaystackPayment(totalAmount, email) {
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || "Failed to initialize order");
         
-        // Step 2: Open Paystack Pop
+        // 4. Open Paystack Pop
         const handler = PaystackPop.setup({
             key: PAYSTACK_PUBLIC_KEY,
             email: email,
-            amount: Math.round(totalAmount * 100), // Convert to Kobo
+            amount: Math.round(totalAmount * 100), // Kobo
             ref: data.orderReference,
             currency: 'NGN',
-            metadata: { 
-                order_id: data.orderId,
-                custom_fields: [{ display_name: "Order ID", variable_name: "order_id", value: data.orderId }]
-            },
-            callback: function(response) {
+            callback: function(paymentResponse) {
                 payBtn.innerHTML = '<i class="fas fa-sync fa-spin"></i> Verifying...';
-                // Step 3: Verify and Redirect
-                verifyPayment(response.reference, data.orderId);
+                // ⭐ Pass orderReference to verification to trigger Admin Email
+                verifyPayment(paymentResponse.reference, data.orderId, data.orderReference);
             },
             onClose: function() {
                 payBtn.disabled = false;
@@ -1164,29 +1158,40 @@ async function processPaystackPayment(totalAmount, email) {
         payBtn.innerHTML = 'Confirm & Pay Now';
     }
 }
-
 /**
- * ⭐ UPDATED: Verifies payment and handles the redirect to confirmation page.
+ * ⭐ UPDATED: Verifies payment and handles Admin Notification before redirecting.
+ * Now accepts orderReference to ensure the Admin Email contains the correct REF string.
  */
-async function verifyPayment(reference, mongoId) {
+async function verifyPayment(reference, mongoId, orderReference) {
     try {
+        // Step 1: Verify the payment with the backend
         const response = await secureUserFetch(`${API_BASE_URL}/api/orders/verify/${reference}`);
         
         if (response.ok) {
-            // Cleanup on success
+            // ⭐ Step 2: TRIGGER ADMIN NOTIFICATION
+            // Since Paystack is a direct digital payment, receiptUrl is null.
+            // We await this to ensure the trigger is sent before the page redirects.
+            try {
+                await sendAdminOrderNotification(orderReference, 'Paystack', null);
+            } catch (emailErr) {
+                console.error("Admin notification failed, but payment was successful:", emailErr);
+            }
+
+            // Step 3: Cleanup local storage on success
             localStorage.removeItem(LOCAL_CART_KEY);
+            localStorage.removeItem('outflickzOrderItems');
             localStorage.setItem(CART_STORAGE_KEY, '0');
             
-            // Redirect using the MongoDB ID as the primary key for the confirmation page
-            window.location.href = `orderconfirmation.html?id=${mongoId}&ref=${reference}&method=paystack`;
+            // Step 4: Final Redirect
+            window.location.href = `orderconfirmation.html?id=${mongoId}&ref=${orderReference || reference}&method=paystack`;
         } else {
-            // Even if verification fetch fails, we redirect to confirmation 
-            // The confirmation page will poll the status.
-            window.location.href = `orderconfirmation.html?id=${mongoId}&ref=${reference}&method=paystack`;
+            // If verification check fails, still redirect; the confirmation page will poll the status
+            window.location.href = `orderconfirmation.html?id=${mongoId}&ref=${orderReference || reference}&method=paystack`;
         }
     } catch (err) {
         console.error("Verification Error:", err);
-        window.location.href = `orderconfirmation.html?id=${mongoId}&ref=${reference}&method=paystack`;
+        // Fallback redirect
+        window.location.href = `orderconfirmation.html?id=${mongoId}&ref=${orderReference || reference}&method=paystack`;
     }
 }
 
@@ -1357,16 +1362,11 @@ function toggleBankTransferDetails() {
     }
 }
 
+
 async function processBankTransferOrder(totalAmount, email) {
-    // 1. ⭐ THE FIX: Get the items specifically saved by cart.html
-    // We use 'outflickzOrderItems' because cart.html now populates this 
-    // regardless of whether the user is a Guest or Logged In.
     const rawOrderItems = localStorage.getItem('outflickzOrderItems');
     const orderItems = JSON.parse(rawOrderItems || "[]");
 
-    console.log("Debug - Order Items found:", orderItems);
-
-    // 2. Validation: Stop immediately if cart is empty
     if (orderItems.length === 0) {
         displayMessage("Your bag appears to be empty. Please go back to the cart.");
         return;
@@ -1377,11 +1377,6 @@ async function processBankTransferOrder(totalAmount, email) {
 
     if (!receiptFile) {
         displayMessage("Please upload your transfer receipt.");
-        const payBtn = document.getElementById('checkout-next-btn');
-        if (payBtn) {
-            payBtn.disabled = false;
-            payBtn.innerHTML = 'Confirm & Pay Now';
-        }
         return;
     }
 
@@ -1390,13 +1385,11 @@ async function processBankTransferOrder(totalAmount, email) {
     payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Processing Order...';
 
     try {
-        // 3. Gather financial data (Matches the keys set in cart.html)
         const shippingData = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
         const subtotal = localStorage.getItem('outflickzOrderSubtotal') || "0";
-        const shippingFee = localStorage.getItem('outflickzOrderShipping') || "0"; // Note: matches updateCartSummary
+        const shippingFee = localStorage.getItem('outflickzOrderShipping') || "0";
         const tax = localStorage.getItem('outflickzOrderTax') || "0";
 
-        // 4. Build FormData
         const formData = new FormData();
         formData.append('receipt', receiptFile);
         formData.append('shippingAddress', JSON.stringify(shippingData));
@@ -1408,7 +1401,7 @@ async function processBankTransferOrder(totalAmount, email) {
         formData.append('shippingFee', shippingFee);
         formData.append('tax', tax);
 
-        // 5. API Call
+        // 1. Send order to backend
         const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/pending`, {
             method: 'POST',
             body: formData 
@@ -1417,7 +1410,15 @@ async function processBankTransferOrder(totalAmount, email) {
         const data = await response.json();
 
         if (response.ok) {
-            // Success: Clean up temporary order data before redirecting
+            // 2. ⭐ TRIGGER ADMIN NOTIFICATION
+            // Using your existing helper function with the data returned from server
+            try {
+                await sendAdminOrderNotification(data.orderReference, 'Bank Transfer', data.paymentReceiptUrl);
+            } catch (notifErr) {
+                console.error("Admin Notification failed but order was placed:", notifErr);
+            }
+
+            // 3. Success cleanup
             localStorage.removeItem('outflickzOrderItems');
             
             finalizeOrderOnServer({ 
@@ -1425,6 +1426,7 @@ async function processBankTransferOrder(totalAmount, email) {
                 orderRef: data.orderReference,
                 paymentMethod: 'Bank Transfer'
             }, 'banktransfer');
+
         } else {
             throw new Error(data.message || "Failed to place order.");
         }
