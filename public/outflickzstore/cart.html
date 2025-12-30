@@ -178,11 +178,20 @@ async function removeItemFromCart(itemId) {
         const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/${itemId}`, { 
             method: 'DELETE' 
         });
+
         if (response.ok) {
+            const updatedData = await response.json(); // Backend returns { items, subtotal, etc. }
+            
             displayMessage("<i class='fas fa-check-circle mr-2'></i> Item removed.");
-            fetchAndRenderCart();
+            
+            // ⭐ OPTIMIZATION: Render using the data we already just received
+            renderCartItems(updatedData.items, true);
+            updateCartSummary(updatedData);
+            updateCartBadge(); 
         }
-    } catch (e) { console.error("Remove failed", e); }
+    } catch (e) { 
+        console.error("Remove failed", e); 
+    }
 }
 
 function handleLocalItemRemoval(itemId) {
@@ -196,39 +205,38 @@ function handleLocalItemRemoval(itemId) {
 }
 
 async function changeCartQuantity(cartItemId, delta) {
-    // 1. Find the current item in the UI to calculate the new quantity
-    // This prevents sending 0 or negative numbers to the server
-    const cartItems = await (await secureUserFetch(`${API_BASE_URL}/api/users/cart`)).json();
-    const item = cartItems.items.find(i => i._id === cartItemId);
-    
-    if (!item) return;
-
-    const newQuantity = item.quantity + delta;
-
-    // 2. If quantity would be 0, use the delete method instead
-    if (newQuantity <= 0) {
-        return removeItemFromCart(cartItemId);
-    }
-
     try {
-        const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/quantity`, {
+        // 1. Fetch current cart to find the item and calculate new quantity
+        const responseFetch = await secureUserFetch(`${API_BASE_URL}/api/users/cart`);
+        const cartData = await responseFetch.json();
+        
+        const item = cartData.items.find(i => i._id === cartItemId);
+        if (!item) return;
+
+        const newQuantity = item.quantity + delta;
+
+        // 2. If quantity drops to 0 or less, remove the item entirely
+        if (newQuantity <= 0) {
+            return removeItemFromCart(cartItemId);
+        }
+
+        // 3. Match backend: PATCH /api/users/cart/:itemId
+        // Note: The itemId goes in the URL, the quantity goes in the body
+        const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/${cartItemId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            // ⭐ FIX: Sending the specific Database Item ID and the calculated new quantity
             body: JSON.stringify({ 
-                itemId: cartItemId, 
                 quantity: newQuantity 
             }) 
         });
 
         if (response.ok) {
+            // Refresh the UI with the updated data
             await fetchAndRenderCart();
         } else {
             const errorData = await response.json();
-            console.error("Server rejected quantity change:", errorData);
-            // If the server strictly wants 'delta' instead of 'quantity', 
-            // swap the body to: body: JSON.stringify({ itemId: cartItemId, delta: delta })
-            displayMessage("Could not update quantity: " + errorData.message);
+            console.error("Update failed:", errorData.message);
+            displayMessage(errorData.message || "Could not update quantity.");
         }
     } catch (e) { 
         console.error("Network error updating quantity:", e); 
@@ -251,16 +259,32 @@ function changeLocalQuantity(itemId, delta) {
 
 async function clearCart() {
     if (!confirm("Are you sure you want to empty your bag?")) return;
+    
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    
     if (token) {
-        await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { method: 'DELETE' });
+        try {
+            const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { 
+                method: 'DELETE' 
+            });
+            
+            if (!response.ok) {
+                displayMessage("Failed to clear server cart. Please try again.");
+                return; // Stop if the server failed
+            }
+        } catch (error) {
+            console.error("Clear cart error:", error);
+            displayMessage("Network error. Could not clear bag.");
+            return;
+        }
     }
+
+    // Clear local data only if server succeeded (or if no token/guest mode)
     localStorage.setItem(LOCAL_CART_KEY, '[]');
     updateCartBadge();
     fetchAndRenderCart();
-    displayMessage("Bag cleared successfully.");
+    displayMessage("<i class='fas fa-trash-alt mr-2'></i> Bag cleared successfully.");
 }
-
 /**
  * ⭐ CRITICAL FIX: This function now saves the totals to localStorage
  * so that checkout.html can read them.
