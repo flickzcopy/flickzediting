@@ -488,18 +488,17 @@ function getStatusBadge(status) {
     // --- API Fetch Functions (Original, plus new Order Details fetch) ---
 
     /**
-     * Fetches all registered user data from the API (used for the main table).
+     * Fetches all users (Registered & Guest) from the API.
      */
     async function fetchUserData() {
         const token = localStorage.getItem('adminToken');
         if (!token) {
-            console.error("No adminToken found. Redirecting to login.");
             logoutAdmin();
             return null;
         }
 
         try {
-            // ASSUMPTION: Backend route for fetching ALL users
+            // Updated Assumption: Backend now returns both registered and guest profiles
             const response = await fetch('/api/admin/users/all', { 
                 method: 'GET',
                 headers: {
@@ -510,7 +509,6 @@ function getStatusBadge(status) {
 
             if (!response.ok) {
                 if (response.status === 401 || response.status === 403) {
-                    console.error(`Authentication error (${response.status}). Token expired or invalid.`);
                     logoutAdmin();
                     return null;
                 }
@@ -518,14 +516,15 @@ function getStatusBadge(status) {
             }
 
             const data = await response.json();
-            return data.users || []; // ASSUMPTION: Backend returns { users: [...], count: 50 }
+            // This should now include objects with userType: 'guest' or 'registered'
+            return data.users || []; 
 
         } catch (error) {
             console.error('Error fetching user data:', error);
             return null;
         }
     }
-    
+
     /**
      * Fetches the full profile details for a specific user ID.
      */
@@ -659,33 +658,45 @@ function getStatusBadge(status) {
         }
     }
     
-    /**
-     * Renders the user data into the main membership table.
-     * @param {Array<Object>} users - Array of user objects.
-     */
-    function renderUserTable(users) {
+ function renderUserTable(users) {
         userTableBody.innerHTML = ''; 
-        userCountDisplay.textContent = `Total Users: ${users.length.toLocaleString()}`;
+        userCountDisplay.textContent = `Total Records: ${users.length.toLocaleString()}`;
 
         if (users.length === 0) {
-            userTableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">No registered users found.</td></tr>';
+            userTableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">No users or guests found.</td></tr>';
             return;
         }
 
         users.forEach(user => {
+            // Determine account type
+            const isGuest = user.isGuest || !user.password; // Logic depends on your DB schema
             const isMember = user.isMember; 
-            const statusText = isMember ? 'VIP Member' : 'Basic User';
-            const statusColor = isMember ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800';
+            
+            let statusText, statusColor;
+
+            if (isGuest) {
+                statusText = 'Guest';
+                statusColor = 'bg-orange-100 text-orange-800';
+            } else {
+                statusText = isMember ? 'VIP Member' : 'Basic User';
+                statusColor = isMember ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800';
+            }
             
             const row = document.createElement('tr');
-            row.className = 'hover:bg-gray-50';
+            row.className = 'hover:bg-gray-50 border-b border-gray-100';
             
             row.innerHTML = `
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 truncate max-w-xs" title="${user._id}">${user._id}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${user.name || 'N/A'}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${user.email}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-xs font-mono text-gray-400 truncate max-w-[100px]" title="${user._id}">
+                    ${user._id}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-800">
+                    ${user.name || '<span class="text-gray-400 italic">Guest User</span>'}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                    ${user.email}
+                </td>
                 <td class="px-6 py-4 whitespace-nowrap">
-                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}">
+                    <span class="px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}">
                         ${statusText}
                     </span>
                 </td>
@@ -693,7 +704,9 @@ function getStatusBadge(status) {
                     ${formatDate(user.createdAt)}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button onclick="viewUserDetails('${user._id}')" class="text-blue-600 hover:text-blue-900 transition duration-150">View Details</button>
+                    <button onclick="viewUserDetails('${user._id}')" class="text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-3 py-1 rounded transition">
+                        Manage
+                    </button>
                 </td>
             `;
             userTableBody.appendChild(row);
@@ -772,58 +785,70 @@ function getStatusBadge(status) {
 
     // --- Details and Modal Functions ---
     
-    /**
-     * Handles the click of the 'View Details' button and loads the data into the details section.
+  /**
+     * Handles the click of the 'View Details' button and loads the data for both Registered and Guest users.
      * @param {string} userId - The ID of the user whose details to view.
      */
     async function viewUserDetails(userId) {
         currentViewingUserId = userId; // Store the current user ID
         showUserDetailsView();
+        
+        // Reset UI States
         detailsLoadingIndicator.classList.remove('hidden');
         userProfileData.classList.add('hidden');
         detailsErrorMessage.classList.add('hidden');
         
-        // Clear previous order history body
+        // Clear previous order history table while loading
         orderHistoryBody.innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-center text-sm text-gray-500">Loading orders...</td></tr>';
         orderCountDisplay.textContent = 'Total Orders: 0';
 
-
-        const userPromise = fetchUserDetails(userId);
-        const ordersPromise = fetchUserOrders(userId); 
-
-        const [user, orders] = await Promise.all([userPromise, ordersPromise]);
+        // Concurrent fetch for user profile and their specific orders
+        const [user, orders] = await Promise.all([
+            fetchUserDetails(userId), 
+            fetchUserOrders(userId)
+        ]);
         
-        detailsLoadingIndicator.classList.add('hidden'); // Hide loading indicator for details view
+        detailsLoadingIndicator.classList.add('hidden');
 
         if (user) {
-            // Render basic info
-            detailsHeaderName.textContent = user.name || 'N/A';
+            // --- GUEST VS REGISTERED LOGIC ---
+            const isGuest = user.isGuest || !user.password;
+            
+            // Render Header Name
+            detailsHeaderName.textContent = user.name || (isGuest ? 'Guest Customer' : 'N/A');
             detailEmail.textContent = user.email;
             
-            const statusText = user.isMember ? 'VIP Member 🌟' : 'Basic User';
-            const statusColor = user.isMember ? 'text-emerald-700' : 'text-gray-700';
+            // Handle Status Badge styling
+            if (isGuest) {
+                detailStatus.textContent = "Guest Checkout";
+                detailStatus.className = "text-xl font-bold text-orange-600";
+                detailJoined.textContent = 'N/A (Guest)';
+            } else {
+                const statusText = user.isMember ? 'VIP Member 🌟' : 'Basic User';
+                const statusColor = user.isMember ? 'text-emerald-700' : 'text-blue-700';
+                
+                detailStatus.textContent = statusText;
+                detailStatus.className = `text-xl font-bold ${statusColor}`;
+                detailJoined.textContent = formatDate(user.createdAt);
+            }
             
-            detailStatus.className = `text-xl font-bold ${statusColor}`;
-            detailStatus.textContent = statusText;
-            
-            detailJoined.textContent = formatDate(user.createdAt);
-            
-            // Render contact info and address
-            detailPhone.textContent = user.phone || 'N/A';
+            // Render Contact Info
+            detailPhone.textContent = user.phone || 'No phone provided';
             detailWhatsapp.textContent = user.whatsappNumber || user.phone || 'N/A'; 
             
+            // Render Address Logic (Supports structured shippingAddress or legacy contactAddress)
             if (user.shippingAddress && user.shippingAddress.street) {
-                const address = user.shippingAddress;
+                const addr = user.shippingAddress;
                 detailAddress.innerHTML = `
-                    ${address.street}<br>
-                    ${address.city}, ${address.state}<br>
-                    ${address.zipCode || ''} ${address.country || ''}
+                    ${addr.street}<br>
+                    ${addr.city}, ${addr.state}<br>
+                    ${addr.zipCode || ''} ${addr.country || ''}
                 `;
             } else {
                 detailAddress.textContent = user.contactAddress || 'No Address Provided';
             }
 
-            // Render Order History (even if orders is null, renderOrderHistory handles it)
+            // Render Order History Table
             if (orders !== null) {
                 renderOrderHistory(orders);
             } else {
@@ -831,9 +856,12 @@ function getStatusBadge(status) {
                 orderCountDisplay.textContent = `Total Orders: N/A`;
             }
 
+            // Final Reveal
             userProfileData.classList.remove('hidden');
         } else {
+            // Handle Case where API returns no user
             detailsErrorMessage.classList.remove('hidden');
+            detailsErrorMessage.textContent = "Could not find profile data for this ID.";
         }
     }
     
