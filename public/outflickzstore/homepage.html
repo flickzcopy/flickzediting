@@ -524,6 +524,7 @@ function addToCart(collectionId, quantity) {
 
     console.log(`Added ${quantity} of item ${collectionId}. New cart total: ${newCount}`);
 }
+
 /**
  * Handles adding an item to the cart. 
  * Integrated with Size Validation and fallback logic.
@@ -877,6 +878,7 @@ function createColorList(collectionId, variants) {
 
     return mapHtml + buttonsHtml;
 }
+
 function createCollectionCard(collection, size = 'default') {
     const currencySymbol = '₦';
     const PLACEHOLDER_URL = 'https://s3.us-west-1.idrivee2.com/outflickz/public/placeholder-image-v1.jpg';
@@ -894,7 +896,7 @@ function createCollectionCard(collection, size = 'default') {
     const descriptionFontSize = isReduced ? 'text-[0.6rem] sm:text-xs' : 'text-xs sm:text-sm';
     const priceFontSize = isReduced ? 'text-sm font-bold sm:text-sm' : 'text-base font-semibold';
     
-    const controlHeight = isReduced ? 'h-9' : 'h-10'; // Increased height for better tap target
+    const controlHeight = isReduced ? 'h-9' : 'h-10';
     const controlTextSize = isReduced ? 'text-[0.7rem] sm:text-xs' : 'text-xs'; 
     
     const quantityInputWidth = isReduced ? 'w-5 sm:w-7' : 'w-7 sm:w-9';
@@ -945,14 +947,13 @@ function createCollectionCard(collection, size = 'default') {
     if (isPreorder) {
         stockBadge = `<span class="absolute top-2 left-2 bg-ash-dark text-white text-[0.6rem] sm:text-xs font-bold px-2 py-0.5 rounded shadow-lg z-40">PRE-ORDER</span>`;
     } else if (isOutOfStock) {
-        stockBadge = '<span class="absolute top-2 left-2 bg-ash-red text-white text-[0.6rem] sm:text-xs font-bold px-2 py-0.5 rounded shadow-lg z-40">Out of Stock</span>';
+        stockBadge = `<span class="absolute top-2 left-2 bg-ash-red text-white text-[0.6rem] sm:text-xs font-bold px-2 py-0.5 rounded shadow-lg z-40">Out of Stock</span>`;
         cartButtonText = 'OUT OF STOCK';
         cartButtonClasses = 'bg-gray-400 text-white cursor-not-allowed';
     }
 
     const isButtonDisabled = isOutOfStock && !isPreorder;
     const safeProductTypeInHtml = collection.collectionName || collection.productType;
-    const quantityGetter = `document.getElementById('quantity-input-${collection._id}').value`;
     const safeName = collection.name.replace(/'/g, "\\'");
 
     // --- Quantity UI ---
@@ -967,8 +968,11 @@ function createCollectionCard(collection, size = 'default') {
     const modalData = { imageUrls: [frontImageUrl, backImageUrl], altText: collection.name.replace(/"/g, '') };
     const imageClickData = JSON.stringify(modalData).replace(/"/g, '&quot;'); 
 
+    // ⭐ FIX: Added data-collection-id to the main wrapper
     return `
-        <div class="collection-card border border-gray-100 rounded-lg overflow-hidden bg-white hover:shadow-lg transition duration-300 flex flex-col h-full">
+        <div class="collection-card border border-gray-100 rounded-lg overflow-hidden bg-white hover:shadow-lg transition duration-300 flex flex-col h-full" 
+             data-collection-id="${collection._id}">
+            
             <div class="relative card-image-box cursor-pointer" onclick="openImageModalWithCarousel('${imageClickData}')">
                 ${stockBadge}
                 <div class="absolute inset-0">
@@ -981,6 +985,7 @@ function createCollectionCard(collection, size = 'default') {
                     </button>
                 </div>
             </div>
+
             <div class="${cardPadding} flex flex-col flex-grow">
                 <p class="text-[0.6rem] text-gray-500 uppercase font-semibold">Outflickz</p>
                 <h3 class="${nameFontSize} font-semibold text-color-black truncate">${collection.name}</h3>
@@ -1005,8 +1010,7 @@ function createCollectionCard(collection, size = 'default') {
                             name: '${safeName}',
                             price: ${itemPrice},
                             imageUrl: '${frontImageUrl}',
-                            quantity: parseInt(${quantityGetter}),
-                            collectionName: '${safeProductTypeInHtml}'
+                            productType: '${safeProductTypeInHtml}'
                         })"
                         class="w-full ${controlHeight} ${controlTextSize} ${cartButtonClasses} rounded-sm transition font-bold uppercase tracking-widest flex items-center justify-center gap-2">
                         <i class="fas fa-shopping-bag"></i>
@@ -1017,6 +1021,7 @@ function createCollectionCard(collection, size = 'default') {
         </div>
     `;
 }
+
 
 // Function to DELETE (The block-style version)
 /**

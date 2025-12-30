@@ -1034,21 +1034,17 @@ PreOrderCollectionSchema.pre('save', function(next) {
 const PreOrderCollection = mongoose.models.PreOrderCollection || mongoose.model('PreOrderCollection', PreOrderCollectionSchema);
 
 const cartItemSchema = new mongoose.Schema({
-    // Item ID / Product Ref
     productId: { type: mongoose.Schema.Types.ObjectId, required: true },
     name: { type: String, required: true },
     productType: { 
         type: String, 
         required: true, 
-      //  enum: ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'] 
     },
     
     // Variant Details
     size: { type: String, required: true },
     color: { type: String }, 
     variationIndex: { type: Number, required: true, min: 1 },
-    
-    // 🌟 FIX: Added 'variation' field to store user-friendly name for Order mapping 🌟
     variation: { type: String },
     
     // Pricing & Quantity
@@ -1056,10 +1052,15 @@ const cartItemSchema = new mongoose.Schema({
     quantity: { type: Number, required: true, min: 1, default: 1 },
     
     // Media
-    imageUrl: { type: String } 
+    imageUrl: { type: String },
+
+    // ⭐ NEW: Added to track if the price has changed since adding to cart
+    addedAt: { type: Date, default: Date.now }
 }, { _id: true });
 
 const cartSchema = new mongoose.Schema({
+    // Keep userId REQUIRED here. 
+    // Guest carts stay in LocalStorage; Database carts are for Users only.
     userId: { 
         type: mongoose.Schema.Types.ObjectId, 
         ref: 'User', 
@@ -1069,13 +1070,10 @@ const cartSchema = new mongoose.Schema({
     items: {
         type: [cartItemSchema],
         default: []
-    },
-    createdAt: { type: Date, default: Date.now },
-    updatedAt: { type: Date, default: Date.now }
-});
+    }
+}, { timestamps: true }); // Automatically handles createdAt and updatedAt
 
 const Cart = mongoose.models.Cart || mongoose.model('Cart', cartSchema);
-
 
 // We need a robust order model to track sales and manage inventory deduction.
 const OrderItemSchema = new mongoose.Schema({
@@ -1103,7 +1101,28 @@ const OrderItemSchema = new mongoose.Schema({
 
 
 const OrderSchema = new mongoose.Schema({
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    // ⭐ UPDATE: userId is no longer required to allow Guest Checkout
+    userId: { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: 'User', 
+        required: false 
+    },
+    
+    // ⭐ NEW: Explicitly track guest status for easier admin filtering
+    isGuest: { 
+        type: Boolean, 
+        default: false 
+    },
+
+    // ⭐ NEW: Store the guest's email at the top level for communication
+    // It's required only if userId is missing.
+    guestEmail: { 
+        type: String, 
+        required: function() { return !this.userId; },
+        trim: true,
+        lowercase: true
+    },
+
     items: { type: [OrderItemSchema], required: true },
     
     // --- Financial Breakdown ---
@@ -1116,9 +1135,9 @@ const OrderSchema = new mongoose.Schema({
         type: String, 
         required: true,
         enum: [
-            'Pending',              // Bank Transfer awaiting admin/Paystack verification
-            'Processing',           // ✅ CRITICAL ADDITION: Intermediate status set by PUT /confirm
-            'Shipped',              // Fulfillment statuses
+            'Pending', 
+            'Processing', 
+            'Shipped', 
             'Delivered',
             'Cancelled',
             'Confirmed',
@@ -1126,7 +1145,7 @@ const OrderSchema = new mongoose.Schema({
             'Refunded',
             'Verification Failed', 
             'Amount Mismatch (Manual Review)',
-            'Inventory Failure (Manual Review)', // Better name for inventory rollback
+            'Inventory Failure (Manual Review)', 
         ], 
         default: 'Pending'
     },    
@@ -1136,14 +1155,15 @@ const OrderSchema = new mongoose.Schema({
     amountPaidKobo: { type: Number, min: 0 },
     paymentTxnId: { type: String, sparse: true },
     paidAt: { type: Date },
-    paymentReceiptUrl: { type: String, sparse: true }, // Bank transfer receipt
+    paymentReceiptUrl: { type: String, sparse: true }, 
     shippedAt: { type: Date, sparse: true }, 
     deliveredAt: { type: Date, sparse: true },    
     confirmedAt: { type: Date, sparse: true },
     confirmedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', sparse: true },
-    notes: [String] // For logging manual review notes, inventory failures, etc.
+    notes: [String] 
 }, { timestamps: true });
 
+// --- TTL Index for Cleanup ---
 OrderSchema.index(
     { createdAt: 1 }, 
     { 
@@ -1151,7 +1171,7 @@ OrderSchema.index(
         partialFilterExpression: { 
             status: 'Pending', 
             paymentMethod: 'Paystack',
-            amountPaidKobo: { $exists: false } // Only delete if no money was received
+            amountPaidKobo: { $exists: false } 
         } 
     }
 );
