@@ -2989,56 +2989,57 @@ app.post('/api/admin/newsletter/send', verifyToken, async (req, res) => {
 
 app.get('/api/admin/users/all', verifyToken, async (req, res) => {
     try {
-        // 1. Fetch Registered Users
-        const users = await User.find({})
+        // 1. Fetch Registered Users from the User Collection
+        const registeredUsers = await User.find({})
             .select('email profile status membership')
             .lean();
 
-        const transformedUsers = users.map(user => ({
+        const transformedRegistered = registeredUsers.map(user => ({
             _id: user._id,
             name: `${user.profile?.firstName || ''} ${user.profile?.lastName || ''}`.trim() || 'N/A',
             email: user.email,
-            isMember: user.status?.role === 'vip',
-            isGuest: false, // Explicitly marked as registered
-            createdAt: user.membership?.memberSince,
+            // If they are in this collection, they are NOT Guests. 
+            // We check their role for VIP vs Basic.
+            statusLabel: user.status?.role === 'vip' ? 'VIP Member' : 'Basic User',
+            statusColor: user.status?.role === 'vip' ? 'emerald' : 'blue',
+            isGuest: false,
+            joinedDate: user.membership?.memberSince || user.createdAt
         }));
 
-        // 2. Fetch Unique Guest Emails from Orders
-        // We look for orders where userId is null
+        // 2. Fetch Guest Orders (where userId is null)
         const guestOrders = await Order.find({ userId: null })
-            .select('guestEmail shippingAddress createdAt')
-            .sort({ createdAt: -1 })
+            .select('guestEmail shippingAddress createdAt isGuest')
             .lean();
 
-        // Use a Map to keep only the most recent entry for each guest email
+        // Unique Guests by Email
         const guestMap = new Map();
         guestOrders.forEach(order => {
             const email = order.guestEmail || order.shippingAddress?.email;
             if (email && !guestMap.has(email)) {
                 guestMap.set(email, {
-                    _id: order._id, // Using Order ID as a reference for guests
-                    name: `${order.shippingAddress?.firstName || ''} ${order.shippingAddress?.lastName || ''}`.trim() || 'Guest User',
+                    _id: order._id, 
+                    name: `${order.shippingAddress?.firstName || ''} ${order.shippingAddress?.lastName || ''}`.trim() || 'Guest',
                     email: email,
-                    isMember: false,
-                    isGuest: true, // Explicitly marked as guest
-                    createdAt: order.createdAt,
+                    statusLabel: 'Guest', // Explicit Guest Label
+                    statusColor: 'orange', // Orange for Guests
+                    isGuest: true,
+                    joinedDate: order.createdAt
                 });
             }
         });
 
-        // 3. Combine and Return
-        const allUsers = [...transformedUsers, ...Array.from(guestMap.values())];
+        // Combine both lists
+        const allRecords = [...transformedRegistered, ...Array.from(guestMap.values())];
 
-        return res.status(200).json({ 
-            users: allUsers,
-            count: allUsers.length
+        res.status(200).json({ 
+            users: allRecords,
+            count: allRecords.length 
         });
-
     } catch (error) {
-        console.error('Admin user fetch error:', error);
-        return res.status(500).json({ message: 'Server error: Failed to retrieve user list.' });
+        res.status(500).json({ message: 'Error fetching membership list' });
     }
 });
+
 app.get('/api/admin/users/:id', verifyToken, async (req, res) => {
     try {
         const id = req.params.id;
