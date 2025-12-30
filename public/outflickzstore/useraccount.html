@@ -447,15 +447,11 @@ const LOCAL_CART_KEY = 'outflickzLocalCart';
 const CART_STORAGE_KEY = 'outflickzCartItemCount'; 
 
 let globalCartItems = []; 
-
 let pendingVerificationEmail = '';
-
 let views = {};
-let headerElement;
-let messageArea;
-let container;
+let headerElement, messageArea, container;
 
-// --- NEW: STATE/PROVINCE DATA FOR DROPDOWN ---
+// --- STATE/PROVINCE DATA ---
 const stateOptions = {
     'Nigeria': ['Abia', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa', 'Benue', 'Borno', 'Cross River', 'Delta', 'Ebonyi', 'Edo', 'Ekiti', 'Enugu', 'Gombe', 'Imo', 'Jigawa', 'Kaduna', 'Kano', 'Katsina', 'Kebbi', 'Kogi', 'Kwara', 'Lagos', 'Nasarawa', 'Niger', 'Ogun', 'Ondo', 'Osun', 'Oyo', 'Plateau', 'Rivers', 'Sokoto', 'Taraba', 'Yobe', 'Zamfara', 'FCT Abuja'],
     'Ghana': ['Ahafo', 'Ashanti', 'Bono', 'Bono East', 'Central', 'Eastern', 'Greater Accra', 'North East', 'Northern', 'Oti', 'Savannah', 'Upper East', 'Upper West', 'Volta', 'Western', 'Western North'],
@@ -464,14 +460,41 @@ const stateOptions = {
 };
 
 /**
- * Dynamically populates the State/Province dropdown based on the selected country.
+ * Helper: Secure fetch wrapper for authenticated requests
  */
+async function secureUserFetch(url, options = {}) {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    const headers = { 'Content-Type': 'application/json', ...options.headers };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const mergedOptions = { ...options, headers, credentials: 'include' };
+    const response = await fetch(url, mergedOptions);
+
+    if (response.status === 401) {
+        console.warn("Session expired or unauthorized.");
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+    }
+    return response;
+}
+
+/**
+ * Helper: Robust JSON parser to handle Netlify 502/HTML errors
+ */
+async function parseSafeJSON(response) {
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+        return await response.json();
+    }
+    if (!response.ok) {
+        throw new Error(`Server Error (${response.status}): The service is currently unavailable. Please try again.`);
+    }
+    return {};
+}
+
 function populateStates() {
     const countrySelect = document.getElementById('create-country');
     const stateSelect = document.getElementById('create-state');
     const selectedCountry = countrySelect.value;
-    
-    // Clear existing options
     stateSelect.innerHTML = '<option value="" disabled selected>Select State</option>';
     stateSelect.disabled = true;
 
@@ -485,519 +508,213 @@ function populateStates() {
         stateSelect.disabled = false;
     }
 }
-// -----------------------------------------------------------
 
-
-/**
- * Switches the active authentication view with a fade transition.
- */
 function showView(viewName) {
     let currentView = Object.values(views).find(v => v.classList.contains('opacity-100') && !v.classList.contains('hidden'));
-
-    const headers = {
-        'login': 'Sign In',
-        'create': 'Create Account',
-        'verify': 'Verify Account',
-        'forgot': 'Reset Password',
-    };
+    const headers = { 'login': 'Sign In', 'create': 'Create Account', 'verify': 'Verify Account', 'forgot': 'Reset Password' };
     headerElement.textContent = headers[viewName] || 'Authentication';
 
-    // Simplifed to always clear message on view change
     messageArea.classList.add('hidden');
     messageArea.innerHTML = '';
-
     const nextView = views[viewName];
 
-    if (!nextView) {
-        console.error(`View '${viewName}' not found.`);
-        return;
-    }
+    if (!nextView) return;
 
     if (currentView && currentView !== nextView) {
-        currentView.classList.remove('opacity-100');
-        currentView.classList.add('opacity-0');
-
-        // Adjust height for smooth transition between views of different sizes
+        currentView.classList.replace('opacity-100', 'opacity-0');
         container.style.height = `${currentView.offsetHeight}px`;
 
         setTimeout(() => {
             currentView.classList.add('hidden');
             currentView.classList.remove('absolute');
-
             nextView.classList.remove('hidden');
             nextView.classList.add('absolute');
-
-            // Calculate and set the target height before showing
             container.style.height = `${nextView.offsetHeight}px`;
 
             setTimeout(() => {
-                nextView.classList.remove('absolute');
-                nextView.classList.remove('opacity-0');
+                nextView.classList.remove('absolute', 'opacity-0');
                 nextView.classList.add('opacity-100');
-
-                // Reset height after transition to allow responsive growth
-                setTimeout(() => {
-                    container.style.height = '';
-                }, 400);
+                setTimeout(() => { container.style.height = ''; }, 400);
             }, 50);
         }, 400);
-    } else if (nextView) {
-        nextView.classList.remove('hidden');
-        nextView.classList.remove('opacity-0');
+    } else {
+        nextView.classList.remove('hidden', 'opacity-0');
         nextView.classList.add('opacity-100');
     }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize DOM elements after load
     views = {
         'login': document.getElementById('login-view'),
         'create': document.getElementById('create-view'),
         'verify': document.getElementById('verify-view'),
         'forgot': document.getElementById('forgot-view'),
-        // 'profile' view removed
     };
     headerElement = document.getElementById('auth-header');
     messageArea = document.getElementById('message-area');
     container = document.getElementById('auth-views');
 
-    // Check if all essential elements were found
-    if (!headerElement || !messageArea || !container || !views.login) {
-        console.error("Essential DOM elements for authentication not found. Check HTML IDs.");
-        // Stop execution if main elements are missing to prevent runtime errors
-        return;
-    }
+    if (!headerElement || !views.login) return;
 
-    // ⭐ NEW: Add listener for country change to populate states
-    const countrySelect = document.getElementById('create-country');
-    if (countrySelect) {
-        countrySelect.addEventListener('change', populateStates);
-    }
-
-    // ⭐ NEW: Add listener for a generic logout button
-    // NOTE: A visible logout button must be added to the HTML if this is needed outside the auth flow.
-    const logoutBtn = document.getElementById('logout-btn'); 
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', handleLogout);
-    }
-    
-    // Add event listeners to newly added forms/buttons
-    const verifyForm = document.getElementById('verify-form');
-    if (verifyForm) {
-        verifyForm.addEventListener('submit', handleVerification);
-    }
-
-    const forgotForm = document.getElementById('forgot-form');
-    if (forgotForm) {
-        forgotForm.addEventListener('submit', handleForgotPassword);
-    }
-    
-    const createForm = document.getElementById('create-form');
-    if (createForm) {
-        createForm.addEventListener('submit', handleCreateAccount); // Ensure create form has listener
-    }
-    
-    const loginForm = document.getElementById('login-form');
-    if (loginForm) {
-        loginForm.addEventListener('submit', handleLogin); // Ensure login form has listener
-    }
-
-
-    const resendBtn = document.getElementById('resend-btn');
-    if (resendBtn) {
-        resendBtn.addEventListener('click', handleResendCode);
-    }
-
+    document.getElementById('create-country')?.addEventListener('change', populateStates);
+    document.getElementById('logout-btn')?.addEventListener('click', handleLogout);
+    document.getElementById('verify-form')?.addEventListener('submit', handleVerification);
+    document.getElementById('forgot-form')?.addEventListener('submit', handleForgotPassword);
+    document.getElementById('create-form')?.addEventListener('submit', handleCreateAccount);
+    document.getElementById('login-form')?.addEventListener('submit', handleLogin);
+    document.getElementById('resend-btn')?.addEventListener('click', handleResendCode);
 
     showView('login');
 });
 
-/**
- * Toggles password input type between 'password' and 'text'.
- */
 function togglePasswordVisibility(fieldId) {
     const field = document.getElementById(fieldId);
     const button = document.getElementById(`toggle-${fieldId}`);
-
-    if (field.type === 'password') {
-        field.type = 'text';
-        button.textContent = 'Hide';
-    } else {
-        field.type = 'password';
-        button.textContent = 'View';
-    }
+    field.type = field.type === 'password' ? 'text' : 'password';
+    button.textContent = field.type === 'password' ? 'View' : 'Hide';
 }
 
-/**
- * Displays a temporary message.
- */
 function displayMessage(message, type = 'info') {
-    const baseClasses = 'mt-8 p-4 text-sm rounded-xl font-medium';
-    messageArea.className = baseClasses;
+    messageArea.className = 'mt-8 p-4 text-sm rounded-xl font-medium border';
     messageArea.innerHTML = message;
-
-    switch (type) {
-        case 'success':
-            messageArea.classList.add('bg-green-100', 'text-green-800', 'border', 'border-green-300');
-            break;
-        case 'error':
-            messageArea.classList.add('bg-red-100', 'text-red-800', 'border', 'border-red-300');
-            break;
-        case 'warning': // Added for critical alerts that aren.t fatal errors
-            messageArea.classList.add('bg-yellow-100', 'text-yellow-800', 'border', 'border-yellow-300');
-            break;
-        default: // 'info'
-            messageArea.classList.add('bg-blue-100', 'text-blue-800', 'border', 'border-blue-300');
-            break;
-    }
+    const colors = {
+        success: 'bg-green-100 text-green-800 border-green-300',
+        error: 'bg-red-100 text-red-800 border-red-300',
+        warning: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+        info: 'bg-blue-100 text-blue-800 border-blue-300'
+    };
+    messageArea.classList.add(...colors[type].split(' '));
     messageArea.classList.remove('hidden');
 }
 
-/**
-* Helper function to simulate a cart badge update (since the actual HTML is missing).
-* In a real app, this would update the count displayed next to a cart icon.
-*/
 function updateCartBadge() {
     const itemCount = localStorage.getItem(CART_STORAGE_KEY) || '0';
-    console.log(`[Cart State] Cart badge updated: ${itemCount} items.`);
-    // Example: document.getElementById('cart-badge').textContent = itemCount;
+    console.log(`Cart count: ${itemCount}`);
 }
 
-/**
-* Function to handle login form submission with real API call
-*/
 async function handleLogin(event) {
     event.preventDefault();
     const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
     const loginBtn = document.getElementById('login-btn');
 
-    // --- 🔑 CART MERGE LOGIC - STEP 1: READ LOCAL CART ---
     let localCartItems = [];
     try {
         const localCartJson = localStorage.getItem(LOCAL_CART_KEY);
-        if (localCartJson) {
-            localCartItems = JSON.parse(localCartJson);
-            // Ensure it's an array before sending
-            if (!Array.isArray(localCartItems)) {
-                localCartItems = [];
-            }
-        }
-    } catch (e) {
-        console.warn('Could not parse local cart data from localStorage:', e);
-        localCartItems = [];
-    }
-    // -----------------------------------------------------
+        localCartItems = localCartJson ? JSON.parse(localCartJson) : [];
+    } catch (e) { localCartItems = []; }
 
-    // 1. Show loading state
     loginBtn.textContent = 'Signing in...';
     loginBtn.disabled = true;
 
     try {
-        // 2. Perform the API call (Login & Merge Cart)
         const response = await fetch(LOGIN_ENDPOINT, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            // --- 🔑 CART MERGE LOGIC - STEP 2: INCLUDE IN PAYLOAD ---
-            body: JSON.stringify({
-                email: email,
-                password: password,
-                localCartItems: localCartItems // Pass local cart to the backend
-            })
-            // -------------------------------------------------------
+            body: JSON.stringify({ email, password, localCartItems })
         });
 
-        // 3. Robust JSON Parsing
-        let data = {};
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-            data = await response.json();
-        } else if (!response.ok) {
-            throw new Error(`Server Error (${response.status}): Could not reach login service.`);
-        }
+        const data = await parseSafeJSON(response);
 
-        // 4. Handle API Responses
         if (response.ok) {
-            // SUCCESS (HTTP 200): Login successful
-            // Token is now set via HTTP-only cookie by the server response.
-
-            // ⭐ CRITICAL FIX: Save the JWT token received from the server in the response body
-            if (data.accessToken) {
-                localStorage.setItem(AUTH_TOKEN_KEY, data.accessToken);
-                console.log('JWT Token successfully stored for API access.');
-            } else {
-                 console.warn('No JWT token received in the login response body. API calls might fail.');
-            }
+            if (data.accessToken) localStorage.setItem(AUTH_TOKEN_KEY, data.accessToken);
+            localStorage.removeItem(LOCAL_CART_KEY);
             
-            // --- 🔑 CART MERGE LOGIC - STEP 3: CLEAR LOCAL STORAGE ---
-            if (localCartItems.length > 0) {
-                localStorage.removeItem(LOCAL_CART_KEY);
-                console.log('Local cart cleared upon successful merge.');
-            }
-            // ----------------------------------------------------------
-            
-            // ⭐ CRITICAL FIX - STEP 4: FETCH PERMANENT CART BEFORE REDIRECTING
-            try {
-                // This function must call the new GET /api/user/cart endpoint
-                // and save the permanent cart items into the frontend's global state/cache.
-                // NOTE: The endpoint is '/api/user/cart' relative to the base, which will be resolved by the fetch API.
-                await fetchAndSetPermanentCartState(); 
-                console.log('Permanent cart state updated successfully.');
-            } catch (cartError) {
-                // Log and continue, as successful login is more critical than the cart fetch
-                console.error('Failed to fetch permanent cart state after login:', cartError);
-            }
-            // -------------------------------------------------------------------
+            try { await fetchAndSetPermanentCartState(); } 
+            catch (e) { console.error("Cart sync failed"); }
 
-            displayMessage('Successfully signed in! Your cart was merged. Redirecting to homepage...', 'success');
-
-            setTimeout(() => {
-                window.location.href = 'homepage.html'; // Actual redirect activated
-            }, 1000);
-
+            displayMessage('Signed in successfully! Redirecting...', 'success');
+            setTimeout(() => { window.location.href = 'homepage.html'; }, 1000);
         } else if (response.status === 403 && data.needsVerification) {
-            // FAILED (HTTP 403): Account needs verification
             pendingVerificationEmail = email;
             document.getElementById('verify-email-display').textContent = email;
-
-            displayMessage(data.message || 'Your account needs to be verified. Please enter the code sent to your email.', 'error');
-
-            setTimeout(() => {
-                showView('verify');
-                setResendCooldown(60);
-            }, 1000);
-
-        } else if (response.status === 401) {
-            // FAILED (HTTP 401): Invalid credentials
-            displayMessage(data.message || 'Sign In failed. Please check your email and password.', 'error');
-
+            displayMessage(data.message, 'warning');
+            setTimeout(() => { showView('verify'); setResendCooldown(60); }, 1000);
         } else {
-            // OTHER ERRORS (e.g., 500 Server Error)
-            const errorMessage = data.message || `API Error (${response.status}): An unexpected error occurred.`;
-            displayMessage(`Sign In Failed: ${errorMessage}`, 'error');
+            displayMessage(data.message || 'Login failed. Check credentials.', 'error');
         }
-
     } catch (error) {
-        // 5. Handle Network/Parsing Errors
-        console.error('Login network or API call failed:', error);
-        displayMessage(`Connection Error: ${error.message || 'Could not connect to the login service.'}`, 'error');
+        displayMessage(error.message, 'error');
     } finally {
-        // 6. Reset button state
         loginBtn.textContent = 'Sign In';
         loginBtn.disabled = false;
     }
 }
 
-/**
- * Fetches the permanent cart from the server after a successful login/auth.
- * Assumes 'secureUserFetch', 'globalCartItems', 'CART_STORAGE_KEY', and 'updateCartBadge' 
- * are available in the file's scope.
- */
 async function fetchAndSetPermanentCartState() {  
     try {
-        const response = await secureUserFetch(`${API_BASE_URL}/user/cart`, { 
-            method: 'GET'
-            // No need for custom headers or credentials here; secureUserFetch handles them.
-        });
-
-        // 2. Handle non-OK response (If it failed, it means the server 
-        //    returned a non-401 failure, like a 403 or 500, or a retry failed).
-        if (!response.ok) {
-            // Log the failure but don't crash the application
-            console.error(`Failed to retrieve permanent cart. Status: ${response.status}`);
-            
-            // Ensure the frontend cart state is cleared/empty if fetching the permanent cart fails
-            globalCartItems = [];
-            localStorage.setItem(CART_STORAGE_KEY, '0');
-            updateCartBadge();
-            
-            throw new Error(`Could not retrieve permanent cart from server. Status: ${response.status}`);
-        }
+        const response = await secureUserFetch(`${API_BASE_URL}/user/cart`);
+        const data = await parseSafeJSON(response);
         
-        // 3. Process the successful response (HTTP 200)
-        const cartData = await response.json();
-        
-        // Ensure the data structure is an array of items (or an empty array)
-        const permanentItems = cartData.items && Array.isArray(cartData.items) 
-                                ? cartData.items 
-                                : [];
-
-        // 4. Store the items in the global state/cache
-        globalCartItems = permanentItems; 
-        console.log(`Permanent cart loaded with ${permanentItems.length} unique items.`);
-        
-        // 5. Update the local storage item count and UI badge
-        localStorage.setItem(CART_STORAGE_KEY, permanentItems.length.toString()); 
+        globalCartItems = Array.isArray(data.items) ? data.items : [];
+        localStorage.setItem(CART_STORAGE_KEY, globalCartItems.length.toString());
         updateCartBadge();
-        
     } catch (error) {
-        // This catches network errors OR the 'Session expired. Must re-login.' error 
-        // thrown by secureUserFetch if the refresh token failed.
-        console.error('Fetch permanent cart error caught:', error.message);
-        
-        // Crucial for cleanup: Ensure local state is cleared if the secure fetch failed
-        globalCartItems = [];
-        localStorage.setItem(CART_STORAGE_KEY, '0');
-        updateCartBadge();
-        
-        // Re-throw to signal the calling function (like handleLogin) of the failure
-        throw error;
+        console.error('Cart fetch error:', error);
     }
 }
 
-/**
-* Handles create account form submission and transitions to verification view.
-*/
 async function handleCreateAccount(event) {
     event.preventDefault();
     const form = event.target;
-    
-    // General Fields
     const email = document.getElementById('create-email').value;
     const password = document.getElementById('create-password').value;
-    const confirmPassword = document.getElementById('confirm-password').value;
     const createBtn = document.getElementById('create-btn');
 
-    // Contact Fields
-    const phone = document.getElementById('create-phone').value;
-    const whatsapp = document.getElementById('create-whatsapp').value;
-    
-    // --- UPDATED FIELD GATHERING FOR ADDRESS OBJECT ---
-    const street = document.getElementById('create-street').value;
-    const city = document.getElementById('create-city').value;
-    const state = document.getElementById('create-state').value; 
-    const country = document.getElementById('create-country').value;
-    const zip = document.getElementById('create-zip').value;
-    // ----------------------------------------------------
-
-
-    if (password !== confirmPassword) {
-        displayMessage('Passwords do not match.', 'error');
-        return;
-    }
-    if (password.length < 8) {
-        displayMessage('Password must be at least 8 characters.', 'error');
-        return;
+    if (password !== document.getElementById('confirm-password').value) {
+        return displayMessage('Passwords do not match.', 'error');
     }
 
     createBtn.textContent = 'Creating...';
     createBtn.disabled = true;
-    displayMessage('Attempting to create account via /api/register...', 'info');
 
-    // Construct the structured address object
-    const addressData = {
-        street: street,
-        city: city,
-        state: state,
-        zip: zip, // Optional field
-        country: country
+    const payload = {
+        firstName: form.firstName.value,
+        lastName: form.lastName.value,
+        email: email,
+        password: password,
+        phone: document.getElementById('create-phone').value,
+        whatsapp: document.getElementById('create-whatsapp').value,
+        address: {
+            street: document.getElementById('create-street').value,
+            city: document.getElementById('create-city').value,
+            state: document.getElementById('create-state').value,
+            country: document.getElementById('create-country').value,
+            zip: document.getElementById('create-zip').value
+        }
     };
-    
+
     try {
         const response = await fetch(REGISTER_ENDPOINT, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                firstName: form.firstName.value,
-                lastName: form.lastName.value,
-                email: email,
-                password: password,
-                phone: phone,
-                whatsapp: whatsapp,
-                address: addressData 
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
         });
 
-        // ROBUST JSON PARSING
-        let data = {};
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-            data = await response.json();
-        } else if (!response.ok) {
-            throw new Error(`Server Error (${response.status}): Netlify could not find the function or the server crashed.`);
-        }
-        // END ROBUST PARSING
+        const data = await parseSafeJSON(response);
 
-
-        // ⭐ CHECK 1: SUCCESS/ACCEPTED PATH (HTTP 201 or 202)
-        if (response.ok || response.status === 202) {
-            
+        if (response.ok || response.status === 202 || data.userId) {
             pendingVerificationEmail = email;
             document.getElementById('verify-email-display').textContent = email;
-
-            // Use the message provided by the server (which covers success and 202 cases)
-            displayMessage(`Success! ${data.message || 'Check your email for the 6-digit verification code.'}`, 'success');
-
-            form.reset();
-            document.getElementById('create-state').disabled = true;
-            document.getElementById('create-state').innerHTML = '<option value="" disabled selected>Select State</option>';
-
-
-            setTimeout(() => {
-                showView('verify');
-                setResendCooldown(60);
-            }, 2000);
-
+            displayMessage(data.message || 'Account created. Please verify.', 'success');
+            setTimeout(() => { showView('verify'); setResendCooldown(60); }, 2000);
         } else {
-            // ERROR PATH (400, 409, 503, etc.)
-
-            // ⭐ CRITICAL FIX: CHECK 2: ACCOUNT EXISTS BUT EMAIL FAILED (HTTP 409 or 503 + userId)
-            // If the account exists (409 Conflict, 503 Service Unavailable) AND the server 
-            // provided a userId, we must move the user to the verification screen.
-            if ((response.status === 409 || response.status === 503) && data.userId) {
-                pendingVerificationEmail = email;
-                document.getElementById('verify-email-display').textContent = email;
-
-                // Display a warning message and direct them to verification.
-                displayMessage(data.message || `Account already registered or verification code re-send failed. Please check your email and proceed to verification.`, 'warning');
-                
-                form.reset();
-                document.getElementById('create-state').disabled = true;
-                document.getElementById('create-state').innerHTML = '<option value="" disabled selected>Select State</option>';
-
-                setTimeout(() => {
-                    showView('verify');
-                    // Do not setResendCooldown here, so the user can immediately click resend if needed.
-                }, 2000);
-                
-            } else {
-                // TRUE FAILURE PATH (400 Bad Request, unhandled 500/503 without userId, etc.)
-                const errorMessage = data.message || `API Error (${response.status}): An unexpected error occurred.`;
-                displayMessage(`Registration Failed: ${errorMessage}`, 'error');
-            }
+            displayMessage(data.message || 'Registration failed.', 'error');
         }
-
     } catch (error) {
-        // Handle network errors or the Error thrown by robust parsing
-        console.error('Network or API call failed:', error);
-        displayMessage(`Connection Error: ${error.message || 'Could not connect to the registration service. Check endpoint configuration.'}`, 'error');
+        displayMessage(error.message, 'error');
     } finally {
         createBtn.textContent = 'Create Account';
         createBtn.disabled = false;
     }
 }
-/**
- * Handles account verification code submission.
- * UPDATED: Optimized to guide users toward homepage.html
- */
+
 async function handleVerification(event) {
     event.preventDefault();
-    const code = document.getElementById('verify-code').value.trim(); 
+    const code = document.getElementById('verify-code').value.trim();
     const verifyBtn = document.getElementById('verify-btn');
-    const email = pendingVerificationEmail;
-
-    if (!email) {
-        displayMessage('Error: No pending email found. Please create an account.', 'error');
-        showView('create');
-        return;
-    }
-
-    if (!code || code.length !== 6) { 
-        displayMessage('Please enter a valid 6-digit verification code.', 'error');
-        return; 
-    }
+    
+    if (code.length !== 6) return displayMessage('Enter 6-digit code.', 'error');
 
     verifyBtn.textContent = 'Verifying...';
     verifyBtn.disabled = true;
@@ -1006,211 +723,70 @@ async function handleVerification(event) {
         const response = await fetch(VERIFY_ENDPOINT, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email, code: code })
+            body: JSON.stringify({ email: pendingVerificationEmail, code })
         });
 
-        let data = {};
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-            data = await response.json();
-        } else if (!response.ok) {
-            throw new Error(`Server Error (${response.status}): Service unavailable.`);
-        }
+        const data = await parseSafeJSON(response);
 
         if (response.ok) {
-            // 🎉 SUCCESS PATH
-            displayMessage('Account verified! Finalizing your session...', 'success');
-            
-            document.getElementById('verify-code').disabled = true;
-            verifyBtn.textContent = 'Verified!';
-
-            // --- 🚀 REDIRECT LOGIC ---
-            // If your backend is updated to return an accessToken upon verification:
-            if (data.accessToken) {
-                localStorage.setItem(AUTH_TOKEN_KEY, data.accessToken);
-                console.log('Session established via verification token.');
-                
-                // Attempt to sync the cart before moving to homepage
-                try { await fetchAndSetPermanentCartState(); } catch (e) { console.warn(e); }
-
-                setTimeout(() => {
-                    window.location.href = 'homepage.html'; 
-                }, 1500);
-            } else {
-                // If backend does NOT return a token, we must go to Login, 
-                // but we pre-fill the email to make it easy.
-                displayMessage('Account verified! Please sign in to continue.', 'success');
-                setTimeout(() => {
-                    showView('login');
-                    const loginEmailField = document.getElementById('login-email');
-                    if (loginEmailField) loginEmailField.value = email;
-                    document.getElementById('verify-code').disabled = false;
-                }, 2000);
-            }
-            return;
-
+            if (data.accessToken) localStorage.setItem(AUTH_TOKEN_KEY, data.accessToken);
+            displayMessage('Verified! Redirecting...', 'success');
+            setTimeout(() => { window.location.href = 'homepage.html'; }, 1500);
         } else {
-            // 🟡 ERROR HANDLING
-            if (response.status === 400 && data.message && data.message.includes('already verified')) {
-                displayMessage('Account already verified. Redirecting to login...', 'info');
-                setTimeout(() => showView('login'), 2000);
-            } else {
-                const errorMessage = data.message || `Verification failed (${response.status}).`;
-                displayMessage(errorMessage, 'error');
-                verifyBtn.textContent = 'Verify Account';
-                verifyBtn.disabled = false;
-            }
+            displayMessage(data.message || 'Verification failed.', 'error');
+            verifyBtn.disabled = false;
+            verifyBtn.textContent = 'Verify Account';
         }
-
     } catch (error) {
-        console.error('Verification error:', error);
-        displayMessage(`Connection Error: ${error.message}`, 'error');
-        verifyBtn.textContent = 'Verify Account';
+        displayMessage(error.message, 'error');
         verifyBtn.disabled = false;
     }
 }
 
-/**
- * Starts a cooldown timer for the Resend Code button.
- */
-function setResendCooldown(durationSeconds = 60) {
-    const resendBtn = document.getElementById('resend-btn');
-    resendBtn.disabled = true;
-    let timer = durationSeconds;
-    resendBtn.textContent = `Resend Code (${timer}s)`;
-
+function setResendCooldown(seconds) {
+    const btn = document.getElementById('resend-btn');
+    btn.disabled = true;
+    let timer = seconds;
     const interval = setInterval(() => {
-        timer--;
-        if (timer > 0) {
-            resendBtn.textContent = `Resend Code (${timer}s)`;
-        } else {
+        btn.textContent = `Resend Code (${--timer}s)`;
+        if (timer <= 0) {
             clearInterval(interval);
-            resendBtn.textContent = 'Resend Code';
-            resendBtn.disabled = false;
+            btn.textContent = 'Resend Code';
+            btn.disabled = false;
         }
     }, 1000);
 }
 
-/**
- * Handles resending the verification code with cooldown logic.
- */
 async function handleResendCode() {
-    const resendBtn = document.getElementById('resend-btn');
-    const email = pendingVerificationEmail;
-
-    if (resendBtn.disabled) {
-        // Cooldown is active, just return
-        return;
-    }
-
-    if (!email) {
-        showView('create');
-        displayMessage('Please create an account first.', 'error');
-        return;
-    }
-
-    // Set cooldown immediately upon clicking
-    setResendCooldown(60); 
-    displayMessage(`Requesting new code for ${email}...`, 'info');
-
+    if (!pendingVerificationEmail) return showView('create');
+    setResendCooldown(60);
     try {
         const response = await fetch(RESEND_ENDPOINT, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email })
+            body: JSON.stringify({ email: pendingVerificationEmail })
         });
-
-        // ROBUST JSON PARSING
-        let data = {};
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-            data = await response.json();
-        } else if (!response.ok) {
-            throw new Error(`Server Error (${response.status}): Netlify could not find the function or the server crashed.`);
-        }
-        // END ROBUST PARSING
-
-        if (response.ok) {
-            displayMessage('New code successfully sent! Check your inbox.', 'success');
-        } else {
-            const errorMessage = data.message || `Resend API Error (${response.status}).`;
-            displayMessage(`Resend Failed: ${errorMessage}`, 'error');
-            // Do NOT reset cooldown here, let it continue to prevent abuse
-        }
-    } catch (error) {
-        console.error('Resend network failed:', error);
-        displayMessage(`Connection Error: ${error.message || 'Could not connect to the resend service.'}`, 'error');
-        // Do NOT reset cooldown here, let it continue to prevent abuse
-    }
+        const data = await parseSafeJSON(response);
+        displayMessage(data.message || 'New code sent!', response.ok ? 'success' : 'error');
+    } catch (e) { displayMessage(e.message, 'error'); }
 }
 
-/**
- * Placeholder function for handling forgot password form submission.
- */
 function handleForgotPassword(event) {
     event.preventDefault();
-    const email = document.getElementById('forgot-email').value;
-    // In a real app, send API call to trigger password reset email
-    displayMessage(`If an account exists for ${email}, a password reset link has been sent.`, 'success');
-    setTimeout(() => {
-        showView('login');
-    }, 5000);
+    displayMessage(`Reset link sent to ${document.getElementById('forgot-email').value}`, 'success');
+    setTimeout(() => showView('login'), 3000);
 }
 
-
-// ------------------------------------------------------------------
-// ⭐ NEW FUNCTION: HANDLE LOGOUT
-// ------------------------------------------------------------------
-
-/**
- * Handles user logout by calling the backend to clear the HTTP-only cookie.
- * This is CRITICAL for the secure cookie flow.
- */
 async function handleLogout() {
-    displayMessage('Logging out...', 'info');
-
+    displayMessage('Signing out...', 'info');
     try {
-        // The cookie is automatically sent with this request due to browser behavior.
-        // The backend should respond by clearing/expiring the cookie.
-        const response = await fetch(LOGOUT_ENDPOINT, {
-            method: 'POST',
-            // CRITICAL: Include the cookie/credentials in the request
-            credentials: 'include', 
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        // No need to check response.ok strictly, as we proceed with client-side cleanup regardless.
-
-        // 1. Clear any local state that might indicate a logged-in user
-        // Note: The local cart key is cleared upon login, but good practice to clear on logout too.
-        localStorage.removeItem(LOCAL_CART_KEY); 
-        // ⭐ CRITICAL FIX: Remove the JWT token from local storage (the token used for API calls)
-        localStorage.removeItem(AUTH_TOKEN_KEY); 
-        
-        // 2. Clear global state
-        globalCartItems = [];
-        localStorage.setItem(CART_STORAGE_KEY, '0');
-        updateCartBadge();
-        
-        // 3. Display success message and redirect
-        displayMessage('You have been successfully signed out.', 'success');
-        
-        setTimeout(() => {
-            window.location.href = 'index.html'; // Redirect to the main landing page
-        }, 1000);
-
-    } catch (error) {
-        console.error('Logout failed:', error);
-        // Even if the network call fails, attempt to redirect the user for consistency
-        displayMessage('Logout failed, but clearing local state. Redirecting...', 'error');
-        
-        // Still clear local tokens on network failure for safety
-        localStorage.removeItem(AUTH_TOKEN_KEY); 
-        
-        setTimeout(() => {
-            window.location.href = 'index.html'; 
-        }, 1000);
-    }
+        await fetch(LOGOUT_ENDPOINT, { method: 'POST', credentials: 'include' });
+    } catch (e) { console.warn("Logout request failed"); }
+    
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(LOCAL_CART_KEY);
+    localStorage.setItem(CART_STORAGE_KEY, '0');
+    window.location.href = 'index.html';
 }
 </script>
 </body>

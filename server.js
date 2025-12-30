@@ -2331,18 +2331,30 @@ function generateRefreshToken(payload) {
 }
 
 /**
- * Generates a short-lived Access Token (e.g., 15 minutes) for user API access.
+ * Unified Token Generation
+ * Uses a single secret and consistent payload structure.
  */
-function generateUserAccessToken(payload) {
-    return jwt.sign({ ...payload, role: 'user' }, process.env.JWT_SECRET, { expiresIn: '15m' }); 
-}
 
-/**
- * Generates a long-lived Refresh Token (e.g., 7 days) for user session persistence.
- */
-function generateUserRefreshToken(payload) {
-    return jwt.sign({ ...payload, role: 'user' }, process.env.JWT_SECRET, { expiresIn: '7d' }); 
-}
+const generateUserAccessToken = (payload) => {
+    try {
+        // Ensure we don't nest the payload twice
+        const data = { id: payload.id, email: payload.email, role: 'user' };
+        return jwt.sign(data, process.env.JWT_SECRET, { expiresIn: '15m' });
+    } catch (err) {
+        console.error("JWT Access Token Sign Error:", err);
+        throw new Error("Failed to generate access token");
+    }
+};
+
+const generateUserRefreshToken = (payload) => {
+    try {
+        const data = { id: payload.id, role: 'user' }; // Keep refresh payload small
+        return jwt.sign(data, process.env.JWT_SECRET, { expiresIn: '7d' });
+    } catch (err) {
+        console.error("JWT Refresh Token Sign Error:", err);
+        throw new Error("Failed to generate refresh token");
+    }
+};
 
 // --- EXPRESS CONFIGURATION AND MIDDLEWARE ---
 const app = express();
@@ -5627,63 +5639,91 @@ app.post('/api/users/verify', async (req, res) => {
         res.status(500).json({ message: 'Server error during verification.' });
     }
 });
-
 // =========================================================
-// 2. POST /api/users/login (Login) - OPTIMIZED FOR SPEED & PERSISTENCE
+// 2. POST /api/users/login (FINAL STABILIZED VERSION)
 // =========================================================
 app.post('/api/users/login', async (req, res) => {
-    const { email, password, localCartItems } = req.body; 
+    // 1. Destructure with defaults to prevent "undefined" errors
+    const { email, password, localCartItems = [] } = req.body; 
+
     try {
+        // 2. Basic Validation
+        if (!email || !password) {
+            return res.status(400).json({ message: 'Email and password are required.' });
+        }
+
+        // 3. Find User (select password explicitly for comparison)
         const user = await User.findOne({ email }).select('+password').lean();
-                if (!user || !(await bcrypt.compare(password, user.password))) {
+        if (!user) {
             return res.status(401).json({ message: 'Invalid email or password.' });
         }
-        // 2. Check verification status
-        if (!user.status.isVerified) {
+
+        // 4. Compare Password
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(401).json({ message: 'Invalid email or password.' });
+        }
+
+        // 5. Check verification status
+        if (!user.status?.isVerified) {
             return res.status(403).json({ 
                 message: 'Account not verified. Please verify your email to log in.',
                 needsVerification: true,
                 userId: user._id
             });
         }
-        // --- 3. 🚀 GENERATE DUAL TOKENS ---
-        const tokenPayload = { id: user._id, email: user.email }; 
-        const accessToken = generateUserAccessToken(tokenPayload);
-        const refreshToken = generateUserRefreshToken(tokenPayload);
-        // --- FIX: USE THE CONSISTENT HELPER FUNCTION ---
-        // Assuming getCookieOptions(req) relies on the global isProduction variable
-        const options = getCookieOptions(req); 
-        console.log(`DEBUG LOGIN: Setting cookie with secure: ${options.secure} and sameSite: ${options.sameSite}`);
-        // 4. Set the secure HTTP-only Refresh Token cookie
-        res.cookie('userRefreshToken', refreshToken, {
-            ...options, // Uses httpOnly, secure, and sameSite: 'None'
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        });
-        // --------------------------------------------------------
-        // 5. Merge Cart & Log Activity
-        if (localCartItems && Array.isArray(localCartItems) && localCartItems.length > 0) {
-            await mergeLocalCart(user._id, localCartItems);
-            console.log(`Cart merged for user: ${user._id}`);
-        }
+
+        // 6. Generate Tokens
+        // We use a try-catch specifically here to catch JWT_SECRET issues
+        let accessToken, refreshToken;
         try {
-            await logActivity('LOGIN', `User **${user.email}** successfully logged in.`, user._id, { ipAddress: req.ip });
-        } catch (logErr) {
-            console.warn('Activity logging failed:', logErr);
+            const tokenPayload = { id: user._id, email: user.email, role: 'user' }; 
+            accessToken = generateUserAccessToken(tokenPayload);
+            refreshToken = generateUserRefreshToken(tokenPayload);
+        } catch (jwtError) {
+            console.error("JWT Signing Error:", jwtError);
+            return res.status(500).json({ message: "Internal server error: Token generation failed." });
         }
-        // 6. Send the Access Token back to the client
-        delete user.password; 
-        res.status(200).json({ 
+
+        // 7. Set Secure Cookie for Netlify
+        res.cookie('userRefreshToken', refreshToken, {
+            httpOnly: true,
+            secure: true,      
+            sameSite: 'None',  
+            path: '/',         
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        });
+
+        // 8. Handle Cart & Logging in the background (Non-blocking)
+        // We DON'T await these if they aren't critical for the response
+        if (Array.isArray(localCartItems) && localCartItems.length > 0) {
+            mergeLocalCart(user._id, localCartItems)
+                .catch(err => console.error("Non-fatal Cart Merge Error:", err));
+        }
+
+        logActivity('LOGIN', `User ${user.email} logged in.`, user._id, { ipAddress: req.ip })
+            .catch(err => console.warn('Activity logging failed:', err));
+
+        // 9. Prepare Clean User Response
+        const { password: _, ...userWithoutPassword } = user;
+
+        // 10. Send Success
+        return res.status(200).json({ 
             message: 'Login successful',
             accessToken: accessToken, 
-            user: user
+            user: userWithoutPassword
         });
 
     } catch (error) {
-        // This is the error caught by the ReferenceError
-        console.error("User login error:", error);
-        res.status(500).json({ message: 'Server error during login.' });
+        // This catches database connection issues or logic crashes
+        console.error("CRITICAL LOGIN CRASH:", error);
+        return res.status(500).json({ 
+            message: 'An unexpected server error occurred.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined 
+        });
     }
 });
+
 // --- Updated GET /api/users/account ---
 app.get('/api/users/account', requireUserLogin, async (req, res) => {
     try {
