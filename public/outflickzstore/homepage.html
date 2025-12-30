@@ -972,8 +972,19 @@ function createCollectionCard(collection, size = 'default') {
                 <button onclick="changeQuantity('${collection._id}', 1)" class="${quantityInputTextSize} text-gray-700 hover:bg-gray-100 ${quantityButtonSize}">&plus;</button>
             </div>`;
 
-    const modalData = { imageUrls: [frontImageUrl, backImageUrl], altText: collection.name.replace(/"/g, '') };
-    const imageClickData = JSON.stringify(modalData).replace(/"/g, '&quot;'); 
+   // NEW WAY (Use this)
+const modalPayload = {
+    _id: collection._id,
+    name: collection.name.replace(/'/g, "\\'"),
+    price: collection.price,
+    description: (collection.description || collection.tag || "Exclusive limited edition item.").replace(/'/g, "\\'"),
+    frontImageUrl: frontImageUrl,
+    backImageUrl: backImageUrl,
+    sizeStockMap: collection.sizeStockMap,
+    variants: collection.variants || collection.variations
+};
+
+const modalJson = JSON.stringify(modalPayload).replace(/"/g, '&quot;');
 
     // ⭐ FIX: Added data-collection-id to the main wrapper
     return `
