@@ -180,27 +180,34 @@ tailwind.config = {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    const token = localStorage.getItem('userAccessToken');
+    // Use the constant defined earlier in your script
+    const token = localStorage.getItem(AUTH_TOKEN_KEY); 
     
-    // 1. Redirect if not logged in
+    // 1. SOFT CHECK: If no token is found, we do NOT redirect.
+    // This allows guests to browse the homepage and use the local cart.
     if (!token) {
-        console.warn('No access token found. Redirecting to login...');
-        window.location.href = 'useraccount.html'; 
-        return; // Stop execution
+        console.log('Browsing as guest. Initializing local cart badge.');
+        if (typeof updateCartBadge === 'function') {
+            updateCartBadge(); 
+        }
+        return; // Stop here for guests
     }
 
-    // 2. If we have a token, sync the permanent cart immediately
-    // This ensures the homepage shows the correct item count in the header
+    // 2. AUTHENTICATED SYNC: If we have a token, sync the permanent cart.
     try {
+        console.log('Token found. Syncing user session...');
+        
         if (typeof fetchAndSetPermanentCartState === 'function') {
             await fetchAndSetPermanentCartState();
             console.log('User session verified and cart synced.');
+        } else {
+            // Fallback: if the specific sync function isn't found, just update the badge
+            if (typeof updateCartBadge === 'function') updateCartBadge();
         }
     } catch (error) {
-        console.error('Session might be invalid:', error);
-        // Optional: If the token is expired/invalid, log them out
-        // localStorage.removeItem('userAccessToken');
-        // window.location.href = 'account.html';
+        // If the sync fails (e.g., expired token), we still don't kick them out 
+        // unless they try to access a private page like the Profile.
+        console.error('Session sync failed, continuing as limited session:', error);
     }
 });
 
@@ -252,28 +259,7 @@ async function redirectToProfileOrLogin() {
     }
 }
 
-// 2. **CRITICAL SECURITY GATE**: Enforces redirect immediately on page load
-//    if the user is not authenticated.
-function enforceAuthGate() {
-    fetch(`${API_BASE_URL}/api/auth/status`, { 
-        method: 'GET',
-        credentials: 'include' // <-- CRITICAL FIX: Ensures the secure cookie is sent.
-    })
-    .then(response => {
-        if (response.status !== 200) {
-            // If not authenticated, redirect to login page (use replace to disable back button)
-            console.warn(`Auth gate failed (Status ${response.status}). Redirecting.`);
-            window.location.replace('useraccount.html');
-        } else {
-             console.log("Auth gate passed (Status 200). User session confirmed.");
-        }
-    })
-    .catch(error => {
-        // Treat network failure as unauthenticated/unverified
-        console.error('Initial Auth Check Failed (Network Error):', error);
-        window.location.replace('useraccount.html');
-    });
-}
+
 
 /**
  * CONCEPTUAL: This function should be called ONLY after a successful login API response 
@@ -311,7 +297,7 @@ document.addEventListener('click', function(event) {
 
 
 // REMOVED: const USER_AUTH_TOKEN = localStorage.getItem('outflickzToken');
-    const API_BASE_URL = 'https://outflickzz.netlify.app';
+    const API_BASE_URL = 'https://outflickzs.netlify.app';
 const CART_STORAGE_KEY = 'outflickzCartCount';
 const LOCAL_CART_KEY = 'outflickzLocalCart';
 const AUTH_TOKEN_KEY = 'userAccessToken';
