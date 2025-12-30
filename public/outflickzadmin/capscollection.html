@@ -616,22 +616,9 @@ async function editCollection(collectionId) {
         submitBtn.classList.add('bg-yellow-600', 'hover:bg-yellow-700');
         resetFormBtn.classList.remove('hidden');
 
-        // 2. Populate basic details
         document.getElementById('collection-name').value = collection.name;
-        
-        // --- FIX: Correct Mapping ---
-        // If your HTML has a field specifically for the Tag dropdown:
-        const tagField = document.getElementById('collection-tag');
-        if (tagField) {
-            tagField.value = collection.tag;
-        }
-
-        // Map the actual description data to the description field
-        const descField = document.getElementById('collection-description');
-        if (descField) {
-            descField.value = collection.description || ""; 
-        }
-        
+        document.getElementById('collection-tag').value = collection.tag;
+        document.getElementById('collection-description').value = collection.description || '';        
         document.getElementById('collection-price').value = collection.price; 
         document.getElementById('available-stock').value = collection.totalStock; 
         document.getElementById('is-active').checked = collection.isActive;

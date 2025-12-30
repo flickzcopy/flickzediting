@@ -3223,7 +3223,6 @@ app.get('/api/admin/orders/confirmed', verifyToken, async (req, res) => {
         res.status(500).json({ message: 'Failed to retrieve confirmed orders.' });
     }
 });
-
 // =========================================================
 // 8b. GET /api/admin/orders/:orderId - Fetch Single Detailed Order (Admin Protected)
 // =========================================================
@@ -3234,16 +3233,13 @@ app.get('/api/admin/orders/:orderId', verifyToken, async (req, res) => {
         // 1. Fetch the single order
         let order = null;
         
-        // CRITICAL FIX: Try finding by MongoDB _id first (standard practice)
-        // If orderId is a valid ObjectId, findById will work.
+        // Try finding by MongoDB _id
         if (orderId.match(/^[0-9a-fA-F]{24}$/)) {
              order = await Order.findById(orderId).lean();
         }
 
-        // If not found by _id (or if it wasn't a valid ObjectId format), 
-        // try searching by the orderReference field, which is often used in logs.
+        // Fallback to orderReference
         if (!order) {
-            console.log(`[Order Fetch] Attempting to find order by orderReference: ${orderId}`);
             order = await Order.findOne({ orderReference: orderId }).lean();
         }
 
@@ -3251,42 +3247,46 @@ app.get('/api/admin/orders/:orderId', verifyToken, async (req, res) => {
             return res.status(404).json({ message: 'Order not found.' });
         }
         
-        // 2. Augment order items with product details (name, imageUrl)
+        // 2. Augment order items with product details (name, imageUrl, etc.)
         const detailedOrders = await augmentOrdersWithProductDetails([order]);
         let detailedOrder = detailedOrders[0];
 
         // 🚨 FIX: Generate Signed URL for the Payment Receipt
         if (detailedOrder.paymentReceiptUrl) {
-            // Assuming generateSignedUrl is an async helper function
             detailedOrder.paymentReceiptUrl = await generateSignedUrl(detailedOrder.paymentReceiptUrl);
         }
 
-        // 3. Get User Details (Name and Email)
+        // 3. Get User Details (Handle Registered Members vs. Guests)
         const user = await User.findById(detailedOrder.userId)
             .select('profile.firstName profile.lastName email') 
             .lean();
 
-        const firstName = user?.profile?.firstName;
-        const lastName = user?.profile?.lastName;
+        let finalUserName;
+        let finalEmail;
 
-        // Construct userName: Use full name if both exist, otherwise fall back to email
-        const userName = (firstName && lastName) 
-            ? `${firstName} ${lastName}` 
-            : user?.email || 'N/A';
-            
-        const email = user ? user.email : 'Unknown User';
+        if (user) {
+            // Path A: Registered Member
+            const firstName = user?.profile?.firstName || '';
+            const lastName = user?.profile?.lastName || '';
+            finalUserName = `${firstName} ${lastName}`.trim() || user.email;
+            finalEmail = user.email;
+        } else {
+            // Path B: Guest User Fallback
+            // Pull from the order document directly (captured during guest checkout)
+            finalUserName = detailedOrder.customerName || detailedOrder.shippingAddress?.name || 'Guest Customer';
+            finalEmail = detailedOrder.email || 'N/A';
+        }
         
         // 4. Combine all details
         const finalDetailedOrder = {
             ...detailedOrder,
-            // Ensure customerName is explicitly set, as the frontend uses order.customerName
-            customerName: userName, 
-            email: email,
-            // Explicitly include the total quantity for the frontend to calculate Total Items Deducted
+            customerName: finalUserName, 
+            email: finalEmail,
+            isGuest: !user, // Useful for frontend badges
             totalQuantity: detailedOrder.items.reduce((sum, item) => sum + (item.quantity || 0), 0)
         };
 
-        // 🚀 FIX APPLIED HERE: Wrap the finalDetailedOrder object in a parent object with the 'order' key.
+        // 🚀 Return wrapped in 'order' key as expected by frontend
         return res.status(200).json({ 
             order: finalDetailedOrder 
         });
@@ -3300,6 +3300,7 @@ app.get('/api/admin/orders/:orderId', verifyToken, async (req, res) => {
     }
 });
 
+
 // 9. PUT /api/admin/orders/:orderId/confirm - Confirm an Order (Admin Protected)
 // =========================================================
 app.put('/api/admin/orders/:orderId/confirm', verifyToken, async (req, res) => {
@@ -3312,32 +3313,24 @@ app.put('/api/admin/orders/:orderId/confirm', verifyToken, async (req, res) => {
 
     try {
         // 1. Initial status change from 'Pending' to 'Processing' (The "CLAIM" step.)
-      const updatedOrder = await Order.findOneAndUpdate(
-    { 
-        _id: orderId, 
-        status: { $in: ['Pending', 'Processing'] } // ✅ Accepts both
-    }, 
-    { 
-        $set: { 
-            status: 'Processing', 
-            confirmedAt: new Date(), 
-            confirmedBy: adminId 
-        } 
-    },
-    { new: true, select: 'userId status totalAmount items' } 
-).lean();
+        const updatedOrder = await Order.findOneAndUpdate(
+            { 
+                _id: orderId, 
+                status: { $in: ['Pending', 'Processing'] } 
+            }, 
+            { 
+                $set: { 
+                    status: 'Processing', 
+                    confirmedAt: new Date(), 
+                    confirmedBy: adminId 
+                } 
+            },
+            { new: true, select: 'userId status totalAmount items email' } // 👈 Added 'email' to selection
+        ).lean();
 
-        // Check if the order was successfully found and updated.
         if (!updatedOrder) {
-            console.warn(`Order ${orderId} skipped: not found or status is not pending.`);
             const checkOrder = await Order.findById(orderId).select('status').lean();
-            if (checkOrder) {
-                console.warn(`[Inventory Skip Reason] Order ${orderId} is currently in status: ${checkOrder.status}.`);
-            } else {
-                console.warn(`[Inventory Skip Reason] Order ${orderId} does not exist.`);
-            }
-            
-            // Use 409 Conflict to indicate that the request could not be completed due to the resource's state.
+            console.warn(`[Inventory Skip] Order ${orderId} is in status: ${checkOrder?.status || 'Not Found'}`);
             return res.status(409).json({ message: 'Order not found or is already processed.' });
         }
         
@@ -3345,79 +3338,70 @@ app.put('/api/admin/orders/:orderId/confirm', verifyToken, async (req, res) => {
         let finalOrder;
         try {
             console.log(`[Inventory] Attempting atomic inventory deduction for Order ${orderId}.`);
-            // The helper now handles the final transition to 'Confirmed'
             finalOrder = await processOrderCompletion(orderId, adminId); 
-            // 🎯 UPDATED LOG: Reflects the final 'Confirmed' status set by the helper
-            console.log(`[Inventory Success] Inventory deduction completed successfully for Order ${orderId}. Final status: ${finalOrder.status}.`);
+            console.log(`[Inventory Success] Deduction completed. Final status: ${finalOrder.status}.`);
             
         } catch (inventoryError) {
-            
-            // --- Handle Business Logic Conflict Separately (Race Condition) ---
             if (inventoryError.isRaceCondition) {
-                console.warn(`Race condition detected: Order ${orderId} confirmed by concurrent request. Returning 200.`);
-                
-                // Fetch the now-confirmed order to return a successful response to the admin UI
                 const confirmedOrder = await Order.findById(orderId).lean();
-                
-                // Log and return 200 OK for concurrent confirmation
-                console.warn(`[Inventory Race Skip] Inventory deduction was skipped because the order was finalized by a concurrent process. Current status: ${confirmedOrder.status}.`);
-
                 return res.status(200).json({ 
-                    // 🎯 UPDATED MESSAGE: Use the confirmedOrder's current status (likely 'Confirmed')
-                    message: `Order ${orderId} was confirmed by a concurrent request. Status: ${confirmedOrder.status}.`,
+                    message: `Order ${orderId} was confirmed by a concurrent request.`,
                     order: confirmedOrder 
                 });
             }
             
-            // Rollback status if inventory fails (Genuine stock insufficient errors)
-            console.error('Inventory deduction failed during Admin confirmation:', inventoryError.message);
-            
-            // The rollback function (called by processOrderCompletion's catch) has already set the status 
-            // to 'Inventory Failure (Manual Review)'. We only add an extra note here.
+            console.error('Inventory deduction failed:', inventoryError.message);
             await Order.findByIdAndUpdate(orderId, { 
                 $push: { notes: `Inventory deduction failed on ${new Date().toISOString()}: ${inventoryError.message}` }
             });
             
-            // Return 409 Conflict for known business logic failure (Insufficient Stock).
             return res.status(409).json({ 
-                message: 'Payment confirmed, but inventory deduction failed. Order status flagged for manual review.',
+                message: 'Payment confirmed, but inventory deduction failed. Flagged for review.',
                 error: inventoryError.message
             });
         }
         
-        // 3. GET CUSTOMER EMAIL & SEND NOTIFICATION 📧
-        const user = await User.findById(updatedOrder.userId).select('email').lean();
-        const customerEmail = user ? user.email : null;
+        // 3. GET CUSTOMER EMAIL (Works for both Registered Users and Guests) 📧
+        // Attempt to find a registered user first
+        const registeredUser = await User.findById(updatedOrder.userId).select('email').lean();
+        
+        /**
+         * DUAL-PATH EMAIL LOGIC:
+         * If the user is registered, we use their account email.
+         * If they are a GUEST, the User search returns null, so we use the email stored on the Order.
+         */
+        const customerEmail = registeredUser ? registeredUser.email : (finalOrder.email || updatedOrder.email);
 
         if (customerEmail) {
             try {
-                // Email is only sent if the inventory transaction (step 2) succeeded
-                console.log(`[Email] Sending confirmation email to: ${customerEmail} for order ${orderId}.`);
+                const userLabel = registeredUser ? "Registered Member" : "Guest User";
+                console.log(`[Email] Sending confirmation to ${userLabel}: ${customerEmail}`);
+                
                 await sendOrderConfirmationEmailForAdmin(customerEmail, finalOrder);
-                console.log(`[Email Success] Confirmation email sent to ${customerEmail}.`);
+                
+                console.log(`[Email Success] Confirmation sent to ${customerEmail}.`);
             } catch (emailError) {
-                console.error(`[Email Failure Reason] CRITICAL WARNING: Failed to send confirmation email to ${customerEmail} (Order ${orderId}):`, emailError.message);
-                // Continue execution to send the success response to the client
+                console.error(`[Email Failure] CRITICAL WARNING: Could not email ${customerEmail}:`, emailError.message);
             }
         } else {
-            console.warn(`[Email Skip Reason] Could not find email for user ID: ${updatedOrder.userId}. Skipping email notification.`);
+            console.warn(`[Email Skip] No email address found for order ${orderId} (Guest or Member).`);
+            await Order.findByIdAndUpdate(orderId, { 
+                $push: { notes: `Warning: Confirmation email not sent because no email address was found.` }
+            });
         }
         
         // ⭐ INTEGRATION: Log the successful confirmation action
         if (finalOrder) {
-            // We assume finalOrder has the required fields (userId, _id, totalAmount)
             await logAdminOrderAction(finalOrder, adminId, 'ORDER_CONFIRMED'); 
         }
 
         // 4. Success Response
         res.status(200).json({ 
-            // 🎯 UPDATED MESSAGE: The final status will now be 'Confirmed'
-            message: `Order ${orderId} confirmed, inventory deducted, and customer notified. Status: ${finalOrder.status}.`,
+            message: `Order ${orderId} confirmed, inventory deducted, and customer notified.`,
             order: finalOrder 
         });
 
     } catch (error) {
-        // This catch block handles the final crash and returns the 500 error
         console.error(`Error confirming order ${orderId}:`, error);
         res.status(500).json({ message: 'Failed to confirm order due to a server error.' });
     }
