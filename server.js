@@ -2525,6 +2525,28 @@ const verifySessionCookie = (req, res, next) => {
     }
 };
 
+// Use this for routes that MUST have a logged-in user (like /account)
+const requireUser = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'Authentication required.' });
+    }
+
+    const accessToken = authHeader.split(' ')[1];
+
+    try {
+        const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
+        req.userId = decoded.id; 
+        next(); 
+    } catch (err) {
+        if (err.name === 'TokenExpiredError') {
+            return res.status(401).json({ message: 'Token expired', expired: true });
+        }
+        return res.status(401).json({ message: 'Invalid token' });
+    }
+};
+
 /**
  * Verifies the user token if present, but allows the request to proceed if absent.
  * (This middleware is generally not needed for a protected route like /api/orders/:orderId)
@@ -5662,30 +5684,32 @@ app.post('/api/users/login', async (req, res) => {
         res.status(500).json({ message: 'Server error during login.' });
     }
 });
-
-// 3. GET /api/users/account (Fetch Profile - Protected)
-app.get('/api/users/account', verifyUserToken, async (req, res) => {
+// --- Updated GET /api/users/account ---
+app.get('/api/users/account', requireUserLogin, async (req, res) => {
     try {
-        // req.userId is set by verifyUserToken middleware
-        const user = await User.findById(req.userId).lean();
+        // Find user and explicitly select the nested objects from your DB schema
+        const user = await User.findById(req.userId)
+            .select('email profile address status membership')
+            .lean();
 
         if (!user) {
-            return res.status(404).json({ message: 'User not found.' });
+            // If the token was valid but the user is gone from DB
+            return res.status(404).json({ message: 'User account no longer exists.' });
         }
 
-        // --- FIX APPLIED HERE: Added the 'address' field ---
+        // Return the exact structure your updateDOM() function expects
         res.status(200).json({
             id: user._id,
             email: user.email,
-            profile: user.profile,
-            status: user.status,
-            membership: user.membership,
-            address: user.address // <--- THIS LINE IS ADDED/CORRECTED
+            profile: user.profile || {},     // firstName, lastName, phone, whatsapp
+            address: user.address || {},     // street, city, state, zip, country
+            status: user.status || {},       // isVerified, role
+            membership: user.membership || {} // memberSince, lastUpdated
         });
         
     } catch (error) {
         console.error("Fetch profile error:", error);
-        res.status(500).json({ message: 'Failed to retrieve user profile.' });
+        res.status(500).json({ message: 'Internal server error retrieving profile.' });
     }
 });
 

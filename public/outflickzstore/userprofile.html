@@ -58,48 +58,39 @@
         handleLogout();
     }
 
-    /**
-     * wrapper for fetch that handles Authorization headers and 
-     * automatic Token Refresh using the secure HTTP-only cookie.
-     */
-    async function secureUserFetch(url, options = {}) {
-        let token = localStorage.getItem(AUTH_TOKEN_KEY);
-        if (token) {
-            options.headers = {
-                ...options.headers,
-                'Authorization': `Bearer ${token}`
-            };
+   async function secureUserFetch(url, options = {}) {
+    let token = localStorage.getItem('userAccessToken');
+    
+    // Merge headers
+    options.headers = {
+        ...options.headers,
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+    };
+    
+    // CRITICAL: Must include credentials for the cookie to be sent to Netlify
+    options.credentials = 'include'; 
+
+    let response = await fetch(url, options);
+
+    if (response.status === 401) {
+        console.log("Access token expired. Attempting refresh...");
+        const refreshRes = await fetch('https://outflickzs.netlify.app/api/users/refresh', {
+            method: 'POST',
+            credentials: 'include' // Sends the userRefreshToken cookie
+        });
+
+        if (refreshRes.ok) {
+            const data = await refreshRes.json();
+            localStorage.setItem('userAccessToken', data.accessToken);
+            
+            // Retry the original request with the NEW token
+            options.headers['Authorization'] = `Bearer ${data.accessToken}`;
+            return await fetch(url, options);
         }
-
-        let response = await fetch(url, options);
-
-        if (response.status === 401) {
-            console.log("Token expired. Attempting refresh...");
-            try {
-                const refreshResponse = await fetch(REFRESH_ENDPOINT, { 
-                    method: 'POST',
-                    credentials: 'include' 
-                });
-
-                if (refreshResponse.ok) {
-                    const data = await refreshResponse.json();
-                    const newToken = data.accessToken;
-                    if (!newToken) throw new Error("No token received");
-
-                    localStorage.setItem(AUTH_TOKEN_KEY, newToken);
-                    options.headers['Authorization'] = `Bearer ${newToken}`;
-                    return await fetch(url, options); // Retry
-                } else {
-                    handleLogout();
-                    return response;
-                }
-            } catch (error) {
-                handleLogout();
-                return response;
-            }
-        }
-        return response;
     }
+    return response;
+}
 
     // --- UI/DOM Management ---
 
@@ -148,36 +139,53 @@
     }
 
     // --- Action Handlers ---
-
-    async function fetchUserData() {
-        const mainContent = document.getElementById('main-profile-content');
-        const loading = document.getElementById('loading-indicator');
-        
-        if (loading) loading.classList.remove('hidden');
-        if (mainContent) mainContent.classList.add('hidden');
-
-        try {
-            const response = await secureUserFetch(`${API_BASE_URL}/api/users/account`);
-            
-            if (!response.ok) {
-                handleLogout();
-                return;
-            }
-
-            const data = await response.json();
-            currentProfileData = data;
-            updateDOM(data); 
-
-            await fetchOrderHistory(); 
-
-            if (loading) loading.classList.add('hidden');
-            if (mainContent) mainContent.classList.remove('hidden');
-
-        } catch (error) {
-            console.error("Fetch Error:", error);
-            handleLogout();
-        }
+async function fetchUserData() {
+    // 1. Check if token even exists before doing anything
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    
+    if (!token) {
+        console.warn("No token found, redirecting to login.");
+        window.location.replace('useraccount.html'); // Redirect without clearing (since there's nothing to clear)
+        return;
     }
+
+    const mainContent = document.getElementById('main-profile-content');
+    const loading = document.getElementById('loading-indicator');
+    
+    if (loading) loading.classList.remove('hidden');
+    if (mainContent) mainContent.classList.add('hidden');
+
+    try {
+        // 2. Use the full URL as seen in your screenshot
+        const response = await secureUserFetch(`${API_BASE_URL}/api/users/account`);
+        
+        if (!response.ok) {
+            // Only logout if the server specifically says the token is invalid (401/403)
+            if (response.status === 401 || response.status === 403) {
+                console.error("Session invalid, logging out.");
+                handleLogout();
+            }
+            return;
+        }
+
+        const data = await response.json();
+        currentProfileData = data;
+        updateDOM(data); 
+
+        // 3. Prevent crash if fetchOrderHistory isn't defined yet
+        if (typeof fetchOrderHistory === 'function') {
+            await fetchOrderHistory(); 
+        }
+
+    } catch (error) {
+        console.error("Network error during profile fetch:", error);
+        // Don't log out for a simple network error, just show an error message
+        showStatusMessage('Connection error. Please refresh.', false);
+    } finally {
+        if (loading) loading.classList.add('hidden');
+        if (mainContent) mainContent.classList.remove('hidden');
+    }
+}
 
     async function submitEditProfile(event) {
         event.preventDefault();
