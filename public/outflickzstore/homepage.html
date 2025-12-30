@@ -977,7 +977,8 @@ function createCollectionCard(collection, size = 'default') {
         frontImageUrl: frontImageUrl,
         backImageUrl: backImageUrl,
         sizeStockMap: collection.sizeStockMap || {},
-        variants: collection.variants || []
+        variants: collection.variants || [],
+        collectionType: collection.collectionType || size // ⭐ Passing the category/type
     };
     
     // Convert to JSON and escape double quotes for HTML
@@ -1082,17 +1083,21 @@ function createSizeList(collectionId, sizeStockMap, isReduced = false) {
         return `
             <label for="${inputId}" class="size-label border border-gray-300 cursor-pointer hover:border-ash-dark transition-all rounded-sm has-[:checked]:border-ash-dark has-[:checked]:bg-gray-100">
                 <input 
-                    type="radio" 
-                    id="${inputId}" 
-                    name="${groupName}" 
-                    value="${size}" 
-                    data-stock="${sizeStockMap[size]}" 
-                    class="hidden" 
-                    onchange="updateMaxQuantity('${collectionId}', this.value)"
-                    ${index === 0 ? 'checked' : ''}
-                >
-                <span class="${sizeClasses}">${size}</span>
-            </label>
+                type="radio" 
+                id="${inputId}" 
+                name="${groupName}" 
+                value="${size}" 
+                data-stock="${sizeStockMap[size]}" 
+                class="hidden" 
+                onchange="
+                    if(!window.selectedSizes) window.selectedSizes = {};
+                    window.selectedSizes['${collectionId}'] = this.value; // ⭐ THE FIX: Save selection globally
+                    updateMaxQuantity('${collectionId}', this.value);
+                "
+                ${index === 0 ? 'checked' : ''}
+            >
+            <span class="${sizeClasses}">${size}</span>
+        </label>
         `;
     }).join('');
 }
@@ -1246,83 +1251,84 @@ function handleModalAddToCart(productId, productType) {
     const modal = document.getElementById('quick-view-modal');
     if (!modal) return;
 
-    // 🔍 Enhanced Diagnostic Logs
+    // 🔍 Diagnostic Logs
     console.log("--- Add to Bag Sync Check ---");
     console.log("ID:", productId);
-    console.log("Initial Type Passed:", productType);
+    console.log("Type Context:", productType);
 
-    // 1. DYNAMIC TYPE IDENTIFICATION
-    // If the passed productType is generic, try to find a more specific one in the modal's hidden data or button attributes
-    const isCap = productType === 'CapCollection' || (window.currentProductCategory === 'CapCollection');
+    // 1. IMPROVED TYPE DETECTION
+    // Caps and Pre-orders usually don't need manual size selection if they are "One Size"
+    const isCap = productType === 'CapCollection' || productType === 'caps';
     
-    // 2. SIZE VALIDATION LOGIC
+    // 2. SMART SIZE RETRIEVAL
     let selectedSize = window.selectedSizes ? window.selectedSizes[productId] : null;
 
-    // FALLBACK: If size isn't in global state, check for visible size buttons
+    // ⭐ CRITICAL FIX: Since your createSizeList uses Radio Inputs, 
+    // we must check the DOM if the global state is empty.
     if (!isCap && !selectedSize) {
-        // Query only buttons that have the data-size attribute and are NOT hidden
-        const sizeButtons = modal.querySelectorAll('button[data-size]:not(.hidden)');
-        
-        if (sizeButtons.length === 1) {
-            // Auto-select if there is only one option available
-            selectedSize = sizeButtons[0].getAttribute('data-size');
+        // Look for the radio button group generated in createSizeList
+        const checkedRadio = modal.querySelector(`input[name="size-${productId}"]:checked`);
+        if (checkedRadio) {
+            selectedSize = checkedRadio.value;
+            // Update global state so it's synced for future logic
             if (!window.selectedSizes) window.selectedSizes = {};
             window.selectedSizes[productId] = selectedSize;
-            console.log("Fallback triggered: Auto-detected single size:", selectedSize);
+            console.log("✅ Size recovered from Radio Input:", selectedSize);
         }
     }
 
-    // Final check: Alert only if it's a Wear/Jersey and selection is genuinely missing
+    // 3. VALIDATION
     if (!isCap && !selectedSize) {
-        console.error("Validation Failed: No size stored in window.selectedSizes for " + productId);
+        console.error("Validation Failed: No size selected for ID " + productId);
         alert("Please select a size first.");
         return;
     }
 
-    // 3. QUANTITY & PRODUCT DATA EXTRACTION
-    const quantityInput = document.getElementById(`modal-qty-${productId}`);
+    // 4. DATA EXTRACTION
+    // Handle both modal and main page quantity ID patterns
+    const quantityInput = document.getElementById(`modal-qty-${productId}`) || document.getElementById(`quantity-input-${productId}`);
     const quantity = quantityInput ? parseInt(quantityInput.value) : 1;
     
-    // Use more specific selectors for price and name to avoid confusion with other page elements
     const productName = modal.querySelector('h2').innerText;
-    const priceElement = modal.querySelector('p.text-2xl') || modal.querySelector('p.font-bold.text-gray-900');
-    const priceText = priceElement.innerText.replace('₦', '').replace(/,/g, '');
+    
+    // Improved price parsing (handling the formatting from createCollectionCard)
+    const priceElement = modal.querySelector('p.text-2xl') || modal.querySelector('p.font-bold');
+    const priceText = priceElement ? priceElement.innerText.replace('₦', '').replace(/,/g, '') : "0";
     const price = parseFloat(priceText);
     
     const mainImage = document.getElementById('modal-main-image');
     const imageUrl = mainImage ? mainImage.src : "";
 
-    // 4. EXECUTE CART ADDITION
+    // 5. EXECUTE CART ADDITION
     if (typeof simulateAddToCart === 'function') {
-        const cartPayload = {
+        const payload = {
             productId: productId,
             name: productName,
             price: price,
             imageUrl: imageUrl,
-            size: isCap ? "O/S" : selectedSize, // "O/S" represents One Size for Caps
+            size: isCap ? "O/S" : selectedSize,
             quantity: quantity,
-            type: productType // Passing the specific collection type
+            productType: productType
         };
 
-        console.log("Payload sent to simulateAddToCart:", cartPayload);
-        simulateAddToCart(cartPayload);
+        console.log("🚀 Payload sent to Cart:", payload);
+        simulateAddToCart(payload);
 
-        // 5. SUCCESS UI FEEDBACK
+        // 6. UI FEEDBACK
+        // Look for the specific button within the modal
         const modalBtn = modal.querySelector('button[onclick*="handleModalAddToCart"]');
         if (modalBtn) {
-            const originalClasses = modalBtn.className;
             modalBtn.innerHTML = '<i class="fas fa-check"></i> Added to Bag';
             modalBtn.classList.remove('bg-black');
-            modalBtn.classList.add('bg-green-600');
+            modalBtn.style.backgroundColor = '#16a34a'; // Netlify-safe Green
             modalBtn.disabled = true;
 
-            // Close modal after success
             setTimeout(() => {
-                closeQuickView();
+                if (typeof closeQuickView === 'function') closeQuickView();
             }, 1000);
         }
     } else {
-        console.error("simulateAddToCart function not found.");
+        console.error("simulateAddToCart is not defined in the global scope.");
     }
 }
 
@@ -1626,6 +1632,33 @@ async function fetchAndRenderPreorderCollections() {
     }
 }
 
+document.addEventListener('DOMContentLoaded', function() {
+    const rotatingImages = document.querySelectorAll('.rotating-image');
+
+    setInterval(() => {
+        rotatingImages.forEach(img => {
+            const currentSrc = img.src;
+            const altSrc = img.getAttribute('data-alt-src');
+
+            // This checks: Does the attribute exist? Is it not empty? 
+            if (altSrc && altSrc.trim() !== "" && !altSrc.includes("YOUR_SECOND")) {
+                
+                // Start Fade Out
+                img.style.opacity = '0';
+                
+                setTimeout(() => {
+                    // Swap the images while invisible
+                    img.src = altSrc;
+                    img.setAttribute('data-alt-src', currentSrc);
+                    
+                    // Fade Back In
+                    img.style.opacity = '1';
+                }, 500); // 500ms matches the transition duration in your HTML
+            }
+        });
+    }, 4000); // Swaps every 4 seconds
+});
+
 // --- Updated Consolidated Initialization Logic ---
 document.addEventListener('DOMContentLoaded', () => {
     
@@ -1737,34 +1770,42 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
     </main>
 
-  <section class="bg-white py-6">
+ <section class="bg-white py-6">
     <div class="max-w-7xl mx-auto px-4">
         <div class="flex items-center justify-start md:justify-center space-x-6 overflow-x-auto pb-4 scrollbar-hide no-scrollbar" style="-ms-overflow-style: none; scrollbar-width: none;">
             
-            <a href="wearscollection.html" class="flex-shrink-0 flex flex-col items-center space-y-2 group">
-                <div class="w-20 h-20 md:w-32 md:h-32 rounded-full border-2 border-gray-200 p-1 transition-transform group-hover:scale-105">
-                    <img src="https://i.imgur.com/kBWnXqe.jpeg" alt="Winterwear" class="w-full h-full rounded-full object-cover">
+            <a href="wearscollection.html" class="flex-shrink-0 flex flex-col items-center space-y-2 group category-item">
+                <div class="w-20 h-20 md:w-32 md:h-32 rounded-full border-2 border-gray-200 p-1 transition-transform group-hover:scale-105 overflow-hidden">
+                    <img src="https://i.imgur.com/kBWnXqe.jpeg" 
+                         data-alt-src="YOUR_SECOND_WEARS_IMAGE_URL" 
+                         alt="Wears" class="w-full h-full rounded-full object-cover transition-opacity duration-500 rotating-image">
                 </div>
                 <span class="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-600">Wears</span>
             </a>
 
-            <a href="newarrivals.html" class="flex-shrink-0 flex flex-col items-center space-y-2 group">
-                <div class="w-20 h-20 md:w-32 md:h-32 rounded-full border-2 border-gray-200 p-1 transition-transform group-hover:scale-105">
-                    <img src="https://i.imgur.com/kBWnXqe.jpeg" alt="Winterwear" class="w-full h-full rounded-full object-cover">
+            <a href="newarrivals.html" class="flex-shrink-0 flex flex-col items-center space-y-2 group category-item">
+                <div class="w-20 h-20 md:w-32 md:h-32 rounded-full border-2 border-gray-200 p-1 transition-transform group-hover:scale-105 overflow-hidden">
+                    <img src="https://i.imgur.com/kBWnXqe.jpeg" 
+                         data-alt-src="YOUR_SECOND_NEW_ARRIVALS_IMAGE_URL" 
+                         alt="New Arrivals" class="w-full h-full rounded-full object-cover transition-opacity duration-500 rotating-image">
                 </div>
                 <span class="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-600">New Arrivals</span>
             </a>
 
-            <a href="capcollection.html" class="flex-shrink-0 flex flex-col items-center space-y-2 group">
-                <div class="w-20 h-20 md:w-32 md:h-32 rounded-full border-2 border-gray-200 p-1 transition-transform group-hover:scale-105">
-                    <img src="https://i.imgur.com/KsNquIe.jpeg" alt="Men" class="w-full h-full rounded-full object-cover">
+            <a href="capcollection.html" class="flex-shrink-0 flex flex-col items-center space-y-2 group category-item">
+                <div class="w-20 h-20 md:w-32 md:h-32 rounded-full border-2 border-gray-200 p-1 transition-transform group-hover:scale-105 overflow-hidden">
+                    <img src="https://i.imgur.com/KsNquIe.jpeg" 
+                         data-alt-src="YOUR_SECOND_CAPS_IMAGE_URL" 
+                         alt="Caps" class="w-full h-full rounded-full object-cover transition-opacity duration-500 rotating-image">
                 </div>
                 <span class="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-600">Caps</span>
             </a>
 
-            <a href="preorder.html" class="flex-shrink-0 flex flex-col items-center space-y-2 group">
-                <div class="w-20 h-20 md:w-32 md:h-32 rounded-full border-2 border-gray-200 p-1 transition-transform group-hover:scale-105">
-                    <img src="https://i.imgur.com/pkHSBXd.jpeg" alt="Women" class="w-full h-full rounded-full object-cover">
+            <a href="preorder.html" class="flex-shrink-0 flex flex-col items-center space-y-2 group category-item">
+                <div class="w-20 h-20 md:w-32 md:h-32 rounded-full border-2 border-gray-200 p-1 transition-transform group-hover:scale-105 overflow-hidden">
+                    <img src="https://i.imgur.com/pkHSBXd.jpeg" 
+                         data-alt-src="YOUR_SECOND_PREORDER_IMAGE_URL" 
+                         alt="Preorder" class="w-full h-full rounded-full object-cover transition-opacity duration-500 rotating-image">
                 </div>
                 <span class="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-600">Preorder</span>
             </a>
