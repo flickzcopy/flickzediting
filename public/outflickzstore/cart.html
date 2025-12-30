@@ -128,15 +128,20 @@ async function fetchAndRenderCart() {
     } catch (error) { renderLocalCart(); }
 }
 
+
 function renderCartItems(items, isApiCart) {
     const cartList = document.getElementById('cart-items-list');
     const currency = '₦';
 
     cartList.innerHTML = items.map(item => {
-        const id = item.productId || item._id;
+        // ⭐ FIX: isApiCart uses item._id (the specific row in the database)
+        // Local cart uses the productId.
+        const id = isApiCart ? item._id : (item.productId || item._id);
+        
         const name = item.name || (item.product && item.product.name) || 'Premium Product';
         const price = item.price || (item.product && item.product.price) || 0;
         const img = item.imageUrl || (item.product && item.product.imageUrl) || 'https://i.imgur.com/PZLMws6.jpeg'; 
+        const qty = item.quantity || 1;
 
         return `
         <div class="flex py-6 border-b border-gray-100 last:border-0">
@@ -149,12 +154,12 @@ function renderCartItems(items, isApiCart) {
                         <h3 class="text-sm sm:text-base font-bold text-gray-900">${name}</h3>
                         <p class="text-[10px] text-gray-500 uppercase mt-1">${item.color || ''} ${item.size ? ' / ' + item.size : ''}</p>
                     </div>
-                    <p class="text-sm font-bold text-gray-900">${currency}${(price * item.quantity).toLocaleString()}</p>
+                    <p class="text-sm font-bold text-gray-900">${currency}${(price * qty).toLocaleString()}</p>
                 </div>
                 <div class="flex items-center justify-between mt-4">
                     <div class="flex items-center border border-gray-200 rounded">
                         <button onclick="${isApiCart ? `changeCartQuantity('${id}', -1)` : `changeLocalQuantity('${id}', -1)`}" class="px-2 py-1 hover:bg-gray-50">-</button>
-                        <span class="px-3 text-xs font-semibold">${item.quantity}</span>
+                        <span class="px-3 text-xs font-semibold">${qty}</span>
                         <button onclick="${isApiCart ? `changeCartQuantity('${id}', 1)` : `changeLocalQuantity('${id}', 1)`}" class="px-2 py-1 hover:bg-gray-50">+</button>
                     </div>
                     <button onclick="${isApiCart ? `removeItemFromCart('${id}')` : `handleLocalItemRemoval('${id}')`}" class="text-[11px] text-gray-400 hover:text-ash-red font-bold transition-colors">
@@ -190,16 +195,25 @@ function handleLocalItemRemoval(itemId) {
     fetchAndRenderCart();
 }
 
-// --- QUANTITY UPDATES ---
-async function changeCartQuantity(productId, delta) {
+async function changeCartQuantity(cartItemId, delta) {
     try {
         const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/quantity`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ productId, delta })
+            // Ensure the key matches your backend expectation (usually 'itemId' or 'productId')
+            body: JSON.stringify({ itemId: cartItemId, delta }) 
         });
-        if (response.ok) fetchAndRenderCart();
-    } catch (e) { console.error(e); }
+
+        if (response.ok) {
+            await fetchAndRenderCart();
+        } else {
+            const errorData = await response.json();
+            console.error("Server rejected quantity change:", errorData);
+            displayMessage("Could not update quantity.");
+        }
+    } catch (e) { 
+        console.error("Network error updating quantity:", e); 
+    }
 }
 
 function changeLocalQuantity(itemId, delta) {
