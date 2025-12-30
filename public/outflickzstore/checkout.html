@@ -1087,7 +1087,7 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
     }
 }
 /**
- * ⭐ UPDATED: Processes Paystack payment and triggers Admin Notification upon verification.
+ * ⭐ UPDATED: Processes Paystack payment with Guest detection.
  */
 async function processPaystackPayment(totalAmount, email) {
     const payBtn = document.getElementById('checkout-next-btn');
@@ -1115,6 +1115,9 @@ async function processPaystackPayment(totalAmount, email) {
     payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Initializing...';
 
     try {
+        // ⭐ FIX: Determine if this is a Guest Checkout
+        const isLoggedIn = isUserLoggedIn(); 
+
         // 3. Create the pending order
         const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/paystack`, {
             method: 'POST',
@@ -1122,6 +1125,9 @@ async function processPaystackPayment(totalAmount, email) {
             body: JSON.stringify({ 
                 shippingAddress, 
                 totalAmount, 
+                // ⭐ CRITICAL: Pass guest details to satisfy backend schema
+                email: email, 
+                isGuest: !isLoggedIn,
                 subtotal: localStorage.getItem('outflickzOrderSubtotal') || '0',
                 shippingFee: localStorage.getItem('outflickzOrderShipping') || '0', 
                 tax: localStorage.getItem('outflickzOrderTax') || '0',
@@ -1141,7 +1147,6 @@ async function processPaystackPayment(totalAmount, email) {
             currency: 'NGN',
             callback: function(paymentResponse) {
                 payBtn.innerHTML = '<i class="fas fa-sync fa-spin"></i> Verifying...';
-                // ⭐ Pass orderReference to verification to trigger Admin Email
                 verifyPayment(paymentResponse.reference, data.orderId, data.orderReference);
             },
             onClose: function() {
@@ -1156,42 +1161,6 @@ async function processPaystackPayment(totalAmount, email) {
         displayMessage(`Error: ${error.message}`);
         payBtn.disabled = false;
         payBtn.innerHTML = 'Confirm & Pay Now';
-    }
-}
-/**
- * ⭐ UPDATED: Verifies payment and handles Admin Notification before redirecting.
- * Now accepts orderReference to ensure the Admin Email contains the correct REF string.
- */
-async function verifyPayment(reference, mongoId, orderReference) {
-    try {
-        // Step 1: Verify the payment with the backend
-        const response = await secureUserFetch(`${API_BASE_URL}/api/orders/verify/${reference}`);
-        
-        if (response.ok) {
-            // ⭐ Step 2: TRIGGER ADMIN NOTIFICATION
-            // Since Paystack is a direct digital payment, receiptUrl is null.
-            // We await this to ensure the trigger is sent before the page redirects.
-            try {
-                await sendAdminOrderNotification(orderReference, 'Paystack', null);
-            } catch (emailErr) {
-                console.error("Admin notification failed, but payment was successful:", emailErr);
-            }
-
-            // Step 3: Cleanup local storage on success
-            localStorage.removeItem(LOCAL_CART_KEY);
-            localStorage.removeItem('outflickzOrderItems');
-            localStorage.setItem(CART_STORAGE_KEY, '0');
-            
-            // Step 4: Final Redirect
-            window.location.href = `orderconfirmation.html?id=${mongoId}&ref=${orderReference || reference}&method=paystack`;
-        } else {
-            // If verification check fails, still redirect; the confirmation page will poll the status
-            window.location.href = `orderconfirmation.html?id=${mongoId}&ref=${orderReference || reference}&method=paystack`;
-        }
-    } catch (err) {
-        console.error("Verification Error:", err);
-        // Fallback redirect
-        window.location.href = `orderconfirmation.html?id=${mongoId}&ref=${orderReference || reference}&method=paystack`;
     }
 }
 

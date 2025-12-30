@@ -6401,21 +6401,35 @@ app.get('/api/orders/verify/:reference', verifyUserToken, async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 });
-
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
-    const userId = req.userId;
-    let { shippingAddress, totalAmount, subtotal, shippingFee, tax, orderItems } = req.body;
+    // 1. Identify if User or Guest
+    const userId = req.userId || null;
+    const { 
+        shippingAddress, 
+        totalAmount, 
+        subtotal, 
+        shippingFee, 
+        tax, 
+        orderItems, 
+        email: incomingEmail, // Extract email from frontend
+        isGuest: incomingIsGuest // Extract isGuest flag from frontend
+    } = req.body;
+
+    const isGuest = !userId || incomingIsGuest === true || incomingIsGuest === 'true';
 
     try {
         const sanitizedShipping = typeof shippingAddress === 'string' ? JSON.parse(shippingAddress) : shippingAddress;
         let rawItems = typeof orderItems === 'string' ? JSON.parse(orderItems) : orderItems;
 
+        // 2. Guest items come from the request, not the database Cart model
         if (!rawItems || (Array.isArray(rawItems) && rawItems.length === 0)) {
-            const userCart = await Cart.findOne({ userId }).lean();
-            rawItems = userCart?.items || [];
+            if (!isGuest) {
+                const userCart = await Cart.findOne({ userId }).lean();
+                rawItems = userCart?.items || [];
+            }
         }
 
-        if (rawItems.length === 0) return res.status(400).json({ message: 'Cart is empty.' });
+        if (!rawItems || rawItems.length === 0) return res.status(400).json({ message: 'Cart is empty.' });
 
         const finalOrderItems = await Promise.all(rawItems.map(async (item) => {
             const allowedCollections = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
@@ -6448,9 +6462,10 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
 
         const orderRef = `outflickz_${Date.now()}_${Math.floor(Math.random() * 1000)}`; 
 
-        // CREATE INITIAL RECORD
-        const newOrder = await Order.create({
-            userId,
+        // 3. Prepare order payload following schema rules
+        const orderPayload = {
+            userId: userId,
+            isGuest: isGuest,
             items: finalOrderItems, 
             shippingAddress: sanitizedShipping,
             totalAmount: parseFloat(totalAmount),
@@ -6461,19 +6476,33 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
             paymentStatus: 'Awaiting Payment', 
             paymentMethod: 'Paystack',
             orderReference: orderRef,
-            isPaystackPending: true, // Filter keeps this hidden until webhook flips it
+            isPaystackPending: true,
             amountPaidKobo: 0, 
             paymentTxnId: orderRef, 
-        });
+        };
 
-        const user = await User.findById(userId).select('email');
+        // ⭐ CRITICAL: Provide guestEmail if userId is null
+        if (isGuest) {
+            orderPayload.guestEmail = incomingEmail || (sanitizedShipping && sanitizedShipping.email);
+        }
+
+        // CREATE INITIAL RECORD
+        const newOrder = await Order.create(orderPayload);
+
+        // 4. Determine which email to return to frontend Paystack pop-up
+        let customerEmailForPaystack = incomingEmail;
+        if (!isGuest) {
+            const user = await User.findById(userId).select('email');
+            customerEmailForPaystack = user?.email;
+        }
 
         res.status(201).json({
             message: 'Order initialized.',
             orderId: newOrder._id,
             orderReference: newOrder.orderReference,
             totalAmount: newOrder.totalAmount,
-            email: user?.email
+            email: customerEmailForPaystack,
+            isGuest: isGuest
         });
 
     } catch (error) {
@@ -6481,14 +6510,11 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 });
-
 // =========================================================
 // 8. POST /api/notifications/admin-order-email - Send Notification to Admin
-// This is typically called by the client AFTER a successful payment/order creation.
+// Modified to include WhatsApp Contact Button for Admin
 // =========================================================
 app.post('/api/notifications/admin-order-email', async (req, res) => {
-    
-    // The payload is sent as JSON from the client-side 'sendAdminOrderNotification' function
     const { 
         orderId, 
         totalAmount, 
@@ -6496,7 +6522,7 @@ app.post('/api/notifications/admin-order-email', async (req, res) => {
         shippingDetails, 
         items, 
         adminEmail,
-        paymentReceiptUrl, // The URL from B2/DB
+        paymentReceiptUrl, 
         subtotal,
         shippingFee,
         tax
@@ -6508,238 +6534,153 @@ app.post('/api/notifications/admin-order-email', async (req, res) => {
     }
 
     try {
-        // --- STEP 1: Prepare Attachments from B2 ---
+        // --- STEP 1: WhatsApp Logic ---
+        // Clean phone number (remove spaces, +, dashes) for the wa.me API
+        const rawPhone = shippingDetails.phone || '';
+        const cleanPhone = rawPhone.replace(/\D/g, ''); 
+        // Create the WhatsApp link with a pre-filled message
+        const whatsappUrl = cleanPhone ? `https://wa.me/${cleanPhone}?text=Hello%20from%20Outflickz%20Admin.%20Regarding%20your%20Order%20%23${orderId}` : null;
+
+        // --- STEP 2: Prepare Attachments from B2 ---
         const attachments = [];
         let attachmentFileName = null; 
         
-        // Only attempt to attach if it's a Bank Transfer AND we have a B2 URL
         if (paymentMethod === 'Bank Transfer' && paymentReceiptUrl) {
-            
             try {
-                // a. Get the file key (path inside the bucket)
                 const fileKey = getFileKeyFromUrl(paymentReceiptUrl);
-
                 if (fileKey) {
-                    console.log(`Attempting to download receipt file: ${fileKey}`);
-
-                    // b. Create the GetObject command
                     const getObjectCommand = new GetObjectCommand({
                         Bucket: IDRIVE_BUCKET_NAME,
                         Key: fileKey,
                     });
-
-                    // c. Send the command and get the response stream
                     const response = await s3Client.send(getObjectCommand);
-
-                    // d. Set content type and filename
                     const contentType = response.ContentType || 'application/octet-stream';
-                    const keyParts = fileKey.split('/');
-                    const suggestedFilename = keyParts[keyParts.length - 1] || 'payment-receipt.jpg'; 
-                    
-                    // e. Convert stream to Buffer
+                    const suggestedFilename = fileKey.split('/').pop() || 'payment-receipt.jpg'; 
                     const buffer = await streamToBuffer(response.Body);
 
-                    // f. Add to attachments array (Nodemailer format)
                     attachments.push({
                         filename: suggestedFilename,
                         content: buffer,
                         contentType: contentType,
                     });
-
                     attachmentFileName = suggestedFilename; 
-                    console.log(`Receipt attached successfully: ${suggestedFilename}`);
-                } else {
-                    console.warn(`[Admin Email] Could not extract file key from URL: ${paymentReceiptUrl}. Skipping receipt attachment.`);
                 }
             } catch (downloadError) {
-                console.error(`[Admin Email] Failed to download receipt from B2:`, downloadError.message);
+                console.error(`[Admin Email] Failed to download receipt:`, downloadError.message);
             }
         }
-        // --- END: STEP 1 ---
 
-        // 2. Format the Email Content (HTML)
-        const paymentStatus = (paymentMethod === 'Paystack/Card') ? 'Payment Confirmed (Paystack)' : 'Payment Awaiting Verification (Bank Transfer)';
+        // --- STEP 3: Format the Email Content ---
+        const paymentStatus = (paymentMethod === 'Paystack/Card' || paymentMethod === 'Paystack') 
+            ? 'Payment Confirmed (Paystack)' 
+            : 'Payment Awaiting Verification (Bank Transfer)';
         
-        // --- Item List HTML ---
         const itemDetailsHtml = items.map(item => `
             <tr>
-                <td style="padding: 12px 0 12px 0; border-bottom: 1px solid #eee; font-size: 14px; color: #333;">
+                <td style="padding: 12px 0; border-bottom: 1px solid #eee; font-size: 14px; color: #333;">
                     <table border="0" cellpadding="0" cellspacing="0">
                         <tr>
                             <td style="padding-right: 10px;">
-                                <img src="${item.imageUrl || 'https://placehold.co/40x40/f7f7f7/999?text=X'}" alt="Product" width="40" height="40" style="display: block; border: 1px solid #ddd; border-radius: 4px;">
+                                <img src="${item.imageUrl || 'https://placehold.co/40x40/f7f7f7/999?text=X'}" width="40" height="40" style="display: block; border: 1px solid #ddd; border-radius: 4px;">
                             </td>
-                            <td>
-                                ${item.name || 'N/A'}
-                            </td>
+                            <td>${item.name || 'N/A'}</td>
                         </tr>
                     </table>
                 </td>
-                
-                <td style="padding: 12px 0 12px 0; border-bottom: 1px solid #eee; font-size: 12px; color: #555;">
+                <td style="padding: 12px 0; border-bottom: 1px solid #eee; font-size: 12px; color: #555;">
                     <span style="display: block;">Size: <strong>${item.size || 'N/A'}</strong></span>
                     <span style="display: block; margin-top: 2px;">Color: ${item.color || 'N/A'}</span>
                 </td>
-                
-                <td style="padding: 12px 0 12px 0; border-bottom: 1px solid #eee; font-size: 14px; color: #333; text-align: center;">
-                    ${item.quantity}
-                </td>
-                
-                <td style="padding: 12px 0 12px 0; border-bottom: 1px solid #eee; font-size: 14px; color: #333; text-align: right;">
-                    ₦${(item.price * item.quantity).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                <td style="padding: 12px 0; border-bottom: 1px solid #eee; font-size: 14px; color: #333; text-align: center;">${item.quantity}</td>
+                <td style="padding: 12px 0; border-bottom: 1px solid #eee; font-size: 14px; color: #333; text-align: right;">
+                    ₦${(parseFloat(item.price || item.priceAtTimeOfPurchase) * item.quantity).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </td>
             </tr>
         `).join('');
 
-        // --- Attachment Confirmation Block ---
+        const whatsappButtonHtml = whatsappUrl ? `
+            <div style="margin: 20px 0; text-align: center;">
+                <a href="${whatsappUrl}" style="background-color: #25D366; color: white; padding: 14px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; font-size: 16px;">
+                    💬 Contact Customer via WhatsApp
+                </a>
+                <p style="font-size: 12px; color: #666; margin-top: 8px;">Direct Number: ${rawPhone}</p>
+            </div>
+        ` : `<p style="color: #d9534f; text-align: center;">No valid phone number provided for WhatsApp.</p>`;
+
         const attachmentConfirmationHtml = attachmentFileName ? `
-            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 30px; border-collapse: collapse; border: 1px solid #c0e6c0; border-radius: 4px;">
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 30px; border: 1px solid #c0e6c0; border-radius: 4px; background-color: #e0ffe0;">
                 <tr>
-                    <td style="padding: 15px; background-color: #e0ffe0; font-size: 14px; color: #006400; font-weight: bold; text-align: center;">
-                        ✅ Payment Receipt Proof Attached: 
-                        <span style="font-weight: normal; color: #333;">${attachmentFileName}</span>
-                        <div style="font-size: 12px; color: #555; margin-top: 5px;">
-                            (Please check the email attachment for the file.)
-                        </div>
+                    <td style="padding: 15px; font-size: 14px; color: #006400; font-weight: bold; text-align: center;">
+                        ✅ Receipt Attached: ${attachmentFileName}
                     </td>
                 </tr>
             </table>
-        ` : (paymentMethod === 'Bank Transfer' ? `
-            <p style="margin-top: 30px; font-size: 14px; color: #FF4500; font-weight: bold; text-align: center;">
-                ⚠️ Bank Transfer Payment Selected: Receipt attachment failed or URL was missing.
-            </p>
-        ` : '');
+        ` : (paymentMethod === 'Bank Transfer' ? `<p style="color: #FF4500; font-weight: bold; text-align: center;">⚠️ Receipt attachment failed.</p>` : '');
 
-        // --- Financial Breakdown Summary (Using the newly included fields) ---
-        const totalAmountNum = parseFloat(totalAmount);
-        const subtotalNum = parseFloat(subtotal || (totalAmountNum - (shippingFee || 0) - (tax || 0)));
-        const shippingFeeNum = parseFloat(shippingFee || 0);
-        const taxNum = parseFloat(tax || 0);
-
-        const financialSummaryHtml = `
-            <tr>
-                <td style="padding: 10px 0; font-size: 14px; color: #555; width: 50%;">Subtotal:</td>
-                <td style="padding: 10px 0; font-size: 14px; color: #000000; text-align: right;">₦${subtotalNum.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-            </tr>
-            <tr>
-                <td style="padding: 5px 0; font-size: 14px; color: #555;">Shipping Fee:</td>
-                <td style="padding: 5px 0; font-size: 14px; color: #000000; text-align: right;">₦${shippingFeeNum.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-            </tr>
-            <tr>
-                <td style="padding: 5px 0 20px 0; font-size: 14px; color: #555; border-bottom: 1px dashed #ccc;">Tax:</td>
-                <td style="padding: 5px 0 20px 0; font-size: 14px; color: #000000; text-align: right; border-bottom: 1px dashed #ccc;">₦${taxNum.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-            </tr>
-        `;
-        
-        // The main HTML structure remains mostly the same, inserting the new breakdown.
         const emailHtml = `
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>New Outfulickz Order</title>
     <style>
-        @media only screen and (max-width: 600px) {
-            .container { width: 100% !important; padding: 0 10px !important; }
-            .header-logo { width: 150px !important; height: auto !important; }
-            .item-table td { display: table-cell !important; }
-        }
+        @media only screen and (max-width: 600px) { .container { width: 100% !important; } }
     </style>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif;">
-    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+    <table border="0" cellpadding="0" cellspacing="0" width="100%">
         <tr>
             <td align="center" style="padding: 20px 0;">
                 <table border="0" cellpadding="0" cellspacing="0" width="600" class="container" style="background-color: #ffffff; border: 1px solid #dddddd; border-radius: 8px;">
                     <tr>
-                        <td align="center" style="padding: 20px 0 10px 0;">
-                            <img src="https://i.imgur.com/6Bvu8yB.png" alt="Outfulickz Logo" class="header-logo" width="180" style="display: block; border: 0; max-width: 180px;">
+                        <td align="center" style="padding: 20px 0;">
+                            <img src="https://i.imgur.com/6Bvu8yB.png" alt="Logo" width="180">
                         </td>
                     </tr>
                     <tr>
-                        <td style="padding: 20px 40px 40px 40px;">
-                            <h1 style="color: #000000; font-size: 24px; text-align: center; margin-bottom: 20px;">
-                                🚨 NEW ORDER PLACED 🚨
-                            </h1>
-                            <p style="font-size: 16px; color: #333; line-height: 1.5;">
-                                A new order has been created and requires immediate attention for fulfillment.
-                            </p>
+                        <td style="padding: 0 40px 40px 40px;">
+                            <h1 style="color: #000; font-size: 24px; text-align: center; margin-bottom: 10px;">🚨 NEW ORDER 🚨</h1>
                             
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 25px; border-collapse: collapse;">
-                                <tr>
-                                    <td colspan="2" style="font-size: 18px; font-weight: bold; color: #000000; padding-bottom: 10px; border-bottom: 2px solid #000000;">ORDER SUMMARY</td>
-                                </tr>
-                                <tr>
-                                    <td style="padding: 10px 0; font-size: 14px; color: #555; width: 50%;">Order ID:</td>
-                                    <td style="padding: 10px 0; font-size: 14px; color: #000000; font-weight: bold; text-align: right;">${orderId}</td>
-                                </tr>
-                                <tr>
-                                    <td style="padding: 10px 0; font-size: 14px; color: #555;">Payment Method:</td>
-                                    <td style="padding: 10px 0; font-size: 14px; color: #000000; text-align: right;">${paymentMethod}</td>
-                                </tr>
-                                <tr>
-                                    <td style="padding: 10px 0; font-size: 14px; color: #555;">Payment Status:</td>
-                                    <td style="padding: 10px 0; font-size: 14px; font-weight: bold; text-align: right; color: ${paymentStatus.includes('Confirmed') ? 'green' : '#FFA500'};">${paymentStatus}</td>
-                                </tr>
-                                
-                                ${financialSummaryHtml}
+                            ${whatsappButtonHtml}
 
-                                <tr>
-                                    <td style="padding: 20px 0 10px 0; font-size: 16px; font-weight: bold; color: #000000;">TOTAL AMOUNT:</td>
-                                    <td style="padding: 20px 0 10px 0; font-size: 18px; font-weight: bold; color: #000000; text-align: right;">₦${totalAmountNum.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                                </tr>
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 25px; border-bottom: 2px solid #000;">
+                                <tr><td colspan="2" style="font-size: 16px; font-weight: bold; padding-bottom: 5px;">ORDER SUMMARY</td></tr>
+                            </table>
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 10px; font-size: 14px;">
+                                <tr><td style="padding: 5px 0; color: #555;">Order ID:</td><td align="right" style="font-weight: bold;">${orderId}</td></tr>
+                                <tr><td style="padding: 5px 0; color: #555;">Payment:</td><td align="right">${paymentMethod}</td></tr>
+                                <tr><td style="padding: 5px 0; color: #555;">Status:</td><td align="right" style="color: ${paymentStatus.includes('Confirmed') ? 'green' : '#FFA500'}; font-weight: bold;">${paymentStatus}</td></tr>
+                                <tr><td style="padding: 5px 0; color: #555;">Subtotal:</td><td align="right">₦${parseFloat(subtotal || 0).toLocaleString()}</td></tr>
+                                <tr><td style="padding: 5px 0; color: #555;">Shipping:</td><td align="right">₦${parseFloat(shippingFee || 0).toLocaleString()}</td></tr>
+                                <tr><td style="padding: 20px 0; font-size: 18px; font-weight: bold;">TOTAL:</td><td align="right" style="font-size: 18px; font-weight: bold;">₦${parseFloat(totalAmount).toLocaleString()}</td></tr>
                             </table>
 
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 30px; border-collapse: collapse;">
-                                <tr>
-                                    <td colspan="2" style="font-size: 18px; font-weight: bold; color: #000000; padding-bottom: 10px; border-bottom: 2px solid #000000;">SHIPPING DETAILS</td>
-                                </tr>
-                                <tr>
-                                    <td style="padding: 10px 0 5px 0; font-size: 14px; color: #000000; font-weight: bold;" colspan="2">
-                                        ${shippingDetails.firstName} ${shippingDetails.lastName}
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td style="padding: 5px 0; font-size: 14px; color: #555;" colspan="2">Email: ${shippingDetails.email}</td>
-                                </tr>
-                                <tr>
-                                    <td style="padding: 5px 0 10px 0; font-size: 14px; color: #555; border-bottom: 1px dashed #ccc;" colspan="2">
-                                        Address: ${shippingDetails.street}, ${shippingDetails.city}, ${shippingDetails.state}, ${shippingDetails.country} ${shippingDetails.zipCode ? `(${shippingDetails.zipCode})` : ''}
-                                    </td>
-                                </tr>
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 30px; border-bottom: 2px solid #000;">
+                                <tr><td style="font-size: 16px; font-weight: bold; padding-bottom: 5px;">SHIPPING DETAILS</td></tr>
                             </table>
-                            
-                            <table border="0" cellpadding="0" cellspacing="0" width="100%" class="item-table" style="margin-top: 30px; border-collapse: collapse;">
-                                <tr>
-                                    <td colspan="4" style="font-size: 18px; font-weight: bold; color: #000000; padding-bottom: 10px; border-bottom: 2px solid #000000;">ITEMS ORDERED</td>
+                            <div style="font-size: 14px; padding-top: 10px; line-height: 1.6;">
+                                <strong>${shippingDetails.firstName} ${shippingDetails.lastName}</strong><br>
+                                Email: ${shippingDetails.email}<br>
+                                Phone: ${rawPhone}<br>
+                                Address: ${shippingDetails.street}, ${shippingDetails.city}, ${shippingDetails.state}, ${shippingDetails.country}
+                            </div>
+
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 30px;">
+                                <tr style="background-color: #f7f7f7; font-size: 12px; color: #555;">
+                                    <th align="left" style="padding: 10px;">PRODUCT</th>
+                                    <th align="left" style="padding: 10px;">DETAILS</th>
+                                    <th align="center" style="padding: 10px;">QTY</th>
+                                    <th align="right" style="padding: 10px;">PRICE</th>
                                 </tr>
-                                
-                                <thead>
-                                    <tr style="text-align: left; background-color: #f7f7f7;">
-                                        <th style="padding: 10px 0; font-size: 12px; color: #555; font-weight: normal; width: 40%;">PRODUCT</th>
-                                        <th style="padding: 10px 0; font-size: 12px; color: #555; font-weight: normal; width: 30%;">DETAILS</th>
-                                        <th style="padding: 10px 0; font-size: 12px; color: #555; font-weight: normal; width: 10%; text-align: center;">QTY</th>
-                                        <th style="padding: 10px 0; font-size: 12px; color: #555; font-weight: normal; width: 20%; text-align: right;">SUBTOTAL</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${itemDetailsHtml}
-                                </tbody>
+                                ${itemDetailsHtml}
                             </table>
-                            
+
                             ${attachmentConfirmationHtml}
-
-                            <p style="margin-top: 40px; font-size: 12px; color: #777; text-align: center;">
-                                This is an automated notification. Please check the order management system for full details and fulfillment.
-                            </p>
-
                         </td>
                     </tr>
-                    
                     <tr>
-                        <td align="center" style="background-color: #f7f7f7; padding: 15px 40px; border-radius: 0 0 8px 8px;">
-                            <p style="margin: 0; font-size: 11px; color: #999;">&copy; ${new Date().getFullYear()} OUTFULICKZ. All rights reserved.</p>
+                        <td align="center" style="background-color: #f7f7f7; padding: 15px; font-size: 11px; color: #999; border-radius: 0 0 8px 8px;">
+                            &copy; ${new Date().getFullYear()} OUTFULICKZ.
                         </td>
                     </tr>
                 </table>
@@ -6747,25 +6688,14 @@ app.post('/api/notifications/admin-order-email', async (req, res) => {
         </tr>
     </table>
 </body>
-</html>
-        `;
+</html>`;
 
-        // 3. Send the Email, passing the attachments array
-        await sendMail(
-            adminEmail,
-            `[New Order] #${orderId} - ${paymentStatus}`,
-            emailHtml,
-            attachments 
-        );
-
-        console.log(`Admin notification sent successfully for Order ID: ${orderId} to ${adminEmail}`);
-        
-        // 4. Send a successful response back to the client
-        res.status(200).json({ message: 'Admin notification request received and processing.' });
+        await sendMail(adminEmail, `[New Order] #${orderId} - ${paymentStatus}`, emailHtml, attachments);
+        res.status(200).json({ message: 'Notification sent.' });
 
     } catch (error) {
-        console.error('Error in POST /api/notifications/admin-order-email:', error);
-        res.status(500).json({ message: 'Failed to dispatch admin email notification due to server error.' });
+        console.error('Admin Email Error:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
     }
 });
 
