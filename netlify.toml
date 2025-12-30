@@ -29,7 +29,7 @@
     # 1. added https://*.paystack.com to style-src for their button and checkout styles.
     # 2. added frame-src to allow the Paystack payment popup/iframe to appear.
     # 3. added paystack.com to img-src for their logo/trust badges.
-    Content-Security-Policy = "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.paystack.co https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://paystack.com https://*.paystack.com https://fonts.googleapis.com https://*.cloudflare.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; img-src 'self' data: https://i.imgur.com https://s3.amazonaws.com https://*.idrivee2.com https://*.idrive.com https://www.idrive.com https://paystack.com https://*.paystack.com; frame-src 'self' https://js.paystack.co https://checkout.paystack.com https://*.paystack.com;"
+Content-Security-Policy = "default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.paystack.co https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://paystack.com https://*.paystack.com https://fonts.googleapis.com https://*.cloudflare.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; img-src 'self' data: https://i.imgur.com https://s3.amazonaws.com https://*.idrivee2.com https://*.idrive.com https://www.idrive.com https://paystack.com https://*.paystack.com https://via.placeholder.com; frame-src 'self' https://js.paystack.co https://checkout.paystack.com https://*.paystack.com;"
     
 # 1. Specific files first (Priority)
 [[redirects]]

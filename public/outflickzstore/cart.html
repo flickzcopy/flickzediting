@@ -8,17 +8,9 @@
     <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
         body { font-family: 'Inter', sans-serif; }
-        input[type="number"]::-webkit-inner-spin-button,
-        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        input[type="number"] { -moz-appearance: textfield; }
-
-        @media (max-width: 1023px) {
-            .cart-item-card { border-bottom: 1px solid #e5e7eb; padding-bottom: 1rem; margin-bottom: 1rem; }
-            .cart-item-card:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
-        }
-        #message-modal-container { background-color: rgba(0, 0, 0, 0.5); transition: opacity 0.3s ease-in-out; }
+        #message-modal-container { background-color: rgba(0, 0, 0, 0.5); }
         .modal-content { transform: translateY(0); transition: transform 0.3s ease-in-out; }
         #message-modal-container.hidden .modal-content { transform: translateY(-50px); }
     </style>
@@ -48,29 +40,21 @@ function displayMessage(message) {
     if (modalContainer && modalText) {
         modalText.innerHTML = message;
         modalContainer.classList.remove('hidden');
-        setTimeout(() => modalContainer.classList.add('hidden'), 3500);
+        setTimeout(() => modalContainer.classList.add('hidden'), 3000);
     }
 }
 
-// --- SECURE FETCH (Updated to handle 401s) ---
+// --- SECURE FETCH ---
 async function secureUserFetch(url, options = {}) {
     let token = localStorage.getItem(AUTH_TOKEN_KEY);
     if (token) {
-        options.headers = { 
-            ...options.headers, 
-            'Authorization': `Bearer ${token}` 
-        };
+        options.headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
     }
-    
     try {
         const response = await fetch(url, options);
-        
-        // If Unauthorized, the token is expired or invalid
         if (response.status === 401) {
-            console.warn("Unauthorized: Clearing session.");
             localStorage.removeItem(AUTH_TOKEN_KEY);
-            // Re-render as a local guest instead of crashing
-            renderLocalCart(); 
+            location.reload(); 
         }
         return response;
     } catch (err) {
@@ -82,15 +66,16 @@ async function secureUserFetch(url, options = {}) {
 // --- CART LOGIC ---
 function updateCartBadge() {
     const badge = document.getElementById('cart-badge');
-    if (!badge) return;
     const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
     const count = localCart.reduce((sum, item) => sum + item.quantity, 0);
     localStorage.setItem(CART_STORAGE_KEY, count.toString());
-    if (count > 0) {
-        badge.textContent = count;
-        badge.classList.remove('hidden');
-    } else {
-        badge.classList.add('hidden');
+    if (badge) {
+        if (count > 0) {
+            badge.textContent = count;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
     }
 }
 
@@ -99,17 +84,19 @@ async function fetchAndRenderCart() {
     const checkoutBtn = document.getElementById('checkout-btn');
     const clearCartBtn = document.getElementById('clear-cart-btn');
 
-    const updateCheckoutButtonState = (hasItems) => {
+    const updateUIState = (hasItems) => {
         if (hasItems) {
             checkoutBtn.disabled = false;
             checkoutBtn.classList.replace('bg-gray-400', 'bg-ash-red');
             checkoutBtn.classList.remove('cursor-not-allowed', 'opacity-50');
             checkoutBtn.onclick = () => window.location.href = 'checkout.html';
+            clearCartBtn.disabled = false;
         } else {
             checkoutBtn.disabled = true;
             checkoutBtn.classList.replace('bg-ash-red', 'bg-gray-400');
             checkoutBtn.classList.add('cursor-not-allowed', 'opacity-50');
             checkoutBtn.onclick = null;
+            clearCartBtn.disabled = true;
         }
     };
 
@@ -119,13 +106,11 @@ async function fetchAndRenderCart() {
         if (localCart.length > 0) {
             renderCartItems(localCart, false);
             updateCartSummary(calculateLocalTotals(localCart));
-            clearCartBtn.disabled = false;
-            updateCheckoutButtonState(true);
+            updateUIState(true);
         } else {
-            cartList.innerHTML = '<div class="text-center py-10 text-gray-500">Your bag is empty.</div>';
+            cartList.innerHTML = '<div class="text-center py-10 text-gray-400">Your bag is empty.</div>';
             updateCartSummary({ subtotal: 0, shipping: 0 });
-            clearCartBtn.disabled = true;
-            updateCheckoutButtonState(false);
+            updateUIState(false);
         }
     };
 
@@ -138,144 +123,126 @@ async function fetchAndRenderCart() {
             const cartData = await response.json();
             renderCartItems(cartData.items || [], true);
             updateCartSummary(cartData);
-            updateCheckoutButtonState(cartData.items && cartData.items.length > 0);
-        } else { 
-            renderLocalCart(); 
-        }
-    } catch (error) { 
-        renderLocalCart(); 
-    }
+            updateUIState(cartData.items && cartData.items.length > 0);
+        } else { renderLocalCart(); }
+    } catch (error) { renderLocalCart(); }
 }
-
 function renderCartItems(items, isApiCart) {
     const cartList = document.getElementById('cart-items-list');
-    const currencySymbol = '₦';
-
-    const typeLabels = {
-        'wearcollections': 'Wears',
-        'capcollections': 'Caps',
-        'newarrivals': 'New Arrival',
-        'preordercollections': 'Pre-Order'
-    };
+    const currency = '₦';
 
     cartList.innerHTML = items.map(item => {
-        const itemId = item.productId || item._id;
-        
-        // ⭐ RESOLVE NAME: Check item level AND nested product level (for API results)
-        const productName = item.name || (item.product && item.product.name) || 'Premium Product';
-        const unitPrice = item.price || (item.product && item.product.price) || 0;
-        const productTag = item.tag || (item.product && item.product.tag) || "";
-        const imageUrl = item.imageUrl || (item.product && item.product.imageUrl) || 'https://via.placeholder.com/150';
-
-        let displayCategory = 'Premium Apparel';
-        const rawType = (item.productType || (item.product && item.product.productType) || "").toLowerCase();
-        
-        if (rawType && typeLabels[rawType]) {
-            displayCategory = typeLabels[rawType];
-        } else if (rawType) {
-            displayCategory = rawType.replace('collections', '').toUpperCase();
-        }
+        // Use an allowed domain (Imgur) for the fallback to avoid CSP errors
+        const id = item.productId || item._id;
+        const name = item.name || (item.product && item.product.name) || 'Premium Product';
+        const price = item.price || (item.product && item.product.price) || 0;
+        const img = item.imageUrl || (item.product && item.product.imageUrl) || 'https://i.imgur.com/PZLMws6.jpeg'; 
 
         return `
-        <div id="cart-item-${itemId}" class="cart-item-card flex py-4 sm:py-6 border-b border-gray-100">
-            <div class="flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 rounded-lg overflow-hidden border border-gray-200">
-                <img src="${imageUrl}" alt="${productName}" class="w-full h-full object-cover object-center">
+        <div class="flex py-6 border-b border-gray-100 last:border-0">
+            <div class="w-20 h-20 sm:w-28 sm:h-28 flex-shrink-0 rounded-lg overflow-hidden border">
+                <img src="${img}" alt="${name}" class="w-full h-full object-cover" onerror="this.src='https://i.imgur.com/PZLMws6.jpeg'">
             </div>
-            <div class="ml-4 flex flex-1 flex-col justify-between">
-                <div class="relative pr-9 sm:grid sm:grid-cols-2 sm:gap-x-6 sm:pr-0">
+            <div class="ml-4 flex-1 flex flex-col justify-between">
+                <div class="flex justify-between items-start">
                     <div>
-                        <h3 class="text-base sm:text-lg font-semibold text-gray-900">${productName}</h3>
-                        <p class="mt-1 text-xs text-red-500 font-medium uppercase tracking-wider">${displayCategory} ${productTag ? '• ' + productTag : ''}</p>
-                        <p class="mt-1 text-xs text-gray-500 uppercase">
-                            ${item.color || ''} ${item.size ? ' / ' + item.size : ''}
-                        </p>
+                        <h3 class="text-sm sm:text-base font-bold text-gray-900">${name}</h3>
+                        <p class="text-[10px] text-gray-500 uppercase mt-1">${item.color || ''} ${item.size ? ' / ' + item.size : ''}</p>
                     </div>
-                    <p class="mt-2 text-base font-bold text-gray-900 text-right sm:text-left">
-                        ${currencySymbol}${(unitPrice * item.quantity).toLocaleString()}
-                    </p>
+                    <p class="text-sm font-bold text-gray-900">${currency}${(price * item.quantity).toLocaleString()}</p>
                 </div>
-                <div class="flex items-center justify-between mt-3">
-                    <div class="flex items-center border border-gray-300 rounded-sm">
-                        <button onclick="${isApiCart ? `changeCartQuantity('${itemId}', -1)` : `changeLocalQuantity('${itemId}', -1)`}" class="w-8 h-8 hover:bg-gray-100">-</button>
-                        <span class="w-8 text-center text-sm font-medium">${item.quantity}</span>
-                        <button onclick="${isApiCart ? `changeCartQuantity('${itemId}', 1)` : `changeLocalQuantity('${itemId}', 1)`}" class="w-8 h-8 hover:bg-gray-100">+</button>
+                <div class="flex items-center justify-between mt-4">
+                    <div class="flex items-center border border-gray-200 rounded">
+                        <button onclick="${isApiCart ? `changeCartQuantity('${id}', -1)` : `changeLocalQuantity('${id}', -1)`}" class="px-2 py-1 hover:bg-gray-50">-</button>
+                        <span class="px-3 text-xs font-semibold">${item.quantity}</span>
+                        <button onclick="${isApiCart ? `changeCartQuantity('${id}', 1)` : `changeLocalQuantity('${id}', 1)`}" class="px-2 py-1 hover:bg-gray-50">+</button>
                     </div>
-                    <button onclick="${isApiCart ? `removeItemFromCart('${itemId}')` : `handleLocalItemRemoval('${itemId}')`}" class="text-xs text-gray-400 hover:text-ash-red">
-                        <i class="fas fa-trash-alt mr-1"></i> Remove
+                    <button onclick="${isApiCart ? `removeItemFromCart('${id}')` : `handleLocalItemRemoval('${id}')`}" class="text-[11px] text-gray-400 hover:text-ash-red font-bold transition-colors">
+                        <i class="fas fa-trash-alt mr-1"></i> REMOVE
                     </button>
                 </div>
             </div>
-        </div>
-    `;
+        </div>`;
     }).join('');
 }
 
-function updateCartSummary(cartData) {
-    const currency = '₦';
-    const subtotal = cartData.subtotal || 0;
-    const shipping = cartData.shipping || 0;
-    
-    document.getElementById('subtotal').textContent = `${currency}${subtotal.toLocaleString()}`;
-    document.getElementById('shipping-cost').textContent = `${currency}${shipping.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
-    document.getElementById('estimated-total').textContent = `${currency}${(subtotal + shipping).toLocaleString()}`;
-}
+// --- SINGLE ITEM REMOVAL ---
 
-function calculateLocalTotals(localCart) {
-    let subtotal = localCart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-    return { items: localCart, subtotal: subtotal, shipping: 0 };
+async function removeItemFromCart(itemId) {
+    if (!confirm("Remove this item from your bag?")) return;
+    try {
+        // Calling your Netlify API endpoint for single item deletion
+        const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/${itemId}`, { 
+            method: 'DELETE' 
+        });
+        if (response.ok) {
+            displayMessage("<i class='fas fa-check-circle mr-2'></i> Item removed.");
+            fetchAndRenderCart();
+        }
+    } catch (e) { console.error("Remove failed", e); }
 }
 
 function handleLocalItemRemoval(itemId) {
-    let localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-    localCart = localCart.filter(item => (item._id || item.productId) !== itemId);
-    localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
+    let cart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
+    // Filter out the item with the matching ID
+    cart = cart.filter(item => (item._id || item.productId) !== itemId);
+    localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(cart));
+    
+    displayMessage("<i class='fas fa-trash-alt mr-2'></i> Item removed from bag.");
     updateCartBadge();
     fetchAndRenderCart();
-    displayMessage("<i class='fas fa-trash mr-2'></i> Item removed from bag.");
 }
 
-async function changeCartQuantity(itemId, delta) {
-    const token = localStorage.getItem(AUTH_TOKEN_KEY);
-    if (!token) return;
+// --- QUANTITY UPDATES ---
+
+async function changeCartQuantity(productId, delta) {
     try {
         const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/quantity`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ productId: itemId, delta })
+            body: JSON.stringify({ productId, delta })
         });
-        if (response && response.ok) fetchAndRenderCart();
+        if (response.ok) fetchAndRenderCart();
     } catch (e) { console.error(e); }
 }
 
-async function removeItemFromCart(itemId) {
-    const token = localStorage.getItem(AUTH_TOKEN_KEY);
-    if (!token) return;
-    try {
-        const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/${itemId}`, { method: 'DELETE' });
-        if (response && response.ok) {
-            fetchAndRenderCart();
-            displayMessage("<i class='fas fa-trash mr-2'></i> Item removed from your account cart.");
+function changeLocalQuantity(itemId, delta) {
+    let cart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
+    const index = cart.findIndex(i => (i._id || i.productId) === itemId);
+    if (index !== -1) {
+        cart[index].quantity += delta;
+        if (cart[index].quantity <= 0) {
+            cart.splice(index, 1);
         }
-    } catch (e) { console.error(e); }
+        localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(cart));
+        updateCartBadge();
+        fetchAndRenderCart();
+    }
 }
 
 async function clearCart() {
-    if (!confirm("Are you sure you want to clear your bag?")) return;
-    
+    if (!confirm("Are you sure you want to empty your bag?")) return;
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     if (token) {
-        // We attempt API delete, but proceed regardless to clear local view
-        try {
-            await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { method: 'DELETE' });
-        } catch (err) {
-            console.error("API Clear failed, clearing local storage anyway.");
-        }
+        await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { method: 'DELETE' });
     }
-    
     localStorage.setItem(LOCAL_CART_KEY, '[]');
     updateCartBadge();
     fetchAndRenderCart();
-    displayMessage("<i class='fas fa-check-circle mr-2'></i> Bag cleared successfully.");
+    displayMessage("Bag cleared successfully.");
+}
+
+function updateCartSummary(data) {
+    const subtotal = data.subtotal || 0;
+    const shipping = data.shipping || 0;
+    document.getElementById('subtotal').textContent = `₦${subtotal.toLocaleString()}`;
+    document.getElementById('shipping-cost').textContent = `₦${shipping.toLocaleString()}`;
+    document.getElementById('estimated-total').textContent = `₦${(subtotal + shipping).toLocaleString()}`;
+}
+
+function calculateLocalTotals(cart) {
+    const subtotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+    return { subtotal, shipping: 0 };
 }
 
 function toggleMenu() { 
@@ -290,9 +257,9 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </head>
 <body class="bg-gray-50 text-color-black min-h-screen">
-    <div id="message-modal-container" class="fixed inset-0 z-[100] hidden flex justify-center items-start pt-10 px-4">
-        <div class="modal-content bg-ash-dark text-white p-4 rounded-lg shadow-2xl max-w-sm w-full relative">
-            <p id="message-modal-text" class="text-sm font-medium flex items-center"></p>
+    <div id="message-modal-container" class="fixed inset-0 z-[100] hidden flex justify-center items-start pt-10 px-4 pointer-events-none">
+        <div class="modal-content bg-ash-dark text-white p-4 rounded-lg shadow-2xl max-w-sm w-full pointer-events-auto">
+            <p id="message-modal-text" class="text-sm font-medium text-center"></p>
         </div>
     </div>
     
@@ -303,16 +270,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 <a href="homepage.html" class="hover:text-ash-red transition-colors">Homepage</a>
                 <a href="cart.html" class="text-ash-red border-b-2 border-ash-red pb-1">Cart</a>
                 <a href="wearscollection.html" class="hover:text-ash-red transition-colors">Wears</a>
-                <a href="newarrivals.html" class="hover:text-ash-red transition-colors">New Arrivals</a>
-                <a href="capcollection.html" class="hover:text-ash-red transition-colors">Caps</a>
             </nav>
             <div class="flex items-center space-x-5">
-                <button onclick="window.location.href='useraccount.html'" class="text-gray-700 hover:text-ash-red"><i class="fas fa-user"></i></button>
-                <a href="cart.html" class="relative text-gray-700 hover:text-ash-red">
+                <button onclick="window.location.href='useraccount.html'" class="hover:text-ash-red"><i class="fas fa-user"></i></button>
+                <a href="cart.html" class="relative hover:text-ash-red">
                     <i class="fas fa-shopping-bag"></i>
-                    <span id="cart-badge" class="absolute -top-2 -right-2 bg-ash-red text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold hidden">0</span>
+                    <span id="cart-badge" class="absolute -top-2 -right-2 bg-ash-red text-white text-[10px] px-1.5 py-0.5 rounded-full hidden">0</span>
                 </a>
-                <button class="md:hidden text-gray-700" onclick="toggleMenu()"><i class="fas fa-bars"></i></button>
+                <button class="md:hidden" onclick="toggleMenu()"><i class="fas fa-bars"></i></button>
             </div>
         </div>
     </header>
@@ -320,51 +285,47 @@ document.addEventListener('DOMContentLoaded', () => {
     <div id="mobile-menu" class="hidden md:hidden bg-white border-b absolute w-full z-40 p-4 shadow-lg space-y-4">
         <a href="homepage.html" class="block font-medium">Homepage</a>
         <a href="wearscollection.html" class="block font-medium">Wears</a>
-        <a href="cart.html" class="block font-bold text-ash-red">Cart</a>
-        <a href="useraccount.html" class="block cursor-pointer font-medium">Account</a>
+        <a href="cart.html" class="block text-ash-red font-bold">Cart</a>
     </div>
 
     <main class="max-w-7xl mx-auto px-4 py-8 sm:py-12">
-        <h1 class="text-2xl sm:text-3xl font-extrabold text-ash-dark mb-8 uppercase tracking-tight">🛒 Your Shopping Bag</h1>
+        <h1 class="text-xl sm:text-2xl font-black text-ash-dark mb-8 uppercase tracking-tight">🛒 Shopping Bag</h1>
+        
         <div class="lg:grid lg:grid-cols-3 lg:gap-12">
             <div class="lg:col-span-2">
                 <div id="cart-items-list" class="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
-                    <div id="loading-indicator" class="text-center py-12 text-gray-400">
-                        <i class="fas fa-circle-notch fa-spin text-2xl mb-2"></i>
-                        <p>Loading your bag...</p>
+                    <div class="text-center py-10 text-gray-400">
+                        <i class="fas fa-spinner fa-spin mr-2"></i> Fetching your items...
                     </div>
                 </div>
-                <div class="mt-6 flex justify-between items-center bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-                    <button id="clear-cart-btn" onclick="clearCart()" class="text-gray-400 hover:text-ash-red font-bold uppercase text-xs transition-colors">Clear Bag</button>
-                    <a href="homepage.html" class="text-xs font-bold uppercase tracking-widest text-gray-900 hover:underline">Continue Shopping</a>
+                
+                <div class="mt-6 flex justify-between items-center bg-white p-5 rounded-xl border border-gray-100">
+                    <button id="clear-cart-btn" onclick="clearCart()" class="text-gray-400 hover:text-ash-red font-bold uppercase text-[10px] tracking-widest transition-colors">Empty Bag</button>
+                    <a href="homepage.html" class="text-[10px] font-bold uppercase tracking-widest hover:underline">Keep Shopping</a>
                 </div>
             </div>
             
             <div class="lg:col-span-1 mt-10 lg:mt-0">
                 <div class="bg-white p-6 rounded-xl shadow-md border border-gray-100 sticky top-24">
-                    <h2 class="text-lg font-bold mb-6 border-b pb-4">Order Summary</h2>
+                    <h2 class="text-base font-bold mb-6 border-b pb-4 uppercase tracking-wider">Summary</h2>
                     <div class="space-y-4 text-sm">
-                        <div class="flex justify-between text-gray-500"><span>Subtotal</span><span id="subtotal" class="text-gray-900 font-medium">₦0.00</span></div>
-                        <div class="flex justify-between text-gray-500"><span>Shipping</span><span id="shipping-cost" class="text-gray-900 font-medium">₦0.00</span></div>
-                        <div class="flex justify-between border-t pt-4 text-base font-bold text-gray-900 uppercase">
-                            <span>Total</span>
-                            <span id="estimated-total" class="text-ash-red">₦0.00</span>
+                        <div class="flex justify-between text-gray-500"><span>Subtotal</span><span id="subtotal" class="text-gray-900 font-semibold">₦0.00</span></div>
+                        <div class="flex justify-between text-gray-500"><span>Shipping</span><span id="shipping-cost" class="text-gray-900 font-semibold">₦0.00</span></div>
+                        <div class="flex justify-between border-t pt-4 text-lg font-black text-ash-dark">
+                            <span>TOTAL</span><span id="estimated-total" class="text-ash-red">₦0.00</span>
                         </div>
                     </div>
-                    <button id="checkout-btn" class="mt-8 w-full bg-gray-400 text-white font-bold py-4 rounded-lg shadow-lg uppercase tracking-widest text-xs transition-all opacity-50 cursor-not-allowed">
-                        Proceed to Checkout
+                    <button id="checkout-btn" class="mt-8 w-full bg-gray-400 text-white font-bold py-4 rounded-lg uppercase tracking-widest text-xs opacity-50 cursor-not-allowed transition-all">
+                        Checkout Now
                     </button>
-                    <div class="mt-4 flex items-center justify-center space-x-2 text-[10px] text-gray-400 uppercase tracking-tighter">
-                        <i class="fas fa-lock"></i>
-                        <span>Secure Checkout</span>
-                    </div>
+                    <p class="text-[9px] text-gray-400 text-center mt-4 uppercase tracking-tighter"><i class="fas fa-shield-alt mr-1"></i> Secure SSL Encrypted Checkout</p>
                 </div>
             </div>
         </div>
     </main>
 
-    <footer class="bg-white border-t border-gray-100 py-12 mt-20 text-center">
-        <p class="text-gray-400 text-xs font-medium tracking-widest uppercase">&copy; 2025 Outflickz. All rights reserved.</p>
+    <footer class="py-10 mt-20 text-center border-t border-gray-100">
+        <p class="text-gray-400 text-[10px] uppercase tracking-widest font-medium">&copy; 2025 Outflickz. Premium Apparel.</p>
     </footer>
 </body>
 </html>

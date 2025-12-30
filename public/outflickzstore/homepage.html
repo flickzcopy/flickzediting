@@ -1202,71 +1202,103 @@ function updateStockStatusDisplay(productData, productElementId) {
         }
     }
 }
-
 function openProductQuickView(jsonPayload) {
     const product = JSON.parse(jsonPayload);
     
+    // Remove existing modal if any
+    const existingModal = document.getElementById('quick-view-modal');
+    if (existingModal) existingModal.remove();
+
     const modalOverlay = document.createElement('div');
     modalOverlay.id = 'quick-view-modal';
-    modalOverlay.className = 'fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-opacity duration-300';
+    // Optimized overlay for responsiveness
+    modalOverlay.className = 'fixed inset-0 z-[1000] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm transition-opacity duration-300';
     
-    const formattedPrice = product.price.toLocaleString('en-US', { minimumFractionDigits: 2 });
+    const formattedPrice = product.price.toLocaleString('en-US');
 
     modalOverlay.innerHTML = `
-        <div class="bg-white w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-lg shadow-2xl relative flex flex-col md:flex-row animate-in fade-in zoom-in duration-300">
-            <button onclick="closeQuickView()" class="absolute top-4 right-4 z-50 bg-white/90 rounded-full p-2 shadow-lg hover:bg-gray-100 transition">
-                <i class="fas fa-times text-xl text-gray-800"></i>
+        <div class="bg-white w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl relative animate-in fade-in zoom-in duration-300">
+            
+            <button onclick="closeQuickView()" class="absolute top-3 right-3 z-[1050] bg-white/80 rounded-full p-2.5 shadow-md hover:bg-gray-100 transition active:scale-90">
+                <i class="fas fa-times text-lg text-gray-800"></i>
             </button>
 
-            <div class="w-full md:w-1/2 bg-[#f9f9f9] flex items-center justify-center relative min-h-[400px]">
-                <img id="modal-main-image" src="${product.frontImageUrl}" class="w-full h-full object-contain p-8 transition-opacity duration-300" alt="${product.name}">
+            <div class="grid grid-cols-1 md:grid-cols-2 h-full">
                 
-                <div class="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-3">
-                    <button onclick="updateModalImg('${product.frontImageUrl}', this)" class="w-3 h-3 rounded-full bg-black border border-white ring-2 ring-black"></button>
-                    <button onclick="updateModalImg('${product.backImageUrl}', this)" class="w-3 h-3 rounded-full bg-gray-300 border border-white hover:bg-gray-400"></button>
-                </div>
-            </div>
-
-            <div class="w-full md:w-1/2 p-8 sm:p-12 flex flex-col">
-                <div class="mb-auto">
-                    <span class="text-[0.65rem] font-black text-gray-400 uppercase tracking-[0.2em]">Outflickz Exclusive</span>
-                    <h2 class="text-2xl sm:text-3xl font-bold text-gray-900 mt-2 leading-tight">${product.name}</h2>
-                    <p class="text-xl font-bold text-red-600 mt-3">₦${formattedPrice}</p>
+                <div class="bg-[#f9f9f9] flex flex-col items-center justify-center relative min-h-[350px] md:min-h-[500px] border-b md:border-b-0 md:border-r border-gray-100 p-4">
+                    <div class="w-full h-full flex items-center justify-center overflow-hidden">
+                        <img id="modal-main-image" 
+                             src="${product.frontImageUrl}" 
+                             class="max-w-full max-h-[300px] md:max-h-[450px] object-contain transition-all duration-500 transform hover:scale-105" 
+                             alt="${product.name}">
+                    </div>
                     
-                    <div class="h-px bg-gray-100 my-8"></div>
-
-                    <div class="mb-8">
-                        <h4 class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest mb-3">Product Details</h4>
-                        <p class="text-gray-900 text-sm leading-relaxed font-bold">
-                            ${product.description || "No specific details provided for this collection."}
-                        </p>
-                    </div>
-
-                    <div class="space-y-8">
-                        <div>
-                            <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest">Available Colors</span>
-                            <div class="flex gap-3 mt-4">
-                                ${createColorList(product._id, product.variants || product.variations)}
-                            </div>
-                        </div>
-
-                        <div>
-                            <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest">Select Size</span>
-                            <div class="flex gap-2 mt-4 flex-wrap">
-                                ${createSizeList(product._id, product.sizeStockMap, false)}
-                            </div>
-                        </div>
+                    <div class="flex gap-3 mt-4 pb-2">
+                        <button onclick="updateModalImg('${product.frontImageUrl}', this)" 
+                                class="w-12 h-12 rounded border-2 border-black overflow-hidden p-1 bg-white transition-all shadow-sm">
+                            <img src="${product.frontImageUrl}" class="w-full h-full object-contain">
+                        </button>
+                        ${product.backImageUrl ? `
+                        <button onclick="updateModalImg('${product.backImageUrl}', this)" 
+                                class="w-12 h-12 rounded border-2 border-transparent hover:border-gray-300 overflow-hidden p-1 bg-white transition-all shadow-sm">
+                            <img src="${product.backImageUrl}" class="w-full h-full object-contain">
+                        </button>` : ''}
                     </div>
                 </div>
 
-                <div class="pt-10">
-                    <button onclick="handleModalAddToCart('${product._id}')" 
-                        class="w-full bg-black text-white py-5 rounded-sm font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3 active:scale-[0.98]">
-                        <i class="fas fa-shopping-bag"></i> Add to Shopping Bag
-                    </button>
-                    <div class="flex items-center justify-center gap-4 mt-6">
-                        <i class="fas fa-shield-alt text-gray-400 text-xs"></i>
-                        <p class="text-[0.6rem] text-gray-400 uppercase tracking-widest">100% Secure Checkout</p>
+                <div class="p-6 sm:p-10 flex flex-col justify-between bg-white">
+                    <div>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="w-8 h-[1px] bg-red-600"></span>
+                            <span class="text-[0.65rem] font-black text-red-600 uppercase tracking-widest">Outflickz Exclusive</span>
+                        </div>
+                        
+                        <h2 class="text-2xl sm:text-3xl font-black text-gray-900 leading-tight uppercase tracking-tight">${product.name}</h2>
+                        <p class="text-2xl font-bold text-gray-900 mt-4">₦${formattedPrice}</p>
+                        
+                        <div class="h-px bg-gray-100 my-6"></div>
+
+                        <div class="mb-6">
+                            <h4 class="text-[0.7rem] font-bold text-gray-400 uppercase tracking-[0.15em] mb-2">Description</h4>
+                            <p class="text-gray-700 text-sm leading-relaxed">
+                                ${product.description || "Designed for ultimate style and comfort. Part of our latest seasonal collection."}
+                            </p>
+                        </div>
+
+                        <div class="space-y-6">
+                            <div>
+                                <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-3">Colorways</span>
+                                <div class="flex flex-wrap gap-2">
+                                    ${createColorList(product._id, product.variants || product.variations)}
+                                </div>
+                            </div>
+
+                            <div>
+                                <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-3">Select Size</span>
+                                <div class="flex flex-wrap gap-2">
+                                    ${createSizeList(product._id, product.sizeStockMap, false)}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-10">
+                        <button onclick="handleModalAddToCart('${product._id}')" 
+                                class="w-full bg-black text-white py-4 rounded-md font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3 active:scale-[0.97] shadow-lg shadow-black/10">
+                            <i class="fas fa-shopping-bag text-sm"></i> Add to Bag
+                        </button>
+                        
+                        <div class="flex items-center justify-center gap-4 mt-6 opacity-50">
+                            <div class="flex items-center gap-1.5">
+                                <i class="fas fa-truck text-[10px]"></i>
+                                <span class="text-[0.6rem] font-bold uppercase tracking-tighter">Fast Delivery</span>
+                            </div>
+                            <div class="w-1 h-1 bg-gray-300 rounded-full"></div>
+                            <div class="flex items-center gap-1.5">
+                                <i class="fas fa-undo text-[10px]"></i>
+                                <span class="text-[0.6rem] font-bold uppercase tracking-tighter">Easy Returns</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1275,6 +1307,17 @@ function openProductQuickView(jsonPayload) {
 
     document.body.appendChild(modalOverlay);
     document.body.style.overflow = 'hidden';
+}
+
+function closeQuickView() {
+    const modal = document.getElementById('quick-view-modal');
+    if (modal) {
+        modal.classList.add('opacity-0');
+        setTimeout(() => {
+            modal.remove();
+            document.body.style.overflow = 'auto';
+        }, 300);
+    }
 }
 
 // 2. MODAL ADD TO CART HANDLER
