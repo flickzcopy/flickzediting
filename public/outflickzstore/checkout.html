@@ -1358,21 +1358,19 @@ function toggleBankTransferDetails() {
 }
 
 /**
- * ⭐ NEW: Processes the Bank Transfer order.
- * Handles receipt upload and order creation.
+ * ⭐ UPDATED: Processes the Bank Transfer order.
+ * Handles receipt upload, missing financial fields, and order creation.
  */
 async function processBankTransferOrder(totalAmount, email) {
-    // 1. Get the input element
+    // 1. Get the input element and file
     const receiptInput = document.getElementById('bank-receipt-upload');
-    
-    // 2. Extract the file from the input
     const receiptFile = receiptInput ? receiptInput.files[0] : null;
 
-    // 3. Validate the file exists
+    // 2. Validate the file exists
     if (!receiptFile) {
         displayMessage("Please upload your transfer receipt.");
         
-        // ⭐ IMPORTANT: Re-enable the button so the user can try again after picking a file
+        // Re-enable the button so the user can try again after picking a file
         const payBtn = document.getElementById('checkout-next-btn');
         if (payBtn) {
             payBtn.disabled = false;
@@ -1386,40 +1384,59 @@ async function processBankTransferOrder(totalAmount, email) {
     payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Processing Order...';
 
     try {
+        // 3. Gather all required data from localStorage
         const shippingData = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
         const orderItems = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
+        
+        // ⭐ FIX: Pull the missing required fields for the Database
+        const subtotal = localStorage.getItem('outflickzOrderSubtotal') || "0";
+        const shippingFee = localStorage.getItem('outflickzShippingFee') || "0";
+        const tax = localStorage.getItem('outflickzOrderTax') || "0";
 
+        // 4. Build FormData (Multipart/form-data)
         const formData = new FormData();
         
-        // Now 'receiptFile' is correctly defined above
+        // File
         formData.append('receipt', receiptFile); 
         
+        // Strings/JSON
         formData.append('shippingAddress', JSON.stringify(shippingData));
         formData.append('orderItems', JSON.stringify(orderItems));
         formData.append('paymentMethod', 'Bank Transfer');
         formData.append('totalAmount', totalAmount.toString());
         formData.append('email', email);
 
+        // ⭐ FIX: Append the financial fields the backend/DB expects
+        formData.append('subtotal', subtotal);
+        formData.append('shippingFee', shippingFee);
+        formData.append('tax', tax);
+
+        // 5. Send to Server
         const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/pending`, {
             method: 'POST',
             body: formData 
+            // Note: browser sets Content-Type automatically for FormData
         });
 
         const data = await response.json();
 
         if (response.ok) {
+            // 6. Success: Finalize and redirect
             finalizeOrderOnServer({ 
                 orderId: data.orderId, 
                 orderRef: data.orderReference,
                 paymentMethod: 'Bank Transfer'
             }, 'banktransfer');
         } else {
+            // Handle server-side validation errors
             throw new Error(data.message || "Failed to place order.");
         }
 
     } catch (error) {
         console.error("Bank Transfer Error:", error);
         displayMessage(error.message);
+        
+        // Re-enable button on error so user can fix issues
         payBtn.disabled = false;
         payBtn.innerHTML = 'Confirm & Pay Now';
     }

@@ -6785,12 +6785,15 @@ app.post('/api/orders/place/pending', verifyUserToken, (req, res) => {
         const userId = req.userId || null;
         const isGuest = !userId;
         
-        const { 
+       const { 
             shippingAddress: shippingAddressString, 
             paymentMethod, 
             totalAmount: totalAmountString, 
             orderItems: orderItemsString,
-            email: guestEmail // Frontend should send this if not logged in
+            email: guestEmail,
+            subtotal: subtotalString,
+            shippingFee: shippingFeeString,
+            tax: taxString
         } = req.body;
         
         const receiptFile = req.file; 
@@ -6852,16 +6855,19 @@ app.post('/api/orders/place/pending', verifyUserToken, (req, res) => {
             const orderRef = `REF-${Date.now()}-${isGuest ? 'GUEST' : userId.substring(0, 5)}`; 
 
             // 5. Create Order
-            const newOrder = await Order.create({
-                userId: userId, // Will be null for guests
+           const newOrder = await Order.create({
+                userId: userId, 
                 items: finalOrderItems, 
                 shippingAddress: shippingAddress,
                 totalAmount: totalAmount,
+                // These must be converted to numbers
+                subtotal: parseFloat(subtotalString) || 0,
+                shippingFee: parseFloat(shippingFeeString) || 0,
+                tax: parseFloat(taxString) || 0,
                 status: 'Pending', 
                 paymentMethod: paymentMethod,
                 orderReference: orderRef, 
                 paymentReceiptUrl: paymentReceiptUrl,
-                // ⭐ Store contact email for guests
                 customerEmail: isGuest ? (shippingAddress.email || guestEmail) : undefined 
             });
 
