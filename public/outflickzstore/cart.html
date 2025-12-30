@@ -8,33 +8,23 @@
     <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
-        /* Load Inter (main font) and Playfair Display (for "OUTFLICKZ" logo) */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
 
-        /* Custom styles */
-        body {
-            font-family: 'Inter', sans-serif;
-        }
+        body { font-family: 'Inter', sans-serif; }
 
-        /* Hide number input arrows/spinners */
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button {
             -webkit-appearance: none;
             margin: 0;
         }
-        input[type="number"] {
-            -moz-appearance: textfield;
-        }
+        input[type="number"] { -moz-appearance: textfield; }
 
-        /* Custom style for the cart items list on mobile/tablet */
         @media (max-width: 1023px) {
             .cart-item-card {
-                /* Add a subtle bottom border for separation */
-                border-bottom: 1px solid #e5e7eb; /* gray-200 */
+                border-bottom: 1px solid #e5e7eb;
                 padding-bottom: 1rem;
                 margin-bottom: 1rem;
             }
-            /* Remove the bottom border on the last item for cleaner look on mobile */
             .cart-item-card:last-child {
                 border-bottom: none;
                 padding-bottom: 0;
@@ -42,9 +32,8 @@
             }
         }
         
-        /* Custom styles for the message modal */
         #message-modal-container {
-            background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent black overlay */
+            background-color: rgba(0, 0, 0, 0.5);
             transition: opacity 0.3s ease-in-out;
         }
         .modal-content {
@@ -56,7 +45,6 @@
         }
     </style>
 <script>
-// Customizing Tailwind colors to match the theme
 tailwind.config = {
     theme: {
         extend: {
@@ -78,217 +66,69 @@ const LOCAL_CART_KEY = 'outflickzLocalCart';
 const AUTH_TOKEN_KEY = 'userAccessToken';
 const REFRESH_ENDPOINT = `${API_BASE_URL}/api/auth/refresh`;
 
-
-// Function to be called when the user clicks the Profile button
+// --- AUTH & NAVIGATION ---
 async function redirectToProfileOrLogin() {
     const token = localStorage.getItem('userAccessToken');
-    const headers = token 
-        ? { 'Authorization': `Bearer ${token}` } 
-        : {}; // If no token, headers is empty
-    
-    // NOTE: This approach requires your /api/auth/status endpoint to 
-    // accept the Authorization: Bearer header.
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
     
     try {
         const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
             method: 'GET',
-            headers: headers, // <-- NEW: Sends the Access Token
-            credentials: 'include' // Still sends the cookie if the browser allows it
+            headers: headers,
+            credentials: 'include'
         });
 
-        // If the Access Token is valid, we get 200 immediately.
         if (response.status === 200) {
-            console.log("Profile click: Auth check successful via Token/Cookie. Redirecting to userprofile.html");
             window.location.href = 'userprofile.html'; 
-            
-        } else if (response.status === 401 || response.status === 403) {
-            // The Access Token or Cookie Session is invalid/missing.
-            console.warn(`Profile click: Auth check failed (Status ${response.status}). Redirecting to useraccount.html`);
-            
-            // Note: Since this fetch is simple, it doesn't auto-refresh the token like secureUserFetch.
-            // If the 401 is due to an expired Access Token, the subsequent fetchUserData on the profile page
-            // will catch the 401 and attempt the secure cookie refresh.
-            
-            window.location.href = 'useraccount.html';
         } else {
-            console.error(`Profile click: Unexpected status ${response.status}. Redirecting to useraccount.html`);
             window.location.href = 'useraccount.html';
         }
-
     } catch (error) {
-        // Network failure
-        console.error('Authentication status check failed (Network Error):', error);
         window.location.href = 'useraccount.html';
     }
 }
 
-// 2. **CRITICAL SECURITY GATE**: Enforces redirect immediately on page load
-//    if the user is not authenticated.
-function enforceAuthGate() {
-    fetch(`${API_BASE_URL}/api/auth/status`, { 
-        method: 'GET',
-        credentials: 'include' // <-- CRITICAL FIX: Ensures the secure cookie is sent.
-    })
-    .then(response => {
-        if (response.status !== 200) {
-            // If not authenticated, redirect to login page (use replace to disable back button)
-            console.warn(`Auth gate failed (Status ${response.status}). Redirecting.`);
-            window.location.replace('useraccount.html');
-        } else {
-             console.log("Auth gate passed (Status 200). User session confirmed.");
-        }
-    })
-    .catch(error => {
-        // Treat network failure as unauthenticated/unverified
-        console.error('Initial Auth Check Failed (Network Error):', error);
-        window.location.replace('useraccount.html');
-    });
-}
-
-/**
- * CONCEPTUAL: This function should be called ONLY after a successful login API response 
- * from your server (in useraccount.html). It sets the login flag and redirects 
- * to the homepage (or profile).
- */
-function onSuccessfulLogin() {
-    // Save the login state to the browser's storage
-    localStorage.setItem('isLoggedIn', 'true');
-    console.log("Login successful! isLoggedIn set to true.");
-
-    // Redirect the user to the homepage after login
-    window.location.href = 'homepage.html'; 
-}
-
-// --- MESSAGE & MODAL DISPLAY FUNCTION ---
-/**
- * Displays a message to the user using a custom modal/alert.
- * @param {string} message - The message to display.
- */
 function displayMessage(message) {
     const modalContainer = document.getElementById('message-modal-container');
     const modalText = document.getElementById('message-modal-text');
-
     if (modalContainer && modalText) {
-        // 1. Set the message content
-        modalText.textContent = message;
-
-        // 2. Display the modal 
+        modalText.innerHTML = message;
         modalContainer.classList.remove('hidden');
-
-        // Add event listener to close on click outside
-        modalContainer.onclick = (e) => {
-            if (e.target === modalContainer) {
-                hideMessageModal();
-            }
-        };
-
-        // Auto-hide after 4 seconds
         setTimeout(hideMessageModal, 4000);
-
-    } else {
-        // Fallback to console if modal elements are missing
-        console.warn("Modal elements not found. Message:", message);
     }
 }
 
-/**
- * Hides the custom message modal.
- */
 function hideMessageModal() {
     const modalContainer = document.getElementById('message-modal-container');
-    if (modalContainer) {
-        modalContainer.classList.add('hidden');
-        modalContainer.onclick = null; // Clean up listener
-    }
+    if (modalContainer) modalContainer.classList.add('hidden');
 }
 
-// --- USER AUTHENTICATION & REDIRECTION FUNCTIONS ---
-
-
-/**
- * Handles user logout by clearing tokens and redirecting.
- * Used by secureUserFetch on non-recoverable token failure.
- */
-function handleLogout() {
-    console.warn("Token refresh failed or expired. User must re-authenticate.");
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-    // You should implement a proper redirection here, e.g., to the login page
-    // window.location.href = '/login.html'; 
-    alert("Session expired. Please log in again."); 
-}
-
-// --- SECURE USER FETCH FUNCTION (CRITICAL AUTH MECHANISM) ---
-
+// --- SECURE FETCH ---
 async function secureUserFetch(url, options = {}) {
     let token = localStorage.getItem(AUTH_TOKEN_KEY);
-    
-    // Add Authorization header if a token exists
     if (token) {
-        options.headers = {
-            ...options.headers,
-            'Authorization': `Bearer ${token}`
-        };
+        options.headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
     }
-
     let response = await fetch(url, options);
-
-    // If response is 401, attempt token refresh
     if (response.status === 401) {
-        console.log("Token expired (401). Attempting refresh...");
-        
         try {
             const refreshResponse = await fetch(REFRESH_ENDPOINT, { method: 'POST' });
-
             if (refreshResponse.ok) {
                 const data = await refreshResponse.json();
-                const newToken = data.accessToken;
-                
-                if (!newToken) {
-                    throw new Error("Refresh successful, but no new token received.");
-                }
-
-                // Store new token and retry the original request
-                localStorage.setItem(AUTH_TOKEN_KEY, newToken);
-                token = newToken; // Update token for retry
-
-                console.log("Token refreshed successfully. Retrying original request...");
-                
-                // Update Authorization header with the new token
-                options.headers['Authorization'] = `Bearer ${token}`;
-                
-                // Retry the original request
+                localStorage.setItem(AUTH_TOKEN_KEY, data.accessToken);
+                options.headers['Authorization'] = `Bearer ${data.accessToken}`;
                 response = await fetch(url, options);
-
-            } else {
-                console.error("Token refresh failed.");
-                handleLogout(); // Log out user if refresh fails
-                // Return original 401 response for the caller to handle (e.g., disable cart)
-                return response; 
             }
-        } catch (error) {
-            console.error("Error during token refresh process:", error);
-            handleLogout();
-            return response; // Return original 401 response
-        }
+        } catch (e) { console.error("Refresh failed", e); }
     }
     return response;
 }
 
-
-// ---------------------------------------------------
-// --- CART LOGIC FUNCTIONS (Core) ---
-// ---------------------------------------------------
-
-// Placeholder for `updateCartBadge`
+// --- CART LOGIC ---
 function updateCartBadge() {
     const badge = document.getElementById('cart-badge');
-    
-    if (!badge) {
-        return; 
-    } 
-    
+    if (!badge) return; 
     const count = parseInt(localStorage.getItem(CART_STORAGE_KEY) || '0');
-    
     if (count > 0) {
         badge.textContent = count;
         badge.classList.remove('hidden');
@@ -297,347 +137,94 @@ function updateCartBadge() {
     }
 }
 
-/**
- * Helper function to handle the local storage cart addition.
- * @param {Object} details - The product details to add.
- */
-function handleLocalCartFallback(details) {
+// NEW: Local Quantity Change for Guests
+function changeLocalQuantity(itemId, delta) {
     let localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
+    const itemIndex = localCart.findIndex(item => item._id === itemId);
     
-    // 🛑 CRITICAL FIX: Ensure the item is uniquely identified by all variant properties
-    // (productId, size, color, variationIndex) before adding.
-    const existingItemIndex = localCart.findIndex(item => 
-        item.productId === details.productId && 
-        item.size === details.size &&
-        item.color === details.color &&
-        item.variationIndex === details.variationIndex
-    );
-
-    if (existingItemIndex > -1) {
-        // Item already exists: increment quantity
-        localCart[existingItemIndex].quantity += details.quantity || 1;
-    } else {
-        // Item is new: set quantity and assign a truly unique ID.
-        details.quantity = details.quantity || 1;
-        
-        // 🚀 IMPROVED: Generate a short, unique, client-side ID for the local item.
-        // This is safer and less error-prone than concatenating product details.
-        // We use a simple composite key for uniqueness check above, but a true ID for manipulation.
-        details._id = details._id || `${details.productId}_${details.variationIndex}_${Date.now()}`; 
-        
-        localCart.push(details);
-    }
-
-    localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
-    // The badge should reflect the total ITEM COUNT, not the number of unique items
-    const totalItemCount = localCart.reduce((acc, item) => acc + item.quantity, 0);
-    localStorage.setItem(CART_STORAGE_KEY, totalItemCount.toString()); 
-    updateCartBadge();
-    
-    // Display info alert for local cart
-    displayMessage(`"${details.name}" added to your bag! (Sign in to save permanently)`);
-    
-    // If we are on the cart page, refresh the view
-    if (document.getElementById('cart-items-list')) {
-        // Render immediately with the local cart data, avoiding a re-fetch loop
-        renderCartItems(localCart, false); 
-        const localTotals = calculateLocalTotals(localCart); 
-        updateCartSummary(localTotals);
-        // Set checkout button state correctly for local cart
-        document.getElementById('checkout-btn').disabled = false; // Enabled but prompts login
-        document.getElementById('clear-cart-btn').disabled = false;
-    }
-}
-
-function getCollectionType(productName) {
-    if (!productName) return 'WearsCollection'; // Safe default
-    const lowerName = productName.toLowerCase();
-    
-    // Map product names to the EXACT backend model keys
-    if (lowerName.includes('tee') || lowerName.includes('tank') || lowerName.includes('wears')) {
-        return 'WearsCollection'; 
-    }
-    if (lowerName.includes('cap') || lowerName.includes('curve')) {
-        return 'CapCollection'; 
-    }
-    if (lowerName.includes('arrival') || lowerName.includes('polo')) {
-        return 'NewArrivals'; 
-    }
-    
-    // Default to WearsCollection if uncertain
-    return 'WearsCollection'; 
-}
-/**
- * Adds an item to the cart. Tries API first, falls back to local storage on 401.
- */
-async function simulateAddToCart(productDetails) {
-    // 1. Gather all item details needed for local cart fallback and API
-    const card = document.querySelector(`.collection-card[data-collection-id="${productDetails.productId}"]`) || document;
-    
-    // Check if size/color radio buttons exist on the card
-    const sizeSelectionExists = card.querySelector(`input[name="size-${productDetails.productId}"]`);
-    const colorSelectionExists = card.querySelector(`input[name="color-${productDetails.productId}"]`);
-    
-    // Find the currently selected size and color inputs
-    const selectedSizeInput = card.querySelector(`input[name="size-${productDetails.productId}"]:checked`);
-    const selectedColorInput = card.querySelector(`input[name="color-${productDetails.productId}"]:checked`);
-    
-    // --- 🛑 SIZE/COLOR VALIDATION CHECK (ENHANCED LOGIC) ---
-    
-    // If a size selection input exists but none is checked, throw error.
-    if (sizeSelectionExists && !selectedSizeInput) {
-        displayMessage('Please **select a size** before adding this item to your bag.');
-        // Re-enable/reset button state if your calling function disabled it
-        return; // Stop the function execution
-    }
-    
-    // If a color selection input exists but none is checked, throw error.
-    if (colorSelectionExists && !selectedColorInput) {
-        displayMessage('Please **select a color** before adding this item to your bag.');
-        return; // Stop the function execution
-    }
-    
-    // --- END VALIDATION CHECK ---
-
-    // The variant input that holds the index and name (Prioritize color if selected)
-    const variantInput = selectedColorInput || selectedSizeInput;
-    
-    // The size and color variables now hold the confirmed selection (or 'N/A' if no selector existed)
-    const size = selectedSizeInput ? selectedSizeInput.value : productDetails.size || 'N/A';
-    const color = selectedColorInput ? selectedColorInput.value : productDetails.color || 'N/A';
-    
-    // 🚀 FIXED LOGIC for variationIndex and variation Name (MUST come from the variantInput)
-    const rawIndex = variantInput?.dataset?.variationIndex || productDetails.variationIndex;
-    // CRITICAL FIX: Default to 1, as 0 can conflict with server logic.
-    const variationIndex = parseInt(rawIndex) || 1; 
-    
-    const variation = variantInput?.dataset?.variationName || 
-                      productDetails.variation || 
-                      (color !== 'N/A' && size !== 'N/A' ? `${color} / ${size}` : (color !== 'N/A' ? color : size !== 'N/A' ? size : `Default Variant`));
-    // -------------------------------------------------------------
-    
-    // ⭐ CRITICAL FIX: Infer the correct productType if missing/generic ⭐
-    let determinedProductType = productDetails.productType;
-    if (!determinedProductType || determinedProductType === "undefined" || determinedProductType === productDetails.name) {
-        determinedProductType = getCollectionType(productDetails.name);
-        console.warn(`Inferred missing productType for ${productDetails.name} to: ${determinedProductType}`);
-    }
-    
-    // Unified item data structure for both API (minimal fields) and Local Cart (all fields)
-    const requiredDetails = {
-        productId: productDetails.productId,
-        name: productDetails.name, 
-        size: size, // Now guaranteed to be the selected value
-        color: color || 'N/A',
-        price: productDetails.price,
-        productType: determinedProductType, // <<<< USING THE FIXED TYPE    
-        imageUrl: productDetails.imageUrl,
-        quantity: productDetails.quantity || 1,
-        variationIndex: variationIndex,
-        variation: variation 
-    };
-    
-    // Construct data for API call 
-    const itemDataForAPI = {
-        productId: requiredDetails.productId,
-        name: requiredDetails.name,
-        productType: requiredDetails.productType, // <<<< USING THE FIXED TYPE
-        price: requiredDetails.price,
-        quantity: requiredDetails.quantity,
-        size: requiredDetails.size,
-        color: requiredDetails.color,
-        imageUrl: requiredDetails.imageUrl,
-        variationIndex: requiredDetails.variationIndex,
-        variation: requiredDetails.variation 
-    };
-
-    // --- 2. Attempt Authenticated API Call ---
-    try {
-        // ... (API call logic remains the same)
-        const response = await fetch('/api/users/cart', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(itemDataForAPI),
-            credentials: 'include'
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-            // Success: Item added to permanent cart
-            const totalItemCount = data.items.reduce((acc, item) => acc + item.quantity, 0);
-            localStorage.setItem(CART_STORAGE_KEY, totalItemCount.toString());
-            localStorage.setItem('outflickzAuthStatus', 'loggedIn'); // Set status flag
+    if (itemIndex > -1) {
+        let newQty = localCart[itemIndex].quantity + delta;
+        if (newQty < 1) {
+            handleLocalItemRemoval(itemId);
+        } else if (newQty <= 5) {
+            localCart[itemIndex].quantity = newQty;
+            localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
+            const total = localCart.reduce((acc, item) => acc + item.quantity, 0);
+            localStorage.setItem(CART_STORAGE_KEY, total.toString());
             updateCartBadge();
-            displayMessage('Item added to your permanent shopping bag!');
-
-            if (document.getElementById('cart-items-list')) {
-                fetchAndRenderCart(); 
-            }
-
-        } else if (response.status === 401 || response.status === 403) {
-            // Unauthorized (Cookie failed/expired) -> FALLBACK TO LOCAL CART
-            console.log("401/403 received (Unauthenticated). Falling back to local cart.");
-            localStorage.setItem('outflickzAuthStatus', 'loggedOut'); // Clear status flag
-            handleLocalCartFallback(requiredDetails);
-
+            renderCartItems(localCart, false);
+            updateCartSummary(calculateLocalTotals(localCart));
         } else {
-            // Other API Errors
-            displayMessage(data.message || 'Failed to add item. Please try again.');
+            displayMessage("Maximum quantity is 5.");
         }
-        
-    } catch (error) {
-        // Network or Fetch Error -> FALLBACK TO LOCAL CART
-        console.error('Error in addToCart API (Network or Fetch Error):', error);
-        localStorage.setItem('outflickzAuthStatus', 'loggedOut'); // Clear status flag
-        handleLocalCartFallback(requiredDetails);
     }
 }
 
-/**
- * Renders the entire cart contents and updates the summary.
- * Switches between API fetch (authenticated) and local storage (unauthenticated on 401/error).
- * This now uses secureUserFetch for persistent authentication.
- */
 async function fetchAndRenderCart() {
     const cartList = document.getElementById('cart-items-list');
     const checkoutBtn = document.getElementById('checkout-btn');
     const clearCartBtn = document.getElementById('clear-cart-btn');
     
-    // Show loading state while fetching API data
-    cartList.innerHTML = '<div class="text-center py-10 text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i> Loading your shopping bag...</div>';
-    checkoutBtn.disabled = true;
-    checkoutBtn.classList.remove('bg-ash-red', 'hover:bg-red-700');
-    checkoutBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
-    clearCartBtn.disabled = true;
-
-    // Helper to render local cart when API fails authentication
     const renderLocalCart = () => {
         const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
         if (localCart.length > 0) {
-            renderCartItems(localCart, false); // Pass false for API flag
-            const localTotals = calculateLocalTotals(localCart); 
-            updateCartSummary(localTotals);
-            
+            renderCartItems(localCart, false);
+            updateCartSummary(calculateLocalTotals(localCart));
             clearCartBtn.disabled = false;
-            
-            // Enable the button style for local cart checkout prompt
             checkoutBtn.disabled = false; 
-            checkoutBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
-            checkoutBtn.classList.add('bg-ash-red', 'hover:bg-red-700');
-
-            checkoutBtn.onclick = () => {
-                displayMessage('Please sign in or create an account to save your cart and proceed to checkout.');
-                redirectToProfileOrLogin();
-            };
+            checkoutBtn.classList.replace('bg-gray-400', 'bg-ash-red');
+            checkoutBtn.classList.remove('cursor-not-allowed');
+            checkoutBtn.onclick = () => window.location.href = 'checkout.html';
         } else {
-            cartList.innerHTML = '<div class="text-center py-10 text-gray-500">Your shopping bag is empty. Please <a href="useraccount.html" class="text-ash-red hover:underline font-semibold">log in</a> to view saved items or <a href="homepage.html" class="text-ash-red hover:underline font-semibold">Start shopping</a>.</div>';
+            cartList.innerHTML = '<div class="text-center py-10 text-gray-500">Your bag is empty. <a href="homepage.html" class="text-ash-red font-semibold">Start shopping</a>.</div>';
             updateCartSummary({ items: [], subtotal: 0, shipping: 0, tax: 0, estimatedTotal: 0 });
             clearCartBtn.disabled = true;
         }
     };
 
     try {
-        // 🔑 FIX: Use secureUserFetch to handle Authorization header and automatic refresh
-        const response = await secureUserFetch('/api/users/cart', {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            credentials: 'include' // Still sends the secure Refresh Token cookie
-        });
-
-        if (response.status === 401 || response.status === 403) {
-            // Unauthorized. This means the Access Token failed AND the Refresh Token failed.
-            console.warn("Session expired (401/403) after refresh attempt. Falling back to local cart.");
-            localStorage.setItem('outflickzAuthStatus', 'loggedOut');
+        const response = await secureUserFetch('/api/users/cart', { method: 'GET' });
+        if (response.ok) {
+            const cartData = await response.json();
+            renderCartItems(cartData.items, true);
+            updateCartSummary(cartData);
+            checkoutBtn.onclick = () => window.location.href = 'checkout.html';
+        } else {
             renderLocalCart();
-            return;
         }
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const cartData = await response.json();
-        
-        // Render authenticated cart (passing true for API flag)
-        renderCartItems(cartData.items, true); 
-        updateCartSummary(cartData);
-        
-        // Update Local Storage badge count and status flag
-        const totalItemCount = cartData.items.reduce((acc, item) => acc + item.quantity, 0);
-        localStorage.setItem(CART_STORAGE_KEY, totalItemCount.toString());
-        localStorage.setItem('outflickzAuthStatus', 'loggedIn');
-        updateCartBadge();
-
-        // Enable actual checkout redirect
-        checkoutBtn.onclick = () => window.location.href = 'checkout.html'; 
-        
     } catch (error) {
-        console.error('Error fetching API cart data. Trying local cart:', error);
-        // Network error. Fallback to local cart display.
-        localStorage.setItem('outflickzAuthStatus', 'loggedOut');
         renderLocalCart();
     }
 }
 
-/**
- * Renders the list of cart items dynamically.
- * @param {Array<Object>} items - The array of cart items.
- * @param {boolean} isApiCart - True if data is from the API (i.e., user is logged in).
- */
 function renderCartItems(items, isApiCart) {
     const cartList = document.getElementById('cart-items-list');
     const currencySymbol = '₦';
 
-    if (items.length === 0) {
-        cartList.innerHTML = '<div class="text-center py-10 text-gray-500">Your shopping bag is empty. <a href="homepage.html" class="text-ash-red hover:underline font-semibold">Start shopping now!</a></div>';
-        return;
-    }
-    
-    // Remove the loading indicator once data is available
-    const loading = document.getElementById('loading-indicator');
-    if (loading) loading.remove();
-
     cartList.innerHTML = items.map(item => `
-        <div id="cart-item-${item._id}" class="cart-item-card flex py-4 sm:py-6 first:pt-0 last:pb-0 border-b border-gray-100">
+        <div id="cart-item-${item._id}" class="cart-item-card flex py-4 sm:py-6 border-b border-gray-100">
             <div class="flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 rounded-lg overflow-hidden border border-gray-200">
                 <img src="${item.imageUrl}" alt="${item.name}" class="w-full h-full object-cover object-center">
             </div>
-
             <div class="ml-4 flex flex-1 flex-col justify-between">
                 <div class="relative pr-9 sm:grid sm:grid-cols-2 sm:gap-x-6 sm:pr-0">
                     <div>
-                        <h3 class="text-base sm:text-lg">
-                            <a href="#" class="font-semibold text-gray-900 hover:text-ash-red">${item.name}</a>
-                        </h3>
-                        ${item.productType ? `<p class="mt-1 text-xs sm:text-sm text-red-500 font-medium">Type: ${item.productType}</p>` : ''}
-                        
-                        ${item.color && item.color !== 'N/A' ? `<p class="mt-1 text-xs sm:text-sm text-gray-500">Color: ${item.color}</p>` : ''}
-                        ${item.size && item.size !== 'N/A' ? `<p class="text-xs sm:text-sm text-gray-500">Size: ${item.size}</p>` : ''}
+                        <h3 class="text-base sm:text-lg font-semibold text-gray-900">${item.name}</h3>
+                        <p class="mt-1 text-xs text-red-500 font-medium">${item.productType || ''}</p>
+                        <p class="mt-1 text-xs text-gray-500">${item.color || ''} ${item.size ? '| ' + item.size : ''}</p>
                     </div>
-
-                    <p class="mt-2 text-base font-bold text-gray-900 sm:mt-0 text-right sm:text-left">
-                        ${currencySymbol}${(item.price * item.quantity).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    <p class="mt-2 text-base font-bold text-gray-900 text-right sm:text-left">
+                        ${currencySymbol}${(item.price * item.quantity).toLocaleString()}
                     </p>
                 </div>
-                
-                <div class="flex items-center justify-between mt-3 sm:mt-4">
-                    <div class="flex items-center border border-gray-300 rounded-sm w-fit ${isApiCart ? '' : 'opacity-50 cursor-not-allowed'}" ${isApiCart ? '' : 'title="Log in to change quantity"'}>
-                        <button onclick="${isApiCart ? `changeCartQuantity('${item._id}', -1)` : `displayMessage('Please log in to change the quantity of this item.')`}" aria-label="Decrease quantity" class="text-sm text-gray-700 hover:bg-gray-100 transition flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-l-sm font-semibold" ${isApiCart ? '' : 'disabled'}>
-                            &minus;
-                        </button>
-                        <input type="number" id="cart-quantity-${item._id}" value="${item.quantity}" min="1" max="5" aria-label="Quantity" class="w-8 h-6 sm:w-10 sm:h-8 text-center text-sm border-x border-gray-300 text-color-black bg-white p-0 focus:border-ash-red focus:ring-1 focus:ring-ash-red" onchange="${isApiCart ? `updateQuantityInput('${item._id}', this.value)` : `displayMessage('Please log in to change the quantity of this item.')`}" ${isApiCart ? '' : 'disabled'} />
-                        <button onclick="${isApiCart ? `changeCartQuantity('${item._id}', 1)` : `displayMessage('Please log in to change the quantity of this item.')`}" aria-label="Increase quantity" class="text-sm text-gray-700 hover:bg-gray-100 transition flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-r-sm font-semibold" ${isApiCart ? '' : 'disabled'}>
-                            &plus;
-                        </button>
+                <div class="flex items-center justify-between mt-3">
+                    <div class="flex items-center border border-gray-300 rounded-sm">
+                        <button onclick="${isApiCart ? `changeCartQuantity('${item._id}', -1)` : `changeLocalQuantity('${item._id}', -1)`}" class="w-8 h-8 font-bold">-</button>
+                        <span class="w-8 text-center text-sm">${item.quantity}</span>
+                        <button onclick="${isApiCart ? `changeCartQuantity('${item._id}', 1)` : `changeLocalQuantity('${item._id}', 1)`}" class="w-8 h-8 font-bold">+</button>
                     </div>
-                    
-                <button onclick="${isApiCart ? `removeItemFromCart('${item._id}')` : `handleLocalItemRemoval('${item._id}')`}" type="button" class="ml-4 text-xs sm:text-sm font-medium text-gray-700 hover:text-ash-red transition">
-                            <i class="fas fa-trash-alt mr-1"></i> Remove
+                    <button onclick="${isApiCart ? `removeItemFromCart('${item._id}')` : `handleLocalItemRemoval('${item._id}')`}" class="text-xs text-gray-500 hover:text-ash-red">
+                        <i class="fas fa-trash-alt mr-1"></i> Remove
                     </button>
                 </div>
             </div>
@@ -645,312 +232,88 @@ function renderCartItems(items, isApiCart) {
     `).join('');
 }
 
+function updateCartSummary(cartData) {
+    const currency = '₦';
+    const subtotal = cartData.subtotal || 0;
+    document.getElementById('subtotal').textContent = `${currency}${subtotal.toLocaleString()}`;
+    document.getElementById('estimated-total').textContent = `${currency}${(subtotal + (cartData.shipping || 0)).toLocaleString()}`;
+    
+    const hasItems = (cartData.items && cartData.items.length > 0);
+    const btn = document.getElementById('checkout-btn');
+    btn.disabled = !hasItems;
+    if(hasItems) {
+        btn.classList.replace('bg-gray-400', 'bg-ash-red');
+        btn.classList.remove('cursor-not-allowed');
+    } else {
+        btn.classList.replace('bg-ash-red', 'bg-gray-400');
+        btn.classList.add('cursor-not-allowed');
+    }
+}
 
-/**
- * Handles removal of an item from the local storage cart.
- * @param {string} itemId - The unique _id of the item to remove (e.g., from the DOM element).
- */
+function calculateLocalTotals(localCart) {
+    let subtotal = localCart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+    return { items: localCart, subtotal: subtotal, shipping: 0, tax: 0, estimatedTotal: subtotal };
+}
+
 function handleLocalItemRemoval(itemId) {
     let localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-
-    // 🚀 IMPROVED: Filter the cart directly using the unique itemId
-    const initialLength = localCart.length;
     localCart = localCart.filter(item => item._id !== itemId);
-
-    if (localCart.length < initialLength) {
-        localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
-        // Update total item count
-        const totalItemCount = localCart.reduce((acc, item) => acc + item.quantity, 0);
-        localStorage.setItem(CART_STORAGE_KEY, totalItemCount.toString());
-        updateCartBadge();
-        
-        // Re-render the local cart view
-        renderCartItems(localCart, false); 
-        updateCartSummary(calculateLocalTotals(localCart));
-        
-        displayMessage('Item removed from local cart.');
-    } else {
-        displayMessage('Error: Item not found in local cart.');
-    }
+    localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
+    localStorage.setItem(CART_STORAGE_KEY, localCart.reduce((acc, i) => acc + i.quantity, 0).toString());
+    updateCartBadge();
+    fetchAndRenderCart();
 }
 
-
-/**
- * Calculates the subtotal, tax, and estimated total for the local shopping cart data.
- */
-function calculateLocalTotals(localCart) {
-    let subtotal = 0;
-    
-    localCart.forEach(item => {
-        const price = parseFloat(item.price) || 0;
-        const quantity = parseInt(item.quantity) || 0;
-        subtotal += price * quantity;
-    });
-
-    const SHIPPING_RATE = 0.00; 
-    const TAX_RATE = 0.00; 
-    
-    let tax = subtotal * TAX_RATE;
-    let shipping = subtotal > 0 ? SHIPPING_RATE : 0;
-    let estimatedTotal = subtotal + shipping + tax;
-
-    return {
-        items: localCart, 
-        subtotal: subtotal,
-        shipping: shipping,
-        tax: tax,
-        estimatedTotal: estimatedTotal
-    };
-}
-
-function updateCartSummary(cartData) {
-    const subtotalEl = document.getElementById('subtotal');
-    const shippingCostEl = document.getElementById('shipping-cost');
-    const estimatedTotalEl = document.getElementById('estimated-total');
-    const checkoutBtn = document.getElementById('checkout-btn');
-    const clearCartBtn = document.getElementById('clear-cart-btn');
-    const taxEstimateEl = document.getElementById('tax-estimate');
-
-    const hasItems = cartData.items.length > 0;
-    const currencySymbol = '₦';
-    
-    const subtotal = cartData.subtotal || 0; 
-    const shipping = cartData.shipping || 0;
-    const tax = cartData.tax || 0; 
-    const total = cartData.estimatedTotal || subtotal + shipping + tax; 
-
-    // Update display
-    subtotalEl.textContent = `${currencySymbol}${subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
-    shippingCostEl.textContent = `${currencySymbol}${shipping.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
-    estimatedTotalEl.textContent = `${currencySymbol}${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
-    taxEstimateEl.textContent = `${currencySymbol}${tax.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
-
-    // Update button states
-    if (hasItems) {
-        checkoutBtn.disabled = false;
-        checkoutBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
-        checkoutBtn.classList.add('bg-ash-red', 'hover:bg-red-700');
-        clearCartBtn.disabled = false;
-    } else {
-        checkoutBtn.disabled = true;
-        checkoutBtn.classList.remove('bg-ash-red', 'hover:bg-red-700');
-        checkoutBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
-        clearCartBtn.disabled = true;
-    }
-}
-/**
- * Handles quantity changes for a cart item via API (plus/minus buttons).
- */
 async function changeCartQuantity(itemId, delta) {
     const input = document.getElementById(`cart-quantity-${itemId}`);
-    let currentValue = parseInt(input.value) || 1;
-    let newQuantity = currentValue + delta;
-    
-    // --- 🔑 FIX: Read stock limit from data attribute ---
-    const maxStock = parseInt(input.getAttribute('data-max-stock')) || Infinity;
-    const finalLimit = Math.min(5, maxStock); // Use the lesser of 5 or available stock
-
-    if (newQuantity < 1) {
-        removeItemFromCart(itemId);
-        return;
-    }
-    
-    // Check against the more restrictive limit (5 or available stock)
-    if (newQuantity > finalLimit) {
-        newQuantity = finalLimit;
-        // Optionally display a message here: "Maximum quantity reached (5 or stock limit)."
-    }
-
-    // Optimistically update the UI
-    input.value = newQuantity; 
-    
-    // Call the API
-    updateItemQuantityAPI(itemId, newQuantity);
+    let current = parseInt(input?.value || 1);
+    updateItemQuantityAPI(itemId, current + delta);
 }
 
-/**
- * Handles direct quantity input changes.
- */
-function updateQuantityInput(itemId, value) {
-    let newQuantity = parseInt(value);
-    const input = document.getElementById(`cart-quantity-${itemId}`);
-    
-    // --- 🔑 FIX: Read stock limit from data attribute ---
-    const maxStock = parseInt(input.getAttribute('data-max-stock')) || Infinity;
-    const finalLimit = Math.min(5, maxStock); // Use the lesser of 5 or available stock
-
-    if (isNaN(newQuantity) || newQuantity < 1) {
-        newQuantity = 1; 
-    } else if (newQuantity > finalLimit) { // Use the calculated limit
-        newQuantity = finalLimit;
-    }
-    
-    // Set the sanitized value back into the input field
-    input.value = newQuantity; 
-    
-    // Call the API function
-    updateItemQuantityAPI(itemId, newQuantity);
-}
-
-/**
- * Direct API call for quantity update
- */
 async function updateItemQuantityAPI(itemId, newQuantity) {
-    try {
-        // 🔑 FIX: Use secureUserFetch for authenticated PATCH request, handling headers and refresh.
-        const response = await secureUserFetch(`/api/users/cart/${itemId}`, {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ quantity: newQuantity }),
-            credentials: 'include' 
-        });
-
-        if (!response.ok) {
-            // After secureUserFetch, a 401 means non-recoverable token failure.
-            if (response.status === 401) {
-                displayMessage('Session expired. Please log in again to update cart.');
-                redirectToProfileOrLogin();
-                return;
-            }
-            throw new Error('Failed to update quantity on server.');
-        }
-
-        fetchAndRenderCart(); 
-
-    } catch (error) {
-        console.error(`Error updating item ${itemId} quantity:`, error);
-        displayMessage('Could not update cart quantity. Please try again.');
-    }
+    if (newQuantity < 1) return removeItemFromCart(itemId);
+    await secureUserFetch(`/api/users/cart/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantity: newQuantity })
+    });
+    fetchAndRenderCart();
 }
-/**
- * Handles item removal via API.
- */
+
 async function removeItemFromCart(itemId) {
-    
-    const itemElement = document.getElementById(`cart-item-${itemId}`);
-    if (itemElement) {
-        itemElement.style.opacity = '0.5'; // Visual feedback for removal
-    }
-
-    try {
-        // 🔑 FIX: Use secureUserFetch for authenticated DELETE request, handling headers and refresh.
-        const response = await secureUserFetch(`/api/users/cart/${itemId}`, {
-            method: 'DELETE',
-            headers: {
-                 // Include content-type header so secureUserFetch knows to use headers
-                'Content-Type': 'application/json' 
-            },
-            credentials: 'include' 
-        });
-
-        if (!response.ok) {
-            if (itemElement) itemElement.style.opacity = '1'; // Revert if failed
-            // After secureUserFetch, a 401 means non-recoverable token failure.
-            if (response.status === 401) {
-                displayMessage('Session expired. Please log in again to remove item.');
-                redirectToProfileOrLogin();
-                return;
-            }
-            throw new Error('Failed to remove item from server.');
-        }
-
-        console.log(`Item ${itemId} removed from cart.`);
-        fetchAndRenderCart();
-        displayMessage('Item removed from your cart.');
-        
-    } catch (error) {
-        console.error(`Error removing item ${itemId}:`, error);
-        displayMessage('Could not remove item from cart. Please try again.');
-    }
+    await secureUserFetch(`/api/users/cart/${itemId}`, { method: 'DELETE' });
+    fetchAndRenderCart();
 }
-/**
- * Clears the cart by sending a DELETE request to clear all items (API or Local).
- */
+
 async function clearCart() {
-    
-    // --- Local cart clear logic (Helper function to reuse on failure) ---
-    const handleLocalClear = () => {
-        // 🚀 FIX: Ensure the local array is cleared/empty
-        localStorage.setItem(LOCAL_CART_KEY, '[]'); 
-        localStorage.setItem(CART_STORAGE_KEY, '0');
-        updateCartBadge();
-        fetchAndRenderCart();
-        displayMessage('Local shopping bag cleared successfully.');
-        console.log('[ClearCart] Logged Out/Fallback: LOCAL_CART_KEY array reset to [].');
-    };
-
-    try {
-        // 🔑 FIX: Use secureUserFetch for authenticated DELETE request, handling headers and refresh.
-        const response = await secureUserFetch('/api/users/cart', {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json' // Set headers to ensure secureFetch adds auth
-            },
-            credentials: 'include' 
-        });
-
-        if (response.status === 401) {
-            // User is definitely not logged in or session expired non-recoverably.
-            console.log('[ClearCart] API 401: Non-recoverable session failure. Clearing local cart.');
-            handleLocalClear();
-            return;
-            
-        } else if (!response.ok) {
-            // Other API errors (400, 500 etc.)
-            throw new Error('Failed to clear cart on server.');
-        } 
-        
-        // --- API cart clear logic SUCCESS (HTTP 200) ---
-        
-        // CRITICAL FIX: After successful server clear, clear the local item array!
-        localStorage.removeItem(LOCAL_CART_KEY); 
-        
-        // Update Local Storage count and badge
-        localStorage.setItem(CART_STORAGE_KEY, '0');
-        updateCartBadge();
-        
-        fetchAndRenderCart();
-        displayMessage('All items removed from your permanent cart. Cart cleared.');
-        console.log('[ClearCart] Logged In: API cleared, local LOCAL_CART_KEY removed.');
-        
-    } catch (error) {
-        console.error('Error clearing API cart (Network issue):', error);
-        // Network error. Fallback to Local cart clear logic.
-        handleLocalClear();
+    if (!confirm("Are you sure you want to clear your bag?")) return;
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (token) {
+        await secureUserFetch('/api/users/cart', { method: 'DELETE' });
     }
+    localStorage.setItem(LOCAL_CART_KEY, '[]');
+    localStorage.setItem(CART_STORAGE_KEY, '0');
+    updateCartBadge();
+    fetchAndRenderCart();
 }
 
-/**
- * Toggles the mobile navigation menu's visibility.
- */
 function toggleMenu() {
     const menu = document.getElementById('mobile-menu');
-    const isExpanded = menu.classList.contains('hidden');
-    menu.classList.toggle('hidden', !isExpanded);
-    document.querySelector('[aria-controls="mobile-menu"]').setAttribute('aria-expanded', isExpanded);
+    menu.classList.toggle('hidden');
 }
 
-// --- Main Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
     updateCartBadge();
-    fetchAndRenderCart(); // IMPORTANT: Load real cart data on page load
-
-    // Attach the hideMessageModal function to the close button
-    const closeButton = document.getElementById('message-modal-close-btn');
-    if (closeButton) {
-        closeButton.addEventListener('click', hideMessageModal);
-    }
+    fetchAndRenderCart();
+    document.getElementById('message-modal-close-btn')?.addEventListener('click', hideMessageModal);
 });
 </script>
 </head>
 <body class="bg-gray-50 text-color-black min-h-screen">
-
-    <div id="message-modal-container" class="fixed inset-0 z-[100] hidden flex justify-center items-start pt-10" role="alert" aria-live="assertive">
+    <div id="message-modal-container" class="fixed inset-0 z-[100] hidden flex justify-center items-start pt-10">
         <div class="modal-content bg-ash-dark text-white p-4 rounded-lg shadow-2xl max-w-sm w-full relative">
             <p id="message-modal-text" class="text-sm font-medium"></p>
-            <button id="message-modal-close-btn" class="absolute top-1 right-1 text-gray-400 hover:text-white transition" aria-label="Close message">
+            <button id="message-modal-close-btn" class="absolute top-1 right-1 text-gray-400 hover:text-white">
                 <i class="fas fa-times"></i>
             </button>
         </div>
@@ -958,202 +321,62 @@ document.addEventListener('DOMContentLoaded', () => {
     
     <header class="bg-color-white sticky top-0 z-50 shadow-md border-b border-gray-100">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
-            <a href="homepage.html" class="flex items-center" aria-label="Outflickz Home">
-                <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-10 sm:h-12 lg:h-10">
-            </a>   
-            <nav class="hidden md:flex flex-grow justify-center space-x-6 lg:space-x-10 text-sm" aria-label="Main Navigation">
-                <a href="homepage.html" class="font-medium text-color-black hover:text-gray-600 transition">Homepage</a>
-                <a href="cart.html" class="font-bold text-ash-red transition flex items-center border-b-2 border-ash-red">Cart</a>
-                <a href="wearscollection.html" class="font-medium text-color-black hover:text-gray-600 transition">Wears Collection</a>
-                <a href="newarrivals.html" class="font-medium text-color-black hover:text-gray-600 transition">New Arrivals</a>
-                <a href="capcollection.html" class="font-medium text-color-black hover:text-gray-600 transition flex items-center">Cap Collections</a>
-                <a href="preorder.html" class="font-medium text-color-black hover:text-gray-600 transition">Pre Order</a>
+            <a href="homepage.html"><img src="https://i.imgur.com/PZLMws6.jpeg" alt="Logo" class="h-10 sm:h-12"></a> 
+            <nav class="hidden md:flex space-x-6 text-sm">
+                <a href="homepage.html" class="hover:text-ash-red">Homepage</a>
+                <a href="cart.html" class="font-bold text-ash-red border-b-2 border-ash-red">Cart</a>
+                <a href="wearscollection.html" class="hover:text-ash-red">Wears</a>
+                <a href="newarrivals.html" class="hover:text-ash-red">New Arrivals</a>
+                <a href="capcollection.html" class="hover:text-ash-red">Caps</a>
             </nav>
-
-            <div class="flex items-center space-x-2 sm:space-x-4">
-                <button id="profile-icon" 
-                class="p-1 sm:p-2 text-gray-700 hover:text-ash-dark transition rounded-full hidden md:block" 
-                aria-label="User Account"
-                onclick="redirectToProfileOrLogin()">
-                    <i class="fas fa-user w-4 h-4 sm:w-5 sm:h-5"></i>
-                </button>
-                <a href="cart.html" class="relative p-1 sm:p-2 text-ash-dark transition rounded-full" aria-label="Shopping Bag">
-                    <i class="fas fa-shopping-bag w-4 h-4 sm:w-5 sm:h-5"></i>
-                    <span id="cart-badge" class="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-ash-red rounded-full hidden">
-                        0
-                    </span>
+            <div class="flex items-center space-x-4">
+                <button onclick="redirectToProfileOrLogin()"><i class="fas fa-user"></i></button>
+                <a href="cart.html" class="relative">
+                    <i class="fas fa-shopping-bag"></i>
+                    <span id="cart-badge" class="absolute -top-2 -right-2 bg-ash-red text-white text-[10px] px-1.5 rounded-full hidden">0</span>
                 </a>
-                <button class="md:hidden p-1 sm:p-2 text-gray-700 hover:text-ash-dark transition rounded-full" onclick="toggleMenu()" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open main menu">
-                    <i class="fas fa-bars w-5 h-5 sm:w-6 sm:h-6"></i>
-                </button>
+                <button class="md:hidden" onclick="toggleMenu()"><i class="fas fa-bars"></i></button>
             </div>
         </div>
     </header>
 
-    <div id="mobile-menu" class="hidden md:hidden bg-color-white border-b border-gray-100 absolute w-full z-40 shadow-lg">
-        <div class="px-2 pt-2 pb-3 space-y-1 text-sm">
-            <a href="homepage.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">Homepage</a>
-            <a href="wearscollection.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">Wears Collection</a>
-            <a href="preorder.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">Pre Order</a>
-            <a href="newarrivals.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">New Arrivals</a>
-            <a href="capcollection.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">Cap Collection</a>
-             <a href="cart.html" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">Cart</a>
-            <a href="javascript:void(0);" onclick="redirectToProfileOrLogin()" class="block px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 rounded-md">Account</a>
-        </div>
+    <div id="mobile-menu" class="hidden md:hidden bg-white border-b absolute w-full z-40 p-4 space-y-2">
+        <a href="homepage.html" class="block">Homepage</a>
+        <a href="wearscollection.html" class="block">Wears</a>
+        <a href="cart.html" class="block font-bold text-ash-red">Cart</a>
+        <a onclick="redirectToProfileOrLogin()" class="block cursor-pointer">Account</a>
     </div>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
-        <h1 class="text-3xl sm:text-4xl font-extrabold text-ash-dark mb-8 uppercase tracking-wide">
-            🛒 Your Shopping Bag
-        </h1>
-
+    <main class="max-w-7xl mx-auto px-4 py-10">
+        <h1 class="text-3xl font-extrabold text-ash-dark mb-8 uppercase">🛒 Your Shopping Bag</h1>
         <div class="lg:grid lg:grid-cols-3 lg:gap-10">
-            
             <div class="lg:col-span-2">
-                
-                <div id="cart-items-list" class="bg-white p-4 sm:p-6 rounded-lg shadow-md border border-gray-100 divide-y divide-gray-100">
-                    
-                    <div id="loading-indicator" class="text-center py-12 text-gray-500 text-lg font-medium">
-                        <i class="fas fa-spinner fa-spin mr-2"></i> Loading your items...
-                    </div>
-                    </div>
-                
-                <div class="mt-6 flex flex-col sm:flex-row justify-between items-center bg-white p-4 sm:p-6 rounded-lg shadow-md border border-gray-100 space-y-3 sm:space-y-0">
-                    <button id="clear-cart-btn" onclick="clearCart()" class="text-xs sm:text-sm font-semibold text-ash-red hover:text-red-700 transition w-full sm:w-auto" disabled>
-                        <i class="fas fa-trash-alt mr-1"></i> Clear Shopping Bag
-                    </button>
-                    <p class="text-sm sm:text-base text-gray-700">Continue Shopping at <a href="homepage.html" class="font-semibold text-ash-dark hover:text-ash-red">Outflickz</a></p>
+                <div id="cart-items-list" class="bg-white p-6 rounded-lg shadow-md divide-y divide-gray-100">
+                    <div id="loading-indicator" class="text-center py-12"><i class="fas fa-spinner fa-spin mr-2"></i> Loading...</div>
+                </div>
+                <div class="mt-6 flex justify-between items-center bg-white p-6 rounded-lg shadow-md">
+                    <button id="clear-cart-btn" onclick="clearCart()" class="text-ash-red font-semibold uppercase text-sm">Clear Bag</button>
+                    <a href="homepage.html" class="text-sm font-semibold">Continue Shopping</a>
                 </div>
             </div>
-
-            <div class="mt-8 lg:mt-0 lg:col-span-1">
-                <div class="bg-color-white p-6 rounded-lg shadow-xl border border-gray-100 lg:sticky lg:top-20">
-                    <h2 class="text-xl font-bold text-ash-dark mb-6">Order Summary</h2>
-
-                    <div class="space-y-4">
-                        <div class="flex justify-between text-sm text-gray-700">
-                            <span>Subtotal</span>
-                            <span id="subtotal" class="font-semibold">₦0.00</span>
-                        </div>
-                        <div class="flex justify-between text-sm text-gray-700">
-                            <span>Shipping Estimate</span>
-                            <span id="shipping-cost" class="font-semibold">₦0.00</span>
-                        </div>
-                        <div class="flex justify-between text-sm text-gray-700 border-t border-gray-200 pt-4">
-                            <span>Tax Estimate (0%)</span>
-                            <span id="tax-estimate" class="font-semibold">₦0.00</span>
-                        </div>
+            <div class="lg:col-span-1">
+                <div class="bg-white p-6 rounded-lg shadow-xl border border-gray-100 sticky top-20">
+                    <h2 class="text-xl font-bold mb-6">Order Summary</h2>
+                    <div class="space-y-4 text-sm">
+                        <div class="flex justify-between"><span>Subtotal</span><span id="subtotal">₦0.00</span></div>
+                        <div class="flex justify-between"><span>Shipping</span><span id="shipping-cost">₦0.00</span></div>
+                        <div class="flex justify-between border-t pt-4 font-bold"><span>Total</span><span id="estimated-total" class="text-ash-red">₦0.00</span></div>
                     </div>
-
-                    <div class="border-t border-gray-300 pt-4 mt-6 flex justify-between items-center">
-                        <p class="text-lg font-bold text-ash-dark">Estimated Total</p>
-                        <p id="estimated-total" class="text-xl font-extrabold text-ash-red">₦0.00</p>
-                    </div>
-
-                    <p class="text-xs text-gray-500 mt-2 text-right">Taxes and shipping calculated at checkout.</p>
-
-                    <button id="checkout-btn" class="mt-6 w-full bg-gray-400 text-white transition duration-300 font-semibold py-3 rounded-sm shadow-md uppercase tracking-widest text-sm cursor-not-allowed" onclick="alert('Proceeding to checkout...');" disabled>
+                    <button id="checkout-btn" class="mt-6 w-full bg-gray-400 text-white font-semibold py-3 rounded-sm shadow-md uppercase tracking-widest text-sm cursor-not-allowed" disabled>
                         Proceed to Checkout
                     </button>
-                    
-                    <div class="mt-6 border-t border-gray-100 pt-6">
-                        <h3 class="text-sm font-semibold text-ash-dark mb-3">Estimated Delivery</h3>
-                        <div class="flex items-center text-sm text-gray-700">
-                            <i class="fas fa-truck text-lg text-green-600 mr-3"></i>
-                            <p>Standard Shipping: **2 - 3 business days**</p>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
-
     </main>
-    
-     <footer class="bg-black text-gray-300 py-6 sm:py-14 border-t border-gray-800 mt-12">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-8">
-                
-                <div class="col-span-2 lg:col-span-1">
-                    <a href="homepage.html" class="flex items-center mb-3 sm:mb-4"> 
-                        <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-8 filter grayscale invert">
-                    </a>
-                    <p class="text-xs sm:text-sm text-gray-500"> 
-                        The home of exclusive street wear and limited edition drops. Elevate your style.
-                    </p>
-                    <div class="flex space-x-4 mt-4 text-gray-400">
-                        <a href="https://www.instagram.com/outflickz01?igsh=Yzl3d3BjaGt5djll" aria-label="Instagram" class="hover:text-ash-red transition"><i class="fab fa-instagram"></i></a>
-                        <a href="https://www.tiktok.com/@outflickz?_r=1&_t=ZS-92AInaYzuTt" aria-label="TikTok" class="hover:text-ash-red transition"><i class="fab fa-tiktok"></i></a>
-                        <a href="https://www.facebook.com/profile.php?id=61584421929170" aria-label="Facebook" class="hover:text-ash-red transition"><i class="fab fa-facebook-f"></i></a>
-                    </div>
-                </div>
 
-                <div class="col-span-1">
-                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Quick Links</h3> 
-                    <ul class="space-y-1.5 sm:space-y-2 text-xs sm:text-sm"> 
-                        <li><a href="wearscollection.html" class="text-gray-400 hover:text-ash-red transition">Wears</a></li>
-                        <li><a href="newarrivals.html" class="text-gray-400 hover:text-ash-red transition">New Arrivals</a></li>
-                        <li><a href="capcollection.html" class="text-gray-400 hover:text-ash-red transition">Caps</a></li>
-                        <li><a href="preorder.html" class="text-gray-400 hover:text-ash-red transition">Pre-Order</a></li>
-                    </ul>
-                </div>
-
-                <div class="col-span-1">
-                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Customer Care</h3> 
-                    <ul class="space-y-1.5 sm:space-y-2 text-xs sm:text-sm"> 
-                        <li><a href="contact.html" class="text-gray-400 hover:text-ash-red transition">Contact Us</a></li>
-                        <li><a href="shipping_returns.html" class="text-gray-400 hover:text-ash-red transition">Shipping & Returns</a></li>
-                        <li><a href="faq.html" class="text-gray-400 hover:text-ash-red transition">FAQ</a></li>
-                        <li><a href="size_guide.html" class="text-gray-400 hover:text-ash-red transition">Size Guide</a></li>
-                    </ul>
-                </div>
-
-                <div class="col-span-2 md:col-span-1">
-                    <h3 class="text-sm font-semibold uppercase tracking-wider text-white mb-3 sm:mb-4">Get In Touch</h3> 
-                    <address class="text-xs sm:text-sm not-italic space-y-2"> 
-                        <p class="text-gray-400">
-                            <i class="fas fa-map-marker-alt mr-2 text-ash-red"></i> Lagos , Nigeria
-                        </p>
-                        <p class="text-gray-400">
-                            <i class="fas fa-envelope mr-2 text-ash-red"></i> outflickzlimited@gmail.com 
-                        </p>
-                        <p class="text-gray-400">
-                            <i class="fas fa-phone mr-2 text-ash-red"></i> +234 7042882706
-                        </p>
-                    </address>
-                </div>
-                
-            </div>
-
-            <div class="border-t border-gray-800 mt-6 sm:mt-10 pt-4 sm:pt-6"> 
-                <p class="text-center text-xs text-gray-500">
-                    &copy; 2025 Outflickz. All rights reserved. | <a href="#" class="hover:text-ash-red">Privacy Policy</a> | <a href="#" class="hover:text-ash-red">Terms of Use</a>
-                </p>
-            </div>
-        </div>
+    <footer class="bg-black text-gray-500 py-10 mt-12 text-center text-xs">
+        <p>&copy; 2025 Outflickz. All rights reserved.</p>
     </footer>
-    
-  <a href="https://t.me/+2349125898200" 
-        target="_blank"
-        class="fixed bottom-6 right-24 z-50 
-               bg-[#24A1DE] text-white 
-               p-3 rounded-full 
-               shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 
-               flex items-center justify-center w-14 h-14" 
-        aria-label="Chat with us on Telegram">
-        
-        <i class="fab fa-telegram-plane fa-2x"></i>
-    </a>
-    
-    <a href="https://wa.me/2347042882706?text=HELLO%20OUTFLICKZ!%20My%20name%20is%20..."
-        target="_blank"
-        class="fixed bottom-6 right-6 z-50 
-               bg-[#25D366] text-white 
-               p-3 rounded-full 
-               shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 
-               flex items-center justify-center w-14 h-14" 
-        aria-label="Chat with us on WhatsApp">
-        
-        <i class="fab fa-whatsapp fa-2x"></i>
-    </a>
 </body>
 </html>

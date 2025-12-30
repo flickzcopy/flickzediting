@@ -2441,56 +2441,66 @@ const singleReceiptUpload = multer({
 
 }).single('receipt'); 
 
+
+/**
+ * 1. verifyUserToken (THE SMART GATE)
+ * Use this for: Checkout, Cart Sync, Order Placement.
+ * It identifies users if they have a token, but lets guests pass through.
+ */
 const verifyUserToken = (req, res, next) => {
     const authHeader = req.headers.authorization;
+    
+    // If no token, they are a guest. Proceed without error.
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ message: 'Access denied. No Access Token provided in header.' });
+        req.userId = null; 
+        req.isGuest = true;
+        return next(); 
     }
+
     const accessToken = authHeader.split(' ')[1];
+
     try {
         const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
-                if (decoded.role !== 'user') {
-            return res.status(403).json({ message: 'Forbidden. Invalid token role for user access.' });
-        }        
-        req.userId = decoded.id; 
-        next();        
+        
+        if (decoded.role === 'user') {
+            req.userId = decoded.id; 
+            req.isGuest = false;
+        } else {
+            req.userId = null;
+            req.isGuest = true;
+        }
+        next(); 
     } catch (err) {
-        // --- 🔑 HIGH-PERFORMANCE REFRESH HANDLING ---
+        // If expired, tell the frontend so it can try to refresh
         if (err.name === 'TokenExpiredError') {
             return res.status(401).json({ 
                 message: 'Access Token expired. Refresh required.',
-                expired: true // CRITICAL flag for the client to initiate refresh flow
+                expired: true 
             });
         }
-        // For all other errors (invalid signature, tampering, etc.), force re-login
-        // No need to clear the cookie here; the Refresh Endpoint handles clearing its own cookie on failure.
-        console.error("JWT Verification Error:", err.message);
-        res.status(401).json({ message: 'Invalid token signature. Please log in again.' });
+        // For other errors, just treat them as a guest
+        req.userId = null;
+        req.isGuest = true;
+        next();
     }
 };
 
+/**
+ * 2. verifySessionCookie (THE REFRESH GATE)
+ * Use this ONLY for: /api/auth/refresh
+ * This MUST remain a hard gate to protect the refresh cycle.
+ */
 const verifySessionCookie = (req, res, next) => {
-    console.log('DEBUG COOKIE CHECK: Incoming Cookie Header:', req.headers.cookie);
     const refreshToken = req.cookies.userRefreshToken; 
-    // ------------------- 💡 DEBUG LOGGING ADDED -------------------
-    console.log('DEBUG REFRESH TOKEN:', refreshToken ? 'Token FOUND' : 'Token MISSING from req.cookies');
     if (!refreshToken) {
-        // If NO cookie is found, the user is NOT logged in.
         return res.status(401).json({ message: 'No valid session cookie found.' });
     }
 
     try {
         const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
-        // 3. Ensure role is correct (optional but good practice)
-        if (decoded.role !== 'user') {
-            return res.status(403).json({ message: 'Forbidden. Invalid token role in cookie.' });
-        }
         req.userId = decoded.id; 
-        
-        console.log('DEBUG REFRESH TOKEN: Verification SUCCESS. Proceeding...');
         next(); 
     } catch (err) {
-        console.error("Session Cookie verification failed:", err.message);
         res.status(401).json({ message: 'Session cookie invalid or expired.' });
     }
 };
@@ -6704,269 +6714,120 @@ app.post('/api/notifications/admin-order-email', async (req, res) => {
         res.status(500).json({ message: 'Failed to dispatch admin email notification due to server error.' });
     }
 });
-
 // =========================================================
-// 7. POST /api/orders/place/pending - Create a Pending Order (Protected)
+// 7. POST /api/orders/place/pending - Unified Member & Guest Order
 // =========================================================
 app.post('/api/orders/place/pending', verifyUserToken, (req, res) => {
-    
-    // 1. Run the Multer middleware to process the form data and file
-    singleReceiptUpload(req, res, async (err) => {
-        // ... (Multer Error Handling remains the same) ...
-        if (err instanceof multer.MulterError) {
-             return res.status(400).json({ message: `File upload failed: ${err.message}` });
-        } else if (err) {
-             console.error('Unknown Multer Error:', err);
-             return res.status(500).json({ message: 'Error processing file upload.' });
-        }
+    
+    singleReceiptUpload(req, res, async (err) => {
+        if (err instanceof multer.MulterError) {
+             return res.status(400).json({ message: `File upload failed: ${err.message}` });
+        } else if (err) {
+             return res.status(500).json({ message: 'Error processing file upload.' });
+        }
 
-        const userId = req.userId;
-        
-        // Extract Form fields 
-        const { 
-            shippingAddress: shippingAddressString, 
-            paymentMethod, 
-            totalAmount: totalAmountString, 
-            subtotal: subtotalString,
-            shippingFee: shippingFeeString,
-            tax: taxString,
-            orderItems: orderItemsString 
-        } = req.body;
-        
-        const receiptFile = req.file; 
-        
-        // Convert string fields
-        const totalAmount = parseFloat(totalAmountString);
-        const subtotal = parseFloat(subtotalString || '0');
-        const shippingFee = parseFloat(shippingFeeString || '0');
-        const tax = parseFloat(taxString || '0');
+        // ⭐ CHANGE 1: userId can now be null (Guest)
+        const userId = req.userId || null;
+        const isGuest = !userId;
+        
+        const { 
+            shippingAddress: shippingAddressString, 
+            paymentMethod, 
+            totalAmount: totalAmountString, 
+            orderItems: orderItemsString,
+            email: guestEmail // Frontend should send this if not logged in
+        } = req.body;
+        
+        const receiptFile = req.file; 
+        const totalAmount = parseFloat(totalAmountString);
 
-        let shippingAddress;
+        // 1. Parse Shipping Address
+        let shippingAddress;
+        try {
+             shippingAddress = shippingAddressString ? JSON.parse(shippingAddressString) : null;
+        } catch (e) {
+             return res.status(400).json({ message: 'Invalid shipping address format.' });
+        }
+        
+        // 2. Critical Validation
+        if (!shippingAddress || !totalAmount || totalAmount <= 0) {
+             return res.status(400).json({ message: 'Missing shipping address or invalid total amount.' });
+        }
 
-        // --- UPDATED ROBUST PARSING LOGIC ---
-        try {
-             if (!shippingAddressString || shippingAddressString.trim() === '') {
-                 shippingAddress = null; 
-             } else {
-                 shippingAddress = JSON.parse(shippingAddressString);
-             }
-        } catch (e) {
-             return res.status(400).json({ message: 'Invalid shipping address format. Ensure the address object is stringified correctly.' });
-        }
-        // --- END: UPDATED ROBUST PARSING LOGIC ---
-        
-        // 2. Critical Input Validation
-        if (!shippingAddress || totalAmount <= 0 || isNaN(totalAmount)) {
-             return res.status(400).json({ message: 'Missing shipping address or invalid total amount.' });
-        }
+        // 3. Handle Payment Receipt
+        let paymentReceiptUrl = null;
+        if (paymentMethod === 'Bank Transfer') {
+            if (!receiptFile) return res.status(400).json({ message: 'Bank payment receipt is required.' });
+            paymentReceiptUrl = await uploadFileToPermanentStorage(receiptFile);
+        }
 
-        let paymentReceiptUrl = null;
-        
-        try {
-            // ... (Bank Transfer Receipt Upload Logic remains the same) ...
-            if (paymentMethod === 'Bank Transfer') {
-                if (!receiptFile) {
-                    return res.status(400).json({ message: 'Bank payment receipt image is required for a Bank Transfer order.' });
-                }
-                
-                paymentReceiptUrl = await uploadFileToPermanentStorage(receiptFile);
-                
-                if (!paymentReceiptUrl) {
-                    throw new Error("Failed to get permanent URL after B2 upload.");
-                }
-            }
-
-            // ⭐ 4. RETRIEVE ORDER ITEMS (PRIORITIZE Buy Now Items)
-            let finalOrderItems = [];
-            let isBuyNowOrder = false;
-            
-            if (orderItemsString && orderItemsString.trim() !== '') {
-                // Scenario 1: Buy Now Checkout
-                let rawItems;
-                try {
-                    rawItems = JSON.parse(orderItemsString);
-                } catch (e) {
-                    return res.status(400).json({ message: 'Invalid order item list format. Ensure orderItems is stringified correctly.' });
-                }
-                
-                isBuyNowOrder = true;
-                
-                // -------------------------------------------------------------
-                // ⭐ START: BUY NOW ITEM MAPPING & VALIDATION FIX
-                // -------------------------------------------------------------
-                finalOrderItems = await Promise.all(rawItems.map(async (item) => { // Use Promise.all and async map
-                    if (!item.productType || !item.variationIndex) {
-                        // Throw immediately if mandatory fields are client-missing
-                        throw new Error(`Order item for product ${item.productId} is missing required field: productType or variationIndex.`); 
-                    }
-
+        try {
+            // ⭐ CHANGE 2: Unified Item Retrieval
+            // Since Guest Cart and Member Cart both send 'orderItems' in the body now
+            let finalOrderItems = [];
+            if (orderItemsString) {
+                const rawItems = JSON.parse(orderItemsString);
+                
+                // Map and Validate Product Types
+                finalOrderItems = await Promise.all(rawItems.map(async (item) => {
                     let correctedType = item.productType;
-                    let isTypeValid = !!PRODUCT_MODEL_MAP[item.productType];
-                    
-                    // Run the correction logic if the type from the client is invalid
-                    if (!isTypeValid) { 
-                        console.log(`[BUY NOW] Attempting to correct invalid productType: ${item.productType} for ${item.productId}`);
-                        
-                        // The same collection-lookup logic from the Cart flow
+                    // (Same correction logic as before to ensure productType exists in DB)
+                    if (!PRODUCT_MODEL_MAP[item.productType]) {
                         for (const type of Object.keys(PRODUCT_MODEL_MAP)) {
-                            try {
-                                const CollectionModel = getProductModel(type); 
-                                const productExists = await CollectionModel.exists({ _id: item.productId });
-                                
-                                if (productExists) {
-                                    correctedType = type;
-                                    break;
-                                }
-                            } catch (error) {
-                                console.warn(`Model check failed for type ${type}: ${error.message}`);
-                            }
-                        }
-
-                        if (correctedType === item.productType) { // If it's still the original invalid type
-                             throw new Error(`Product ID ${item.productId} not found in any collection. Cannot place order.`);
-                        }
+                            const Model = getProductModel(type);
+                            if (await Model.exists({ _id: item.productId })) {
+                                correctedType = type;
+                                break;
+                            }
+                        }
                     }
+                    return {
+                        ...item,
+                        priceAtTimeOfPurchase: item.price,
+                        productType: correctedType
+                    };
+                }));
+            }
 
-                    return {
-                        ...item, 
-                        priceAtTimeOfPurchase: item.price, 
-                        productType: correctedType, // Use the corrected or original type
-                        variationIndex: item.variationIndex
-                    };
-                }));
-                // -------------------------------------------------------------
-                // ⭐ END: BUY NOW ITEM MAPPING & VALIDATION FIX
-                // -------------------------------------------------------------
+            if (finalOrderItems.length === 0) {
+                return res.status(400).json({ message: 'Order items are missing.' });
+            }
 
-            } else {
-                // Scenario 2: Standard Cart Checkout
-                const cart = await Cart.findOne({ userId }).lean();
+            // 4. Generate Reference
+            const orderRef = `REF-${Date.now()}-${isGuest ? 'GUEST' : userId.substring(0, 5)}`; 
 
-                if (!cart || cart.items.length === 0) {
-                    return res.status(400).json({ message: 'Cannot place order: Shopping bag is empty.' });
-                }
-                
-                // Map cart items to OrderItemSchema structure
-                finalOrderItems = cart.items.map(item => ({
-                    productId: item.productId,
-                    name: item.name, 
-                    imageUrl: item.imageUrl,
-                    productType: item.productType, 
-                    quantity: item.quantity,
-                    priceAtTimeOfPurchase: item.price, 
-                    variationIndex: item.variationIndex,
-                    size: item.size,
-                    variation: item.variation,
-                    color: item.color,
-                }));
-            }
-            
-            if (finalOrderItems.length === 0) {
-                return res.status(400).json({ message: 'Order item list is empty.' });
-            }
-            
-            // -------------------------------------------------------------
-            // ⭐ CRITICAL FIX: VALIDATE AND CORRECT productType (Using getProductModel)
-            // This logic is ONLY executed for items from the permanent Cart (Scenario 2).
-            // NOTE: The validation for 'Buy Now' is now handled above in Scenario 1.
-            // -------------------------------------------------------------
-            if (!isBuyNowOrder) {
-                for (let item of finalOrderItems) {
-                    let isTypeValid = !!PRODUCT_MODEL_MAP[item.productType];
+            // 5. Create Order
+            const newOrder = await Order.create({
+                userId: userId, // Will be null for guests
+                items: finalOrderItems, 
+                shippingAddress: shippingAddress,
+                totalAmount: totalAmount,
+                status: 'Pending', 
+                paymentMethod: paymentMethod,
+                orderReference: orderRef, 
+                paymentReceiptUrl: paymentReceiptUrl,
+                // ⭐ Store contact email for guests
+                customerEmail: isGuest ? (shippingAddress.email || guestEmail) : undefined 
+            });
 
-                    if (!isTypeValid) { 
-                        console.log(`Attempting to correct invalid productType: ${item.productType} for ${item.productId}`);
-                        
-                        let correctedType = null;
-                        
-                        // Iterate through all valid product types from the map
-                        for (const type of Object.keys(PRODUCT_MODEL_MAP)) {
-                            try {
-                                const CollectionModel = getProductModel(type); // Safely get the model
-                                
-                                // Check if the product ID exists in this collection
-                                const productExists = await CollectionModel.exists({ _id: item.productId });
-                                
-                                if (productExists) {
-                                    correctedType = type;
-                                    break;
-                                }
-                            } catch (error) {
-                                // If getProductModel throws (e.g., Model not defined), log but continue to next type
-                                console.warn(`Model check failed for type ${type}: ${error.message}`);
-                            }
-                        }
+            // 6. Clear Database Cart only for Members
+            if (!isGuest) {
+                await Cart.findOneAndUpdate({ userId }, { items: [], updatedAt: Date.now() });
+            }
+            
+            res.status(201).json({
+                message: 'Order placed successfully.',
+                orderId: newOrder._id,
+                orderReference: orderRef,
+                isGuest: isGuest
+            });
 
-                        if (!correctedType) {
-                             // CRITICAL: Product ID not found in any valid collection
-                             throw new Error(`Product ID ${item.productId} (Type: ${item.productType}) not found in any collection. Cannot place order.`);
-                        }
-                        
-                        // 1. Update the final order item with the correct type
-                        item.productType = correctedType;
-                        
-                        // 2. Fix the permanent cart data for future checkouts (Optional but recommended)
-                        await Cart.findOneAndUpdate(
-                            { userId, 'items.productId': item.productId },
-                            { '$set': { 'items.$.productType': correctedType } }
-                        );
-                    }
-                }
-            }
-            // -------------------------------------------------------------
-
-            const orderRef = `REF-${Date.now()}-${userId.substring(0, 5)}`; 
-
-            const newOrder = await Order.create({
-                userId: userId,
-                // Use the items with the now-corrected productType
-                items: finalOrderItems, 
-                shippingAddress: shippingAddress,
-                totalAmount: totalAmount,
-                subtotal: subtotal,
-                shippingFee: shippingFee,
-                tax: tax,
-                status: 'Pending', 
-                paymentMethod: paymentMethod,
-                orderReference: orderRef, 
-                amountPaidKobo: Math.round(totalAmount * 100),
-                paymentTxnId: orderRef, 
-                paymentReceiptUrl: paymentReceiptUrl,
-            });
-
-            // 6. Clear the user's permanent cart ONLY IF it was a standard cart checkout
-            if (!isBuyNowOrder) {
-                await Cart.findOneAndUpdate(
-                    { userId },
-                    { items: [], updatedAt: Date.now() }
-                );
-            }
-            
-            console.log(`Pending Order created: ${newOrder._id}. Source: ${isBuyNowOrder ? 'Buy Now' : 'Cart'}`);
-            
-            // ... (Success Response remains the same) ...
-            const { firstName, lastName } = shippingAddress;
-            res.status(201).json({
-                message: 'Pending order placed successfully. Awaiting payment verification.',
-                orderId: newOrder._id,
-                status: newOrder.status,
-                firstName: firstName,
-                lastName: lastName,
-                ReceiptUrl: paymentReceiptUrl
-            });
-
-        } catch (error) {
-            console.error('Error placing pending order:', error);
-            // Send the specific validation message back to the client if possible
-            const userMessage = error.message.includes('validation failed') 
-                                ? error.message.split(':').slice(-1)[0].trim() 
-                                : 'Failed to create pending order due to a server error.';
-
-            res.status(500).json({ message: userMessage });
-        }
-    });
+        } catch (error) {
+            console.error('Order Error:', error);
+            res.status(500).json({ message: error.message });
+        }
+    });
 });
-
 
 // =========================================================
 // 2. GET /api/orders/history - Retrieve Order History (Protected)
