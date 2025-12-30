@@ -524,39 +524,34 @@ function addToCart(collectionId, quantity) {
 
     console.log(`Added ${quantity} of item ${collectionId}. New cart total: ${newCount}`);
 }
-
 /**
  * Handles adding an item to the cart. 
- * Integrated with Size Validation and fallback logic.
+ * Integrated with Size Validation, Guest logic, and API Sync.
  */
 async function simulateAddToCart(productDetails) {
-    // --- 1. Gather all item details from DOM and input ---
+    // --- 1. Gather all item details from DOM ---
     const card = document.querySelector(`.collection-card[data-collection-id="${productDetails.productId}"]`);
-    if (!card) return;
+    if (!card) {
+        console.error("Collection card not found for ID:", productDetails.productId);
+        return;
+    }
     
     // Selectors for size and color
     const selectedSizeInput = card.querySelector(`input[name="size-${productDetails.productId}"]:checked`);
     const selectedColorInput = card.querySelector(`input[name="color-${productDetails.productId}"]:checked`);
     
-    // --- CRITICAL VALIDATION ADDED FROM BUY NOW LOGIC ---
+    // --- 2. Validation ---
     const sizeOptions = card.querySelectorAll(`input[name="size-${productDetails.productId}"]`);
     if (sizeOptions.length > 0 && !selectedSizeInput) {
-        // Use your custom alert for a premium feel
         displayCartAlert("Please select a size before adding to bag.", "error");
-        
-        // Optional: Visual feedback on the size list
         const sizeContainer = card.querySelector('.flex.gap-1.text-gray-700.flex-wrap');
         sizeContainer?.classList.add('ring-1', 'ring-red-500', 'p-1', 'rounded');
         setTimeout(() => sizeContainer?.classList.remove('ring-1', 'ring-red-500', 'p-1'), 2000);
         return;
     }
 
-    // Sanitize values to prevent "undefined" strings
-    const rawColorValue = selectedColorInput ? selectedColorInput.value : null;
-    const color = (rawColorValue && rawColorValue !== 'undefined') ? rawColorValue : 'N/A';
-        
-    const rawSizeValue = selectedSizeInput ? selectedSizeInput.value : null;
-    const size = (rawSizeValue && rawSizeValue !== 'undefined') ? rawSizeValue : 'N/A';
+    const color = (selectedColorInput && selectedColorInput.value !== 'undefined') ? selectedColorInput.value : 'N/A';
+    const size = (selectedSizeInput && selectedSizeInput.value !== 'undefined') ? selectedSizeInput.value : 'N/A';
     
     let variationIndex = 1; 
     let selectedImageUrl = productDetails.imageUrl;
@@ -568,7 +563,6 @@ async function simulateAddToCart(productDetails) {
             try {
                 const colorMap = JSON.parse(colorMapContainer.getAttribute('data-color-map'));
                 const newImageUrls = colorMap[color];
-                
                 if (newImageUrls && newImageUrls.frontImageUrl) {
                     selectedImageUrl = newImageUrls.frontImageUrl; 
                     const colorMapKeys = Object.keys(colorMap);
@@ -579,16 +573,14 @@ async function simulateAddToCart(productDetails) {
         }
     }
 
-    // Construct variation string
     const variation = (color !== 'N/A' && size !== 'N/A')
         ? `${color} / ${size}`
         : (color !== 'N/A' ? color : (size !== 'N/A' ? size : 'Default Variant'));
     
-    // Get latest quantity from input field
     const quantityInput = card.querySelector(`#quantity-input-${productDetails.productId}`);
     const quantity = parseInt(quantityInput?.value) || 1;
 
-    const itemDataForAPI = {
+    const itemData = {
         productId: productDetails.productId,
         name: productDetails.name, 
         productType: productDetails.productType || 'Wears', 
@@ -601,14 +593,13 @@ async function simulateAddToCart(productDetails) {
         variation: variation
     };
     
-    // --- 2. Local Cart Fallback Helper ---
-    const handleLocalCartFallback = (details) => {
+    // --- 3. Local Cart Helper ---
+    const handleLocalCartOnly = (details) => {
         let localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
         const existingItemIndex = localCart.findIndex(item => 
             item.productId === details.productId && 
             item.size === details.size &&
-            item.color === details.color &&
-            item.variationIndex === details.variationIndex
+            item.color === details.color
         );
 
         if (existingItemIndex > -1) {
@@ -622,14 +613,24 @@ async function simulateAddToCart(productDetails) {
         displayCartAlert(`"${details.name}" added to bag!`, 'info');
     };
 
-    console.log('[CART] Attempting API Sync...');
+    // --- 4. Logic Switch: Guest vs Logged In ---
+    // Assuming your auth token is stored in localStorage
+    const isLoggedIn = !!localStorage.getItem('outflickzToken'); 
 
-    // --- 3. API Execution ---
+    if (!isLoggedIn) {
+        console.log('[CART] Guest mode: Saving to LocalStorage.');
+        handleLocalCartOnly(itemData);
+        return; // 🔥 CRITICAL: Prevent the 500 error by stopping here
+    }
+
+    console.log('[CART] Logged-in mode: Syncing with API...');
+
+    // --- 5. API Execution (Only for Logged-in Users) ---
     try {
         const response = await secureUserFetch('/api/users/cart', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(itemDataForAPI),
+            body: JSON.stringify(itemData),
             credentials: 'include' 
         });
 
@@ -640,15 +641,14 @@ async function simulateAddToCart(productDetails) {
             if (data.items) localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(data.items));
             updateCartBadge();
             displayCartAlert('Item added to your permanent bag!', 'success');
-        } else if (response.status === 401 || response.status === 403) {
-            handleLocalCartFallback(itemDataForAPI);
         } else {
-            if (response.status >= 500) handleLocalCartFallback(itemDataForAPI);
-            displayCartAlert(data.message || `Error ${response.status}`, 'error');
+            // If API fails (even for logged in users), fallback to local so they can still shop
+            handleLocalCartOnly(itemData);
+            console.warn('[CART] API sync failed, used local fallback.', data.message);
         }
     } catch (error) {
-        console.error('Network Error:', error);
-        handleLocalCartFallback(itemDataForAPI);
+        console.error('[CART] Network Error:', error);
+        handleLocalCartOnly(itemData);
     }
 }
 
