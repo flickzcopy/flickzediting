@@ -149,34 +149,43 @@ function renderCartItems(items, isApiCart) {
     const cartList = document.getElementById('cart-items-list');
     const currencySymbol = '₦';
 
+    // ⭐ UPDATED: Matches the exact collection names seen in your MongoDB Compass screenshot
     const typeLabels = {
-        'WearsCollection': 'Wears',
-        'CapCollection': 'Caps',
-        'NewArrivals': 'New Arrival',
-        'PreOrderCollection': 'Pre-Order'
+        'wearcollections': 'Wears',
+        'capcollections': 'Caps',
+        'newarrivals': 'New Arrival',
+        'preordercollections': 'Pre-Order'
     };
 
     cartList.innerHTML = items.map(item => {
-        const itemId = item._id || item.productId;
+        // Handle ID mapping from either API (productId) or Local Storage (_id)
+        const itemId = item.productId || item._id;
         
-        // ⭐ FIX: Logic to determine the red label (e.g., Caps vs Wears)
+        // ⭐ NAME LOGIC: Uses the 'name' field directly from your database document
+        // Examples: "Outflickz Black Sleeveless" or "Outflickz White Sleeveless"
+        const productName = item.name || 'Premium Product';
+
+        // ⭐ COLLECTION LABEL LOGIC: 
+        // Checks the productType against the specific lowercase collection names in your DB
         let displayCategory = 'Premium Apparel';
-        const rawType = item.productType || "";
+        const rawType = item.productType ? item.productType.toLowerCase() : "";
+        
         if (rawType && typeLabels[rawType]) {
             displayCategory = typeLabels[rawType];
         } else if (rawType) {
-            displayCategory = rawType.replace('Collection', '');
+            // Fallback: strip "collections" and capitalize (e.g., wearcollections -> Wear)
+            displayCategory = rawType.replace('collections', '');
         }
 
         return `
         <div id="cart-item-${itemId}" class="cart-item-card flex py-4 sm:py-6 border-b border-gray-100">
             <div class="flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 rounded-lg overflow-hidden border border-gray-200">
-                <img src="${item.imageUrl}" alt="${item.name}" class="w-full h-full object-cover object-center">
+                <img src="${item.imageUrl}" alt="${productName}" class="w-full h-full object-cover object-center">
             </div>
             <div class="ml-4 flex flex-1 flex-col justify-between">
                 <div class="relative pr-9 sm:grid sm:grid-cols-2 sm:gap-x-6 sm:pr-0">
                     <div>
-                        <h3 class="text-base sm:text-lg font-semibold text-gray-900">${item.name}</h3>
+                        <h3 class="text-base sm:text-lg font-semibold text-gray-900">${productName}</h3>
                         <p class="mt-1 text-xs text-red-500 font-medium uppercase tracking-wider">${displayCategory}</p>
                         <p class="mt-1 text-xs text-gray-500 uppercase">
                             ${item.color || ''} ${item.size ? ' / ' + item.size : ''}

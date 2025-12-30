@@ -602,6 +602,51 @@ async function secureUserFetch(url, options = {}) {
     return response;
 }
 
+/**
+ * Auto-fills the checkout form if a user is logged in.
+ */
+async function autoFillUserData() {
+    const token = localStorage.getItem('userAccessToken');
+    if (!token) return; // Not logged in, stay as guest
+
+    try {
+        // Using the same secureUserFetch logic from your profile page
+        const response = await secureUserFetch('https://outflickzs.netlify.app/api/users/account');
+        
+        if (response.ok) {
+            const userData = await response.json();
+            
+            // Map Database "profile" and "address" objects to Form IDs
+            const profile = userData.profile || {};
+            const address = userData.address || {};
+
+            // 1. Contact Info
+            if (userData.email) document.getElementById('email').value = userData.email;
+            if (profile.phone) document.getElementById('phone').value = profile.phone;
+            if (profile.whatsapp) document.getElementById('whatsapp').value = profile.whatsapp;
+
+            // 2. Shipping Details
+            if (profile.firstName) document.getElementById('first-name').value = profile.firstName;
+            if (profile.lastName) document.getElementById('last-name').value = profile.lastName;
+            
+            if (address.street) document.getElementById('address-line-1').value = address.street;
+            if (address.city) document.getElementById('city').value = address.city;
+            if (address.state) document.getElementById('state').value = address.state;
+            if (address.country) document.getElementById('country').value = address.country;
+            
+            // Handle ZIP (check for null/undefined)
+            if (address.zip && address.zip !== "null") {
+                document.getElementById('zip-code').value = address.zip;
+            }
+
+            console.log("Checkout form auto-filled for:", userData.email);
+        }
+    } catch (error) {
+        console.warn("Could not auto-fill user data:", error);
+    }
+}
+
+
     function updateCartBadge() {
         const badge = document.getElementById('cart-badge');
         if (!badge) return;
@@ -1357,6 +1402,8 @@ document.addEventListener('DOMContentLoaded', () => {
     updateCartBadge();
     fetchInitialCartData(); // Fetches items and handles "Empty Cart" redirect
     updateCheckoutView();   // Ensures Step 1 (Shipping Form) is visible first
+    // Call this function when the DOM loads
+    autoFillUserData(); 
     
     // 2. NAVIGATION & BUTTON LOGIC
     // Next Button (Proceed to Review)

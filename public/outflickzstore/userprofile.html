@@ -26,17 +26,12 @@
 <body class="bg-gray-50 min-h-screen text-gray-900 antialiased">
     
 <script>
-    // --- Authentication Constants (Must match global definition) ---
+    // --- Authentication Constants ---
     const API_BASE_URL = 'https://outflickzs.netlify.app';
     const AUTH_TOKEN_KEY = 'userAccessToken';
     const REFRESH_ENDPOINT = `${API_BASE_URL}/api/users/refresh`; 
     
-    // ⭐ ADDED: Helper for handleLogout to be used inside secureUserFetch catch blocks
-    function handleLogout() {
-        localStorage.removeItem(AUTH_TOKEN_KEY); 
-        window.location.replace('useraccount.html');
-    }
-
+    // Global state for the user
     let currentProfileData = {
         profile: {},
         address: {},
@@ -45,63 +40,30 @@
         orders: []
     };
 
-
-/**
- * Checks authentication status via Access Token (Header) and Session Cookie.
- * This is the robust way to handle the profile button click immediately after login.
- */
-async function redirectToProfileOrLogin() {
-    const token = localStorage.getItem(AUTH_TOKEN_KEY);
-    // Prepare headers, including the Authorization Bearer header if a token exists.
-    const headers = token 
-        ? { 'Authorization': `Bearer ${token}` } 
-        : {}; 
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
-            method: 'GET',
-            headers: headers, // <-- NEW: Sends the Access Token to the server
-            credentials: 'include' // Still sends the cookie if the browser allows it (for fallbacks)
-        });
-
-        if (response.status === 200) {
-            // Success via Access Token or successfully-read secure cookie
-            window.location.href = 'userprofile.html'; 
-        } else {
-            // Failed both checks (Token expired AND cookie failed/missing).
-            // Clear local state and redirect to login page.
-            localStorage.removeItem(AUTH_TOKEN_KEY);
-            window.location.href = 'useraccount.html';
-        }
-    } catch (error) {
-        console.error('Authentication status check failed (Network Error):', error);
-        // On network error, assume logged out or unreachable
-        localStorage.removeItem(AUTH_TOKEN_KEY);
-        window.location.href = 'useraccount.html';
+    // --- Authentication Helpers ---
+    function handleLogout() {
+        localStorage.removeItem(AUTH_TOKEN_KEY); 
+        window.location.replace('useraccount.html');
     }
-}
 
-    // ⭐ CORRECTED LOGOUT: Uses the standard AUTH_TOKEN_KEY variable
     async function logoutUser() {
-        // 1. Attempt to call server endpoint to clear the HTTP-only cookie
         try {
             await fetch(`${API_BASE_URL}/api/users/logout`, {
                 method: 'POST',
                 credentials: 'include' 
             });
         } catch (error) {
-            console.warn('Server logout call failed or was unreachable, proceeding with client-side cleanup.', error);
+            console.warn('Server logout failed, clearing local state.');
         }
-        
-        // 2. Client-side cleanup and redirect
-        localStorage.removeItem(AUTH_TOKEN_KEY); 
-        window.location.replace('useraccount.html');
+        handleLogout();
     }
 
+    /**
+     * wrapper for fetch that handles Authorization headers and 
+     * automatic Token Refresh using the secure HTTP-only cookie.
+     */
     async function secureUserFetch(url, options = {}) {
         let token = localStorage.getItem(AUTH_TOKEN_KEY);
-        
-        // Add Authorization header if a token exists
         if (token) {
             options.headers = {
                 ...options.headers,
@@ -111,13 +73,9 @@ async function redirectToProfileOrLogin() {
 
         let response = await fetch(url, options);
 
-        // If response is 401, attempt token refresh
         if (response.status === 401) {
-            console.log("Token expired (401). Attempting refresh...");
-            
+            console.log("Token expired. Attempting refresh...");
             try {
-                // ⭐ FIX: Added credentials: 'include' for the refresh request 
-                // to send the necessary secure Refresh Token cookie.
                 const refreshResponse = await fetch(REFRESH_ENDPOINT, { 
                     method: 'POST',
                     credentials: 'include' 
@@ -126,110 +84,101 @@ async function redirectToProfileOrLogin() {
                 if (refreshResponse.ok) {
                     const data = await refreshResponse.json();
                     const newToken = data.accessToken;
-                    
-                    if (!newToken) {
-                        throw new Error("Refresh successful, but no new token received.");
-                    }
+                    if (!newToken) throw new Error("No token received");
 
-                    // Store new token and retry the original request
                     localStorage.setItem(AUTH_TOKEN_KEY, newToken);
-                    token = newToken; // Update token for retry
-
-                    console.log("Token refreshed successfully. Retrying original request...");
-                    
-                    // Update Authorization header with the new token
-                    options.headers = {
-                        ...options.headers,
-                        'Authorization': `Bearer ${token}`
-                    };
-                    
-                    // Retry the original request
-                    response = await fetch(url, options);
-
+                    options.headers['Authorization'] = `Bearer ${newToken}`;
+                    return await fetch(url, options); // Retry
                 } else {
-                    console.error("Token refresh failed. Server returned non-200.");
-                    handleLogout(); // Log out user if refresh fails
-                    // Return original 401 response for the caller to handle (e.g., disable cart)
-                    return response; 
+                    handleLogout();
+                    return response;
                 }
             } catch (error) {
-                console.error("Error during token refresh process:", error);
                 handleLogout();
-                return response; // Return original 401 response
+                return response;
             }
         }
         return response;
     }
 
-    // --- Modal Functions ---
-    function closeModal(modalId) {
-        document.getElementById(modalId).classList.add('hidden');
-    }
+    // --- UI/DOM Management ---
 
-    function openChangePasswordModal() {
-        const modal = document.getElementById('change-password-modal');
-        modal.classList.remove('hidden');
-        document.getElementById('change-password-form').reset();
-    }
-
-    function openEditProfileModal() {
-        const modal = document.getElementById('edit-profile-modal');
-        modal.classList.remove('hidden');
-
-        document.getElementById('edit-profile-firstName').value = currentProfileData.profile.firstName || '';
-        document.getElementById('edit-profile-lastName').value = currentProfileData.profile.lastName || '';
-        document.getElementById('edit-profile-phone').value = currentProfileData.profile.phone || '';
-        document.getElementById('edit-profile-whatsapp').value = currentProfileData.profile.whatsapp || '';
-    }
-
-    function openEditAddressModal() {
-        const modal = document.getElementById('edit-address-modal');
-        modal.classList.remove('hidden');
-
-        const address = currentProfileData.address || {}; 
+    /**
+     * Populates the HTML with data matching your backend structure.
+     * Fixed to handle null values as seen in your console log.
+     */
+    function updateDOM(data) {
+        const profile = data.profile || {};
+        const status = data.status || {};
+        const membership = data.membership || {};
+        const address = data.address || {}; 
         
-        document.getElementById('edit-address-street').value = address.street || '';
-        document.getElementById('edit-address-city').value = address.city || '';
-        document.getElementById('edit-address-state').value = address.state || '';
-        document.getElementById('edit-address-zip').value = address.zip || '';
-        document.getElementById('edit-address-country').value = address.country || '';
-    }
-
-    function showStatusMessage(message, isSuccess = true) {
-        const container = document.getElementById('status-message-container');
-        const messageBox = document.getElementById('status-message');
+        // Name and Identity
+        const fullName = `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 'Guest User';
+        document.getElementById('user-name').textContent = fullName;
+        document.getElementById('user-email').textContent = data.email || 'Email Not Available'; 
         
-        messageBox.textContent = message;
-        container.classList.remove('hidden', 'bg-green-100', 'bg-red-100', 'text-green-800', 'text-red-800');
+        // Status & Membership
+        document.getElementById('user-role').textContent = (status.role || 'user').toUpperCase();
+        document.getElementById('user-verification').innerHTML = status.isVerified 
+            ? '<span class="text-green-600 font-bold"><i class="fas fa-check-circle mr-1"></i> Verified</span>'
+            : '<span class="text-red-600 font-bold"><i class="fas fa-times-circle mr-1"></i> Unverified</span>';
+        
+        const memberDate = membership.memberSince ? new Date(membership.memberSince).toLocaleDateString() : 'N/A';
+        document.getElementById('member-since').textContent = memberDate;
 
-        if (isSuccess) {
-            container.classList.add('bg-green-100', 'text-green-800');
-        } else {
-            container.classList.add('bg-red-100', 'text-red-800');
-        }
+        // Contact Info
+        document.getElementById('user-phone').textContent = profile.phone || 'Not Set';
+        document.getElementById('user-whatsapp').textContent = profile.whatsapp || 'Not Set';
 
-        setTimeout(() => {
-            container.classList.add('hidden');
-        }, 5000);
-    }
-
-    // --- New Function for Password Visibility ---
-    function togglePasswordVisibility(inputId, iconId) {
-        const input = document.getElementById(inputId);
-        const icon = document.getElementById(iconId);
-
-        if (input.type === 'password') {
-            input.type = 'text';
-            icon.classList.remove('fa-eye');
-            icon.classList.add('fa-eye-slash');
-        } else {
-            input.type = 'password';
-            icon.classList.remove('fa-eye-slash');
-            icon.classList.add('fa-eye');
+        // Address (Handles null zip code safely)
+        document.getElementById('street-address').textContent = address.street || 'Not Set';
+        const zipPart = (address.zip && address.zip !== "null") ? address.zip : '';
+        document.getElementById('city-state-zip').textContent = `${address.city || 'Not Set'}, ${address.state || 'Not Set'} ${zipPart}`.trim();
+        document.getElementById('country').textContent = address.country || 'Not Set';
+        
+        // Update "Edit/Set" Button Text
+        const isAddressSet = !!(address.street && address.city);
+        const editAddressBtn = document.getElementById('edit-address-button');
+        if (editAddressBtn) {
+            editAddressBtn.innerHTML = isAddressSet 
+                ? '<i class="fas fa-edit mr-1"></i> Edit' 
+                : '<i class="fas fa-plus-circle mr-1"></i> Set Address';
         }
     }
 
-    // --- Submission Handlers (Personal Information) ---
+    // --- Action Handlers ---
+
+    async function fetchUserData() {
+        const mainContent = document.getElementById('main-profile-content');
+        const loading = document.getElementById('loading-indicator');
+        
+        if (loading) loading.classList.remove('hidden');
+        if (mainContent) mainContent.classList.add('hidden');
+
+        try {
+            const response = await secureUserFetch(`${API_BASE_URL}/api/users/account`);
+            
+            if (!response.ok) {
+                handleLogout();
+                return;
+            }
+
+            const data = await response.json();
+            currentProfileData = data;
+            updateDOM(data); 
+
+            await fetchOrderHistory(); 
+
+            if (loading) loading.classList.add('hidden');
+            if (mainContent) mainContent.classList.remove('hidden');
+
+        } catch (error) {
+            console.error("Fetch Error:", error);
+            handleLogout();
+        }
+    }
+
     async function submitEditProfile(event) {
         event.preventDefault();
         const button = document.getElementById('submit-profile-btn');
@@ -245,371 +194,42 @@ async function redirectToProfileOrLogin() {
         };
 
         try {
-            // ⭐ FIX: Use secureUserFetch here to ensure Access Token header is sent/refreshed
             const response = await secureUserFetch(`${API_BASE_URL}/api/users/profile`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(profileData),
-                // credentials: 'include' removed, as secureUserFetch handles auth via header
+                body: JSON.stringify(profileData)
             });
 
             const data = await response.json();
-
-            if (!response.ok) {
-                showStatusMessage(data.message || 'Failed to update personal details.', false);
-                if (response.status === 401 || response.status === 403) {
-                    console.error("Profile update unauthorized, forcing logout.");
-                    handleLogout(); // Use new helper
-                    return;
-                }
-                throw new Error(data.message || 'Update failed');
-            }
-
-            currentProfileData.profile = data.profile;
-            updateDOM(currentProfileData);
-            closeModal('edit-profile-modal');
-            showStatusMessage('Personal details updated successfully!', true);
-
-        } catch (error) {
-            console.error('Profile Update Error:', error);
-            if (!document.getElementById('status-message-container').classList.contains('bg-red-100')) {
-                showStatusMessage('An unexpected error occurred during profile update.', false);
-            }
-        } finally {
-            button.disabled = false;
-            button.textContent = originalText;
-        }
-    }
-
-    // --- Submission Handlers (Contact Address) ---
-    async function submitEditAddress(event) {
-        event.preventDefault();
-        const button = document.getElementById('submit-address-btn');
-        const originalText = button.textContent;
-        button.disabled = true;
-        button.textContent = 'Updating...';
-
-        const addressData = {
-            street: document.getElementById('edit-address-street').value.trim(),
-            city: document.getElementById('edit-address-city').value.trim(),
-            state: document.getElementById('edit-address-state').value.trim(),
-            zip: document.getElementById('edit-address-zip').value.trim(),
-            country: document.getElementById('edit-address-country').value.trim()
-        };
-
-        try {
-            // ⭐ FIX: Use secureUserFetch here to ensure Access Token header is sent/refreshed
-            const response = await secureUserFetch(`${API_BASE_URL}/api/users/address`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(addressData),
-                // credentials: 'include' removed, as secureUserFetch handles auth via header
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                showStatusMessage(data.message || 'Failed to update contact address.', false);
-                if (response.status === 401 || response.status === 403) {
-                    console.error("Address update unauthorized, forcing logout.");
-                    handleLogout(); // Use new helper
-                    return;
-                }
-                throw new Error(data.message || 'Update failed');
-            }
-
-            currentProfileData.address = data.address;
-            updateDOM(currentProfileData);
-            closeModal('edit-address-modal');
-            showStatusMessage('Contact address updated successfully!', true);
-
-        } catch (error) {
-            console.error('Address Update Error:', error);
-            if (!document.getElementById('status-message-container').classList.contains('bg-red-100')) {
-                showStatusMessage('An unexpected error occurred during address update.', false);
-            }
-        } finally {
-            button.disabled = false;
-            button.textContent = originalText;
-        }
-    }
-
-    // --- Fetch and Render Order History ---
-    async function fetchOrderHistory() {
-        const orderList = document.getElementById('order-history-list');
-        orderList.innerHTML = `
-            <div class="flex justify-center items-center py-10">
-                <i class="fas fa-spinner fa-spin text-3xl text-ash-red"></i>
-                <p class="ml-3 text-gray-600">Loading orders...</p>
-            </div>
-        `;
-        
-        try {
-            // ⭐ FIX: Use secureUserFetch here to ensure Access Token header is sent/refreshed
-            const response = await secureUserFetch(`${API_BASE_URL}/api/orders/history`, { 
-                method: 'GET' 
-            }); 
-            
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error(`Failed to fetch order history (Status: ${response.status}):`, errorText);
-                document.getElementById('order-history-list').innerHTML = '<p class="text-red-500 italic">Failed to load order history. Please ensure you are logged in.</p>';
-                
-                if (response.status === 401 || response.status === 403) {
-                    console.error("Order history fetch unauthorized, forcing redirect.");
-                    handleLogout(); // Use new helper
-                }
-                return;
-            }
-
-            const data = await response.json();
-            currentProfileData.orders = data.orders || [];
-            
-            renderOrderHistory(currentProfileData.orders);
-
-        } catch (error) {
-            console.error('Error fetching order history:', error);
-            document.getElementById('order-history-list').innerHTML = '<p class="text-red-500 italic">Network error fetching order history.</p>';
-        }
-    }
-
-    function renderOrderHistory(orders) {
-        const orderList = document.getElementById('order-history-list');
-        orderList.innerHTML = ''; 
-
-        if (orders.length === 0) {
-            orderList.innerHTML = '<p class="text-gray-500 italic">You have no previous orders.</p>';
-            return;
-        }
-
-        const tableBody = orders.map(order => {
-            let statusClass = '';
-            let statusIcon = '';
-            switch(order.status) {
-                case 'Delivered':
-                    statusClass = 'bg-green-100 text-green-800';
-                    statusIcon = 'check-circle';
-                    break;
-                case 'Shipped':
-                    statusClass = 'bg-blue-100 text-blue-800';
-                    statusIcon = 'truck';
-                    break;
-                case 'Processing':
-                    statusClass = 'bg-yellow-100 text-yellow-800';
-                    statusIcon = 'sync-alt fa-spin';
-                    break;
-                case 'Cancelled':
-                    statusClass = 'bg-red-100 text-red-800';
-                    statusIcon = 'times-circle';
-                    break;
-                default:
-                    statusClass = 'bg-gray-100 text-gray-700';
-                    statusIcon = 'info-circle';
-            }
-            const formattedDate = new Date(order.date).toLocaleDateString('en-US');
-            const formattedTotal = order.total.toFixed(2);
-
-            return `
-                <tr class="border-b hover:bg-gray-50 transition">
-                    <td class="px-6 py-4 font-medium text-gray-900">${order.id}</td>
-                    <td class="px-6 py-4">${formattedDate}</td>
-                    <td class="px-6 py-4">₦${formattedTotal}</td> 
-                    <td class="px-6 py-4">
-                        <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium ${statusClass}">
-                            <i class="fas fa-${statusIcon} mr-2"></i>
-                            ${order.status}
-                        </span>
-                    </td>
-                    <td class="px-6 py-4">
-                        <a href="order-details.html?id=${order.id}" class="text-ash-red hover:text-ash-red-dark font-medium">
-                            View Details
-                        </a>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-
-        orderList.innerHTML = `
-            <div class="overflow-x-auto shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th scope="col" class="relative px-6 py-3"><span class="sr-only">Details</span></th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        ${tableBody}
-                    </tbody>
-                </table>
-            </div>
-        `;
-    }
-
-    /**
-    * Populates the DOM with the latest user data object.
-    */
-    function updateDOM(data) {
-        const profile = data.profile || {};
-        const status = data.status || {};
-        const membership = data.membership || {};
-        const address = data.address || {}; 
-        
-        const fullName = `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 'Guest User';
-        const emailAddress = data.email || 'Email Not Available'; 
-        const userRole = status.role || 'user';
-        const isVerified = status.isVerified;
-        const memberSince = membership.memberSince ? new Date(membership.memberSince).toLocaleDateString() : 'N/A';
-
-        document.getElementById('user-name').textContent = fullName;
-        document.getElementById('user-email').textContent = emailAddress;
-        document.getElementById('user-role').textContent = userRole.toUpperCase();
-        document.getElementById('user-verification').innerHTML = isVerified 
-            ? '<span class="text-green-600 font-bold"><i class="fas fa-check-circle mr-1"></i> Verified</span>'
-            : '<span class="text-red-600 font-bold"><i class="fas fa-times-circle mr-1"></i> Unverified</span>';
-        document.getElementById('member-since').textContent = memberSince;
-        document.getElementById('user-phone').textContent = profile.phone || 'Not Set';
-        document.getElementById('user-whatsapp').textContent = profile.whatsapp || 'Not Set';
-
-
-        document.getElementById('street-address').textContent = address.street || 'Not Set';
-        document.getElementById('city-state-zip').textContent = `${address.city || 'Not Set'}, ${address.state || 'Not Set'} ${address.zip || ''}`;
-        document.getElementById('country').textContent = address.country || 'Not Set';
-        
-        // --- Dynamic Address Button Text ---
-        const isAddressSet = address.street && address.city && address.country;
-        const editAddressButton = document.getElementById('edit-address-button');
-
-        if (editAddressButton) {
-            if (isAddressSet) {
-                editAddressButton.innerHTML = '<i class="fas fa-edit mr-1"></i> Edit';
-                editAddressButton.setAttribute('aria-label', 'Edit Contact Address');
+            if (response.ok) {
+                currentProfileData.profile = data.profile;
+                updateDOM(currentProfileData);
+                closeModal('edit-profile-modal');
+                showStatusMessage('Profile updated successfully!');
             } else {
-                editAddressButton.innerHTML = '<i class="fas fa-plus-circle mr-1"></i> Set Address';
-                editAddressButton.setAttribute('aria-label', 'Set Contact Address');
+                showStatusMessage(data.message || 'Update failed', false);
             }
-        }
-    }
-
-    // --- Submission Handlers (Change Password) ---
-    async function submitChangePassword(event) {
-        event.preventDefault();
-        const button = document.getElementById('submit-password-btn');
-        const originalText = button.textContent;
-        button.disabled = true;
-        button.textContent = 'Updating...';
-
-        const oldPassword = document.getElementById('change-password-old').value;
-        const newPassword = document.getElementById('change-password-new').value;
-        const confirmPassword = document.getElementById('change-password-confirm').value;
-
-        if (newPassword !== confirmPassword) {
-            showStatusMessage('New password and confirmation do not match.', false);
-            button.disabled = false;
-            button.textContent = originalText;
-            return;
-        }
-
-        const passwordData = {
-            currentPassword: oldPassword, 
-            newPassword: newPassword
-        };
-        try {
-            // ⭐ FIX: Use secureUserFetch here to ensure Access Token header is sent/refreshed
-            const response = await secureUserFetch(`${API_BASE_URL}/api/users/change-password`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(passwordData),
-                // credentials: 'include' removed, as secureUserFetch handles auth via header
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                showStatusMessage(data.message || 'Failed to change password.', false);
-                if (response.status === 401 || response.status === 403) {
-                    console.error("Password change unauthorized, forcing logout.");
-                    handleLogout(); // Use new helper
-                    return;
-                }
-                throw new Error(data.message || 'Password change failed');
-            }
-
-            // SUCCESS
-            closeModal('change-password-modal');
-            showStatusMessage('Password updated successfully! Please log in again using your new password.', true);
-            
-            setTimeout(logoutUser, 3000); 
-
         } catch (error) {
-            console.error('Password Change Error:', error);
-            if (!document.getElementById('status-message-container').classList.contains('bg-red-100')) {
-                showStatusMessage('An unexpected error occurred during password change.', false);
-            }
+            showStatusMessage('An error occurred', false);
         } finally {
             button.disabled = false;
             button.textContent = originalText;
         }
     }
-        
-    /**
-    * Attempts to fetch user data and redirects to login on failure (401/403).
-    * Uses secureUserFetch to automatically handle Access Token headers and refresh logic.
-    */
-    async function fetchUserData() {
-        const mainContent = document.getElementById('main-profile-content');
-        const loadingIndicator = document.getElementById('loading-indicator');
-        
-        // Initial display state
-        if (loadingIndicator) loadingIndicator.classList.remove('hidden');
-        if (mainContent) mainContent.classList.add('hidden');
 
-        try {
-            // This already uses secureUserFetch - correct.
-            const response = await secureUserFetch(`${API_BASE_URL}/api/users/account`, {
-                method: 'GET',
-            });
-            
-            console.log(`Fetch Status: ${response.status}`); 
-
-            if (!response.ok) {
-                console.error(`Authentication failed (Status: ${response.status}). Redirecting.`);
-                
-                if (loadingIndicator) loadingIndicator.classList.add('hidden');
-                
-                // secureUserFetch should have called handleLogout if the 401 was non-recoverable,
-                // but we ensure the redirect happens here as a final safeguard.
-                setTimeout(handleLogout, 100); 
-                return; 
-            } 
-            
-            // ------------------ Success Path ------------------
-            const data = await response.json();
-            console.log('User Data fetched successfully:', data);
-            currentProfileData = data;
-            updateDOM(data); 
-
-            // fetchOrderHistory is also fixed above to use secureUserFetch, ensuring consistency.
-            await fetchOrderHistory(); 
-
-            if (loadingIndicator) loadingIndicator.classList.add('hidden');
-            if (mainContent) mainContent.classList.remove('hidden');
-
-        } catch (error) {
-            // This catches network errors or the error thrown by secureUserFetch 
-            // when the Refresh Token itself is invalid (forcing a logout/re-login).
-            console.error("Fetch user data error (Auth Failure or Network):", error);
-            
-            if (loadingIndicator) loadingIndicator.classList.add('hidden');
-            if (mainContent) mainContent.classList.add('hidden');
-            
-            handleLogout(); // Clear state and redirect
-        }
+    // --- Utility Functions ---
+    function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+    
+    function showStatusMessage(msg, isSuccess = true) {
+        const container = document.getElementById('status-message-container');
+        const messageBox = document.getElementById('status-message');
+        messageBox.textContent = msg;
+        container.className = `fixed bottom-4 right-4 p-4 rounded shadow-lg ${isSuccess ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+        container.classList.remove('hidden');
+        setTimeout(() => container.classList.add('hidden'), 5000);
     }
 
+    // Initialize
     document.addEventListener('DOMContentLoaded', fetchUserData);
 </script>
 
