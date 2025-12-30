@@ -945,7 +945,10 @@ function createCollectionCard(collection, size = 'default') {
     else if (maxStock > 0) initialMaxStock = maxStock;
 
     const isOutOfStock = maxStock === 0 || collection.availableStock === 0;
-    const description = collection.tag || (isPreorder ? 'Secure your exclusive item before it sells out' : 'Exclusive limited edition item.');
+
+    // ⭐ FIX: Handle the Description and Product Note
+    const cardDescription = collection.tag || (isPreorder ? 'Secure your exclusive item' : 'Limited edition.');
+    const fullDescription = (collection.description || cardDescription).replace(/'/g, "\\'");
 
     let stockBadge = '';
     let cartButtonText = 'ADD TO CART'; 
@@ -972,26 +975,24 @@ function createCollectionCard(collection, size = 'default') {
                 <button onclick="changeQuantity('${collection._id}', 1)" class="${quantityInputTextSize} text-gray-700 hover:bg-gray-100 ${quantityButtonSize}">&plus;</button>
             </div>`;
 
-   // NEW WAY (Use this)
-const modalPayload = {
-    _id: collection._id,
-    name: collection.name.replace(/'/g, "\\'"),
-    price: collection.price,
-    description: (collection.description || collection.tag || "Exclusive limited edition item.").replace(/'/g, "\\'"),
-    frontImageUrl: frontImageUrl,
-    backImageUrl: backImageUrl,
-    sizeStockMap: collection.sizeStockMap,
-    variants: collection.variants || collection.variations
-};
+    // ⭐ FIX: Prepare the Modal Payload
+    const modalPayload = {
+        _id: collection._id,
+        name: safeName,
+        price: itemPrice,
+        description: fullDescription,
+        frontImageUrl: frontImageUrl,
+        backImageUrl: backImageUrl,
+        sizeStockMap: collection.sizeStockMap,
+        variants: collection.variants || collection.variations
+    };
+    const modalJson = JSON.stringify(modalPayload).replace(/"/g, '&quot;'); 
 
-const modalJson = JSON.stringify(modalPayload).replace(/"/g, '&quot;');
-
-    // ⭐ FIX: Added data-collection-id to the main wrapper
     return `
         <div class="collection-card border border-gray-100 rounded-lg overflow-hidden bg-white hover:shadow-lg transition duration-300 flex flex-col h-full" 
              data-collection-id="${collection._id}">
             
-            <div class="relative card-image-box cursor-pointer" onclick="openImageModalWithCarousel('${imageClickData}')">
+            <div class="relative card-image-box cursor-pointer" onclick="openProductQuickView('${modalJson}')">
                 ${stockBadge}
                 <div class="absolute inset-0">
                     <img class="w-full h-full object-cover absolute transition-opacity duration-300 active" id="front-image-${collection._id}" src="${frontImageUrl}" alt="${collection.name}">
@@ -1007,7 +1008,7 @@ const modalJson = JSON.stringify(modalPayload).replace(/"/g, '&quot;');
             <div class="${cardPadding} flex flex-col flex-grow">
                 <p class="text-[0.6rem] text-gray-500 uppercase font-semibold">Outflickz</p>
                 <h3 class="${nameFontSize} font-semibold text-color-black truncate">${collection.name}</h3>
-                <p class="${descriptionFontSize} text-red-700 mt-0.5 truncate">${description}</p>
+                <p class="${descriptionFontSize} text-red-700 mt-0.5 truncate">${cardDescription}</p>
                 <p class="${priceFontSize} text-ash-dark mt-1">${currencySymbol}${formattedPrice}</p>
 
                 <div class="flex items-center gap-2 mt-2">
@@ -1631,124 +1632,26 @@ async function fetchAndRenderPreorderCollections() {
     }
 }
 
-/**
- * Updates the modal to display the image at the currentImageIndex.
- * @param {string} altText - The alternative text (product name).
- */
-function updateModalImage(altText) {
-    const imageDisplay = document.getElementById('modal-image-display');
-    const prevButton = document.getElementById('modal-prev-btn');
-    const nextButton = document.getElementById('modal-next-btn');
-    const imageCounter = document.getElementById('modal-image-counter'); // New counter element
-
-    if (imageDisplay && modalImageUrls.length > 0) {
-        const imageUrl = modalImageUrls[currentImageIndex] || PLACEHOLDER_URL_MODAL;
-        imageDisplay.src = imageUrl;
-        imageDisplay.alt = `${altText} View ${currentImageIndex + 1}`;
-
-        // Update counter text (1/2 or 2/2)
-        if (imageCounter) {
-            imageCounter.textContent = `${currentImageIndex + 1} / ${modalImageUrls.length}`;
-        }
-        
-        // Control button visibility/disabled state
-        const canSwitch = modalImageUrls.length > 1;
-
-        if (prevButton) {
-            prevButton.style.display = canSwitch ? 'flex' : 'none';
-            prevButton.disabled = currentImageIndex === 0;
-        }
-        if (nextButton) {
-            nextButton.style.display = canSwitch ? 'flex' : 'none';
-            nextButton.disabled = currentImageIndex === modalImageUrls.length - 1;
-        }
-    }
-}
-
-/**
- * Switches the displayed image in the modal (circular movement).
- * @param {number} direction - 1 for next, -1 for previous.
- * @param {string} altText - The product name for alt text.
- */
-function switchModalImage(direction) {
-    if (modalImageUrls.length < 2) return;
-
-    let newIndex = currentImageIndex + direction;
-    
-    // Simple bounds check (non-circular)
-    if (newIndex >= 0 && newIndex < modalImageUrls.length) {
-        currentImageIndex = newIndex;
-    }
-
-    const imageDisplay = document.getElementById('modal-image-display');
-    const altText = imageDisplay ? imageDisplay.alt.split(' View ')[0] : 'Product';
-    
-    updateModalImage(altText);
-}
-
-
-/**
- * Opens the full-screen modal to display a large image with switching controls.
- * @param {string} jsonString - JSON string containing imageUrls (array) and altText.
- */
-function openImageModalWithCarousel(jsonString) {
-    const modal = document.getElementById('image-modal-overlay');
-    
-    try {
-        // Safely parse the data passed from the HTML
-        const data = JSON.parse(jsonString.replace(/\\'/g, "'"));
-        
-        // Filter out placeholders and set global state
-        modalImageUrls = data.imageUrls.filter(url => url && url !== PLACEHOLDER_URL_MODAL && url !== 'null');
-        currentImageIndex = 0;
-
-        if (modal && modalImageUrls.length > 0) {
-            updateModalImage(data.altText);
-            
-            modal.classList.remove('hidden');
-            document.body.style.overflow = 'hidden'; // Prevent scrolling the background
-        } else {
-            console.warn("No valid images available for modal.");
-        }
-    } catch (e) {
-        console.error("Error parsing image data:", e);
-    }
-}
-
-/**
- * Closes the full-screen image modal.
- */
-function closeImageModal() {
-    const modal = document.getElementById('image-modal-overlay');
-    
-    if (modal) {
-        modal.classList.add('hidden');
-        document.body.style.overflow = ''; // Restore background scrolling
-        // Clear global state
-        modalImageUrls = [];
-        currentImageIndex = 0;
-    }
-}
-// --- Consolidated Initialization Logic ---
+// --- Updated Consolidated Initialization Logic ---
 document.addEventListener('DOMContentLoaded', () => {
     
-    // 1. Fetch and Render Collections
+    // 1. Fetch and Render all Collections
+    // These functions now use the updated createCollectionCard which links to the New Modal
     fetchAndRenderWearsCollections(); 
     fetchAndRenderNewArrivals(); 
     fetchAndRenderCapsCollection();
-    fetchAndRenderPreorderCollections(); // New function call
+    fetchAndRenderPreorderCollections();
     
-    // 2. Image Modal Close Handler
-    // Optional: Close modal when clicking outside the image
-    const modal = document.getElementById('image-modal-overlay');
-    if (modal) {
-        modal.addEventListener('click', (e) => {
-            // Close only if the click is directly on the overlay, not the image or button
-            if (e.target.id === 'image-modal-overlay') {
-                closeImageModal();
-            }
-        });
-    }
+    // 2. New Modal Close Handler (Click Outside to Close)
+    // We listen on the 'body' because the modal is created dynamically
+    document.addEventListener('click', (e) => {
+        const modalOverlay = document.getElementById('quick-view-modal');
+        
+        // If the user clicks the dark background (the overlay itself), close it
+        if (modalOverlay && e.target === modalOverlay) {
+            closeQuickView();
+        }
+    });
 });
 </script>
 
