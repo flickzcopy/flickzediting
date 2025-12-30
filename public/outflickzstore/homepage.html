@@ -1148,66 +1148,11 @@ function standardizeStockData(productData) {
     return { totalAvailable, variantsData };
 }
 
-/**
- * Analyzes a product's variants to determine overall stock status 
- * and controls visibility of the 'Out of Stock' label and individual size buttons.
- * @param {object} productData - The database product object.
- * @param {string} productElementId - The ID of the main HTML element wrapping the product (e.g., 'product-card-P123').
- */
-function updateStockStatusDisplay(productData, productElementId) {
-    const productElement = document.getElementById(productElementId);
-    if (!productElement) return;
-
-    // Use the helper function to standardize the stock data
-    const { totalAvailable, variantsData } = standardizeStockData(productData);
-    
-    // --- 1. Iterate through variants and handle individual size visibility (Wears only) ---
-    // This part only affects products with multiple selectable sizes (Wears)
-    if (variantsData.length > 1) { // Only run individual hiding logic if there are multiple sizes
-        variantsData.forEach(variant => {
-            const sizeButton = productElement.querySelector(`[data-size="${variant.size}"]`);
-            
-            if (sizeButton) {
-                if (variant.isAvailable) {
-                    // Ensure size button is active
-                    sizeButton.classList.remove('hidden', 'opacity-50', 'cursor-not-allowed');
-                    sizeButton.disabled = false;
-                } else {
-                    // Requirement: If size is out of stock, it should disappear/be hidden.
-                    sizeButton.classList.add('hidden'); 
-                    // sizeButton.disabled = true; // Optional: use this if you want to display it as disabled instead of hiding
-                }
-            }
-        });
-    }
-
-
-    // --- 2. Determine and display the overall 'Out of Stock' label ---
-    // Requirement: If ALL sizes (Wears) OR the single item (Caps) is out of stock, show the label.
-    const outOfStockLabel = productElement.querySelector('.out-of-stock-label');
-    
-    if (outOfStockLabel) {
-        if (totalAvailable === 0) {
-            outOfStockLabel.classList.remove('hidden');
-            
-            // For single-variant items (Caps), also hide the main size button if present
-            if (variantsData.length === 1) {
-                 const singleSizeButton = productElement.querySelector(`[data-size="${variantsData[0].size}"]`);
-                 if (singleSizeButton) {
-                    singleSizeButton.classList.add('hidden');
-                 }
-            }
-        } else {
-            outOfStockLabel.classList.add('hidden');
-        }
-    }
-}
 function openProductQuickView(jsonPayload) {
     const product = JSON.parse(jsonPayload);
     
-    // 1. Identify if the product is a Cap to exclude size logic
+    // Check if the product is a Cap
     const isCap = product.category === 'CapCollection' || product.collectionType === 'CapCollection';
-
     const existingModal = document.getElementById('quick-view-modal');
     if (existingModal) existingModal.remove();
 
@@ -1219,31 +1164,14 @@ function openProductQuickView(jsonPayload) {
 
     modalOverlay.innerHTML = `
         <div class="bg-white w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl relative animate-in fade-in zoom-in duration-300">
-            
             <button onclick="closeQuickView()" class="absolute top-3 right-3 z-[1050] bg-white/80 rounded-full p-2.5 shadow-md hover:bg-gray-100 transition active:scale-90">
                 <i class="fas fa-times text-lg text-gray-800"></i>
             </button>
 
             <div class="grid grid-cols-1 md:grid-cols-2 h-full">
-                
                 <div class="bg-[#f9f9f9] flex flex-col items-center justify-center relative min-h-[350px] md:min-h-[500px] border-b md:border-b-0 md:border-r border-gray-100 p-4">
                     <div class="w-full h-full flex items-center justify-center overflow-hidden">
-                        <img id="modal-main-image" 
-                             src="${product.frontImageUrl}" 
-                             class="max-w-full max-h-[300px] md:max-h-[450px] object-contain transition-all duration-500 transform hover:scale-105" 
-                             alt="${product.name}">
-                    </div>
-                    
-                    <div class="flex gap-3 mt-4 pb-2">
-                        <button onclick="updateModalImg('${product.frontImageUrl}', this)" 
-                                class="w-12 h-12 rounded border-2 border-black overflow-hidden p-1 bg-white transition-all shadow-sm">
-                            <img src="${product.frontImageUrl}" class="w-full h-full object-contain">
-                        </button>
-                        ${product.backImageUrl ? `
-                        <button onclick="updateModalImg('${product.backImageUrl}', this)" 
-                                class="w-12 h-12 rounded border-2 border-transparent hover:border-gray-300 overflow-hidden p-1 bg-white transition-all shadow-sm">
-                            <img src="${product.backImageUrl}" class="w-full h-full object-contain">
-                        </button>` : ''}
+                        <img id="modal-main-image" src="${product.frontImageUrl}" class="max-w-full max-h-[300px] md:max-h-[450px] object-contain transition-all duration-500 transform hover:scale-105">
                     </div>
                 </div>
 
@@ -1253,18 +1181,10 @@ function openProductQuickView(jsonPayload) {
                             <span class="w-8 h-[1px] bg-red-600"></span>
                             <span class="text-[0.65rem] font-black text-red-600 uppercase tracking-widest">Outflickz Exclusive</span>
                         </div>
-                        
-                        <h2 class="text-2xl sm:text-3xl font-black text-gray-900 leading-tight uppercase tracking-tight">${product.name}</h2>
+                        <h2 class="text-2xl sm:text-3xl font-black text-gray-900 uppercase">${product.name}</h2>
                         <p class="text-2xl font-bold text-gray-900 mt-4">₦${formattedPrice}</p>
                         
                         <div class="h-px bg-gray-100 my-6"></div>
-
-                        <div class="mb-6">
-                            <h4 class="text-[0.7rem] font-bold text-gray-400 uppercase tracking-[0.15em] mb-2">Description</h4>
-                            <p class="text-gray-700 text-sm leading-relaxed">
-                                ${product.description || "Designed for ultimate style and comfort."}
-                            </p>
-                        </div>
 
                         <div class="space-y-6">
                             <div>
@@ -1280,26 +1200,23 @@ function openProductQuickView(jsonPayload) {
                                     ${createSizeList(product._id, product.sizeStockMap, false)}
                                 </div>
                             </div>
+
+                            <div>
+                                <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-3">Quantity</span>
+                                <div class="flex items-center border border-gray-200 w-fit rounded-lg overflow-hidden">
+                                    <button onclick="this.parentNode.querySelector('input').stepDown()" class="px-4 py-2 hover:bg-gray-50 active:bg-gray-100 transition text-gray-600 border-r border-gray-200">-</button>
+                                    <input type="number" id="modal-qty-${product._id}" value="1" min="1" max="10" class="w-12 text-center font-bold text-sm focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none">
+                                    <button onclick="this.parentNode.querySelector('input').stepUp()" class="px-4 py-2 hover:bg-gray-50 active:bg-gray-100 transition text-gray-600 border-l border-gray-200">+</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     <div class="mt-10">
-                        <button onclick="handleModalAddToCart('${product._id}', ${isCap})" 
+                        <button onclick="handleModalAddToCart('${product._id}', '${isCap ? 'CapCollection' : 'Wears'}')" 
                                 class="w-full bg-black text-white py-4 rounded-md font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3 active:scale-[0.97] shadow-lg shadow-black/10">
                             <i class="fas fa-shopping-bag text-sm"></i> Add to Bag
                         </button>
-                        
-                        <div class="flex items-center justify-center gap-4 mt-6 opacity-50">
-                            <div class="flex items-center gap-1.5">
-                                <i class="fas fa-truck text-[10px]"></i>
-                                <span class="text-[0.6rem] font-bold uppercase tracking-tighter">Fast Delivery</span>
-                            </div>
-                            <div class="w-1 h-1 bg-gray-300 rounded-full"></div>
-                            <div class="flex items-center gap-1.5">
-                                <i class="fas fa-undo text-[10px]"></i>
-                                <span class="text-[0.6rem] font-bold uppercase tracking-tighter">Easy Returns</span>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -1327,8 +1244,11 @@ function handleModalAddToCart(productId, productType) {
 
     const selectedSize = window.selectedSizes ? window.selectedSizes[productId] : null;
     const selectedColor = window.selectedColors ? window.selectedColors[productId] : null;
+    
+    // Get quantity from the new input
+    const quantityInput = document.getElementById(`modal-qty-${productId}`);
+    const quantity = quantityInput ? parseInt(quantityInput.value) : 1;
 
-    // ⭐ NEW LOGIC: Only require size if it's NOT a Cap
     const isCap = productType === 'CapCollection';
     
     if (!isCap && !selectedSize) {
@@ -1352,9 +1272,9 @@ function handleModalAddToCart(productId, productType) {
             description: description,
             price: price,
             imageUrl: imageUrl,
-            size: isCap ? "O/S" : selectedSize, // Set "O/S" (One Size) for caps
+            size: isCap ? "O/S" : selectedSize,
             color: selectedColor,
-            quantity: 1
+            quantity: quantity // ⭐ Now uses the selected quantity
         });
 
         // Success UI Feedback
