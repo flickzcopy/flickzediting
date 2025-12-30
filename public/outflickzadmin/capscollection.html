@@ -150,6 +150,12 @@
                                     <option value="Clearance">Clearance</option>
                                 </select>
                             </div>
+                            
+                            <div>
+        <label for="collection-description" class="block text-sm font-medium text-gray-700">Product Description</label>
+        <textarea id="collection-description" rows="3" placeholder="Enter details about material, fit, and style..." class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-emerald-500 focus:border-emerald-500"></textarea>
+        <p class="mt-1 text-xs text-gray-500">Briefly describe the product for the customers.</p>
+    </div>
 
                             <div>
                                 <label for="collection-price" class="block text-sm font-medium text-gray-700">Collection Price (NGN)</label>
@@ -450,6 +456,7 @@ function getAuthToken() {
 
 function resetForm() {
     document.getElementById('caps-collection-form').reset();
+    document.getElementById('collection-description').value = '';
     collectionIdToUpdate = null;
     formTitle.textContent = '➕ Create New Cap Collection';
     submitBtn.textContent = 'Submit Collection';
@@ -583,8 +590,7 @@ function getTagClass(tag) {
         default: return 'bg-gray-100 text-gray-800';
     }
 }
-
-// --- UPDATED: editCollection ---
+// --- UPDATED: editCollection (Corrected with separate Description and Tag) ---
 async function editCollection(collectionId) {
     const token = getAuthToken();
     if (!token) return;
@@ -612,31 +618,40 @@ async function editCollection(collectionId) {
 
         // 2. Populate basic details
         document.getElementById('collection-name').value = collection.name;
-        document.getElementById('collection-description').value = collection.tag;
-        document.getElementById('collection-price').value = collection.price; 
         
-        // The single 'available-stock' field is now conceptually the stock for the first variation,
-        // or just the TOTAL for display/reference, as the backend aggregates it. We use the total.
+        // --- FIX: Correct Mapping ---
+        // If your HTML has a field specifically for the Tag dropdown:
+        const tagField = document.getElementById('collection-tag');
+        if (tagField) {
+            tagField.value = collection.tag;
+        }
+
+        // Map the actual description data to the description field
+        const descField = document.getElementById('collection-description');
+        if (descField) {
+            descField.value = collection.description || ""; 
+        }
+        
+        document.getElementById('collection-price').value = collection.price; 
         document.getElementById('available-stock').value = collection.totalStock; 
         document.getElementById('is-active').checked = collection.isActive;
 
-        // 3. Populate variations (REINSTATED DUAL IMAGE LOGIC)
+        // 3. Populate variations (DUAL IMAGE LOGIC)
         productSectionsContainer.innerHTML = '';
         sectionCount = 0;
 
         collection.variations.forEach(variation => {
             const sectionNumber = variation.variationIndex;
-            // Assumes backend provides frontImageUrl and backImageUrl fields (signed URLs are used in the detail view)
             const frontUrl = variation.frontImageUrl || null;
             const backUrl = variation.backImageUrl || null;
 
             const newSection = document.createElement('div');
-            // Pass both signed image URLs
+            // Pass both signed image URLs to the creator
             newSection.innerHTML = createProductSection(sectionNumber - 1, frontUrl, backUrl).trim();
             productSectionsContainer.appendChild(newSection.firstChild);
             sectionCount++;
 
-            // Populate color
+            // Populate color for this variation
             const colorInput = document.getElementById(`color-input-${sectionNumber}`);
             if (colorInput) {
                 colorInput.value = variation.colorHex;
@@ -648,7 +663,10 @@ async function editCollection(collectionId) {
         updateAddSectionButtonState();
 
         // 5. Scroll to the form
-        document.getElementById('content-capscollection').scrollIntoView({ behavior: 'smooth' });
+        const formContainer = document.getElementById('content-capscollection');
+        if (formContainer) {
+            formContainer.scrollIntoView({ behavior: 'smooth' });
+        }
 
     } catch (error) {
         console.error('Error fetching collection for edit:', error);
@@ -1048,6 +1066,7 @@ async function handleCollectionSubmit(event) {
     const collectionData = {
         name: document.getElementById('collection-name').value,
         tag: document.getElementById('collection-description').value,
+        description: document.getElementById('collection-description').value, // Add this line
         price: parseFloat(document.getElementById('collection-price').value), 
         // sizes field removed
         totalStock: 0, // Placeholder. Backend middleware calculates this.

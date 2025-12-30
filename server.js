@@ -818,6 +818,13 @@ const NewArrivalsSchema = new mongoose.Schema({
         trim: true,
         maxlength: [100, 'Product name cannot exceed 100 characters']
     },
+    description: {
+        type: String,
+        required: [true, 'Product description is required'],
+        trim: true,
+        maxlength: [1000, 'Description cannot exceed 1000 characters'],
+        default: 'Quality premium apparel from Outflickz.'
+    },
     tag: {
         type: String,
         required: [true, 'Product tag is required'],
@@ -899,6 +906,12 @@ const CapVariationSchema = new mongoose.Schema({
 // --- 🧢 UPDATED CAP COLLECTION SCHEMA AND MODEL 🧢 ---
 const CapCollectionSchema = new mongoose.Schema({
     name: { type: String, required: [true, 'Collection name is required'], trim: true, maxlength: [100, 'Collection name cannot exceed 100 characters'] },
+    description: { 
+        type: String, 
+        trim: true, 
+        maxlength: [1000, 'Description cannot exceed 1000 characters'],
+        default: '' 
+    },
     tag: { type: String, required: [true, 'Collection tag is required'], enum: ['Top Deal', 'Hot Deal', 'New', 'Seasonal', 'Clearance'] },
     price: { type: Number, required: [true, 'Price (in NGN) is required'], min: [0.01, 'Price (in NGN) must be greater than zero'] },
     variations: {
@@ -3880,15 +3893,11 @@ app.delete('/api/admin/capscollections/:id', verifyToken, async (req, res) => {
     }
 });
 
-/**
- * GET /api/admin/newarrivals - Fetch All New Arrivals
- * Fetches all products, sorts them, and generates signed URLs for all variation images.
- */
 app.get('/api/admin/newarrivals', verifyToken, async (req, res) => {
     try {
-        // 1. Fetch all products
+        // 1. Fetch all products - Added 'description' to the select list
         const products = await NewArrivals.find({})
-            .select('_id name tag price variations totalStock isActive')
+            .select('_id name description tag price variations totalStock isActive') // UPDATED
             .sort({ createdAt: -1 })
             .lean();
 
@@ -3896,7 +3905,6 @@ app.get('/api/admin/newarrivals', verifyToken, async (req, res) => {
         const signedProducts = await Promise.all(products.map(async (product) => {
             const signedVariations = await Promise.all(product.variations.map(async (v) => ({
                 ...v,
-                // Generate signed URLs for image retrieval
                 frontImageUrl: await generateSignedUrl(v.frontImageUrl) || v.frontImageUrl,
                 backImageUrl: await generateSignedUrl(v.backImageUrl) || v.backImageUrl
             })));
@@ -3910,20 +3918,17 @@ app.get('/api/admin/newarrivals', verifyToken, async (req, res) => {
     }
 });
 
-/**
- * GET /api/admin/newarrivals/:id - Fetch Single New Arrival
- * Fetches a single product by ID and generates signed URLs for its variation images.
- */
 app.get('/api/admin/newarrivals/:id', verifyToken, async (req, res) => {
     try {
         const productId = req.params.id;
+        // This will now include 'description' if it exists in the DB
         const product = await NewArrivals.findById(productId).lean();
 
         if (!product) {
             return res.status(404).json({ message: 'Product not found.' });
         }
 
-        // Sign URLs
+        // Sign URLs logic remains the same
         const signedVariations = await Promise.all(product.variations.map(async (v) => ({
             ...v,
             frontImageUrl: await generateSignedUrl(v.frontImageUrl) || v.frontImageUrl, 
@@ -4003,10 +4008,9 @@ app.post(
             
             const newProduct = new NewArrivals({
                 name: productData.name,
+                description: productData.description, // ADD THIS LINE
                 tag: productData.tag,
                 price: productData.price, 
-                // The sizes field was correctly removed from the main schema, 
-                // so we don't try to assign productData.sizes here.
                 isActive: productData.isActive, 
                 variations: finalVariations, 
             });
@@ -4150,6 +4154,7 @@ app.put(
             
             // Update the Document Fields
             existingProduct.name = productData.name;
+            existingProduct.description = productData.description; // ADD THIS LINE
             existingProduct.tag = productData.tag;
             existingProduct.price = productData.price;
             // The sizes field was correctly removed from the main schema, do not update it here.
@@ -5036,41 +5041,32 @@ app.get('/api/collections/wears', async (req, res) => {
 app.get('/api/collections/newarrivals', async (req, res) => {
     try {
         const products = await NewArrivals.find({ isActive: true }) 
-            .select('_id name tag price variations totalStock') 
+            // --- UPDATED: Added 'description' to the select string ---
+            .select('_id name description tag price variations totalStock') 
             .sort({ createdAt: -1 })
             .lean(); 
 
         const publicProducts = await Promise.all(products.map(async (product) => {
             
             const sizeStockMap = {}; 
-            
-            // --- CRITICAL: Variables for OOS Image Fallback ---
             let fallbackFrontImageUrl = null;
             let fallbackBackImageUrl = null;
-            const PLACEHOLDER_S3_PATH = 'public/placeholder-image-v1.jpg'; // Path to your default placeholder
+            const PLACEHOLDER_S3_PATH = 'public/placeholder-image-v1.jpg';
 
-            // --- CRITICAL: Filter Variants and Aggregate Stock ---
             const filteredVariantsWithStock = [];
 
             for (const v of product.variations || []) {
-                
-                // 1. SIGN THE VARIATION IMAGES
                 const signedFrontUrl = await generateSignedUrl(v.frontImageUrl);
                 const signedBackUrl = await generateSignedUrl(v.backImageUrl);
                 
-                // 2. Capture the first signed URL encountered for the OOS fallback (Runs once)
                 if (!fallbackFrontImageUrl && signedFrontUrl) {
                     fallbackFrontImageUrl = signedFrontUrl;
                     fallbackBackImageUrl = signedBackUrl;
                 }
                 
-                // 3. Calculate total stock for THIS specific color (variant)
                 const variantTotalStock = (v.sizes || []).reduce((sum, s) => sum + (s.stock || 0), 0);
                 
-                // 4. ONLY INCLUDE THE VARIANT IF IT HAS STOCK
                 if (variantTotalStock > 0) {
-                    
-                    // 5. Aggregate size stock for the top-level sizeStockMap
                     (v.sizes || []).forEach(s => {
                         const normalizedSize = s.size.toUpperCase().trim();
                         if (s.stock > 0) {
@@ -5078,7 +5074,6 @@ app.get('/api/collections/newarrivals', async (req, res) => {
                         }
                     });
 
-                    // 6. Map and prepare the public variant object
                     filteredVariantsWithStock.push({
                         color: v.colorHex,
                         frontImageUrl: signedFrontUrl || 'https://placehold.co/400x400/111111/FFFFFF?text=Front+View+Error',
@@ -5090,22 +5085,20 @@ app.get('/api/collections/newarrivals', async (req, res) => {
                     });
                 }
             }
-            // --- END CRITICAL FILTERING ---
 
-            // --- CRITICAL IMAGE FIX: Failsafe for Missing Data ---
             if (!fallbackFrontImageUrl) {
                 const signedPlaceholder = await generateSignedUrl(PLACEHOLDER_S3_PATH);
                 fallbackFrontImageUrl = signedPlaceholder;
                 fallbackBackImageUrl = signedPlaceholder;
             }
-            // --- END CRITICAL IMAGE FIX ---
 
             return {
                 _id: product._id,
                 name: product.name,
+                // --- ADDED: Include the description in the final object ---
+                description: product.description || '', 
                 tag: product.tag,
                 price: product.price, 
-                // 💡 OOS/Fallback Images
                 frontImageUrl: fallbackFrontImageUrl,
                 backImageUrl: fallbackBackImageUrl,
                 sizeStockMap: sizeStockMap,
