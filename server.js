@@ -6769,8 +6769,9 @@ app.post('/api/notifications/admin-order-email', async (req, res) => {
     }
 });
 
+
 // =========================================================
-// 7. POST /api/orders/place/pending - Updated with Receipt Return
+// 7. POST /api/orders/place/pending - Corrected for Guest Validation
 // =========================================================
 app.post('/api/orders/place/pending', verifyUserToken, (req, res) => {
     singleReceiptUpload(req, res, async (err) => {
@@ -6788,7 +6789,7 @@ app.post('/api/orders/place/pending', verifyUserToken, (req, res) => {
             paymentMethod, 
             totalAmount: totalAmountString, 
             orderItems: orderItemsString,
-            email: guestEmail,
+            email: guestEmailFromForm, // Incoming guest email from frontend
             subtotal: subtotalString,
             shippingFee: shippingFeeString,
             tax: taxString
@@ -6843,8 +6844,10 @@ app.post('/api/orders/place/pending', verifyUserToken, (req, res) => {
 
             const orderRef = `REF-${Date.now()}-${isGuest ? 'GUEST' : userId.substring(0, 5)}`; 
 
-            const newOrder = await Order.create({
+            // ⭐ FIX: Map the fields to match your Mongoose Schema exactly
+            const orderPayload = {
                 userId: userId, 
+                isGuest: isGuest, // Set explicit guest status
                 items: finalOrderItems, 
                 shippingAddress: shippingAddress,
                 totalAmount: totalAmount,
@@ -6854,15 +6857,20 @@ app.post('/api/orders/place/pending', verifyUserToken, (req, res) => {
                 status: 'Pending', 
                 paymentMethod: paymentMethod,
                 orderReference: orderRef, 
-                paymentReceiptUrl: paymentReceiptUrl,
-                customerEmail: isGuest ? (shippingAddress.email || guestEmail) : undefined 
-            });
+                paymentReceiptUrl: paymentReceiptUrl
+            };
+
+            // ⭐ CRITICAL: If guest, provide guestEmail to satisfy schema 'required' logic
+            if (isGuest) {
+                orderPayload.guestEmail = guestEmailFromForm || (shippingAddress && shippingAddress.email);
+            }
+
+            const newOrder = await Order.create(orderPayload);
 
             if (!isGuest) {
                 await Cart.findOneAndUpdate({ userId }, { items: [], updatedAt: Date.now() });
             }
             
-            // ⭐ THE KEY FIX: Return paymentReceiptUrl so Frontend can notify Admin
             res.status(201).json({
                 message: 'Order placed successfully.',
                 orderId: newOrder._id,
@@ -6873,7 +6881,8 @@ app.post('/api/orders/place/pending', verifyUserToken, (req, res) => {
 
         } catch (error) {
             console.error('Order Error:', error);
-            res.status(500).json({ message: error.message });
+            // This will now capture and display if a specific field is still missing
+            res.status(500).json({ message: `Database Error: ${error.message}` });
         }
     });
 });

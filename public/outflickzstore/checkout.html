@@ -1362,7 +1362,6 @@ function toggleBankTransferDetails() {
     }
 }
 
-
 async function processBankTransferOrder(totalAmount, email) {
     const rawOrderItems = localStorage.getItem('outflickzOrderItems');
     const orderItems = JSON.parse(rawOrderItems || "[]");
@@ -1389,6 +1388,9 @@ async function processBankTransferOrder(totalAmount, email) {
         const subtotal = localStorage.getItem('outflickzOrderSubtotal') || "0";
         const shippingFee = localStorage.getItem('outflickzOrderShipping') || "0";
         const tax = localStorage.getItem('outflickzOrderTax') || "0";
+        
+        // ⭐ FIX: Determine if this is a Guest Checkout
+        const isLoggedIn = isUserLoggedIn(); // Based on your existing auth helper
 
         const formData = new FormData();
         formData.append('receipt', receiptFile);
@@ -1396,7 +1398,11 @@ async function processBankTransferOrder(totalAmount, email) {
         formData.append('orderItems', JSON.stringify(orderItems)); 
         formData.append('paymentMethod', 'Bank Transfer');
         formData.append('totalAmount', totalAmount.toString());
-        formData.append('email', email);
+        
+        // ⭐ CRITICAL: Match the keys the backend is looking for
+        formData.append('email', email); 
+        formData.append('isGuest', (!isLoggedIn).toString());
+        
         formData.append('subtotal', subtotal);
         formData.append('shippingFee', shippingFee);
         formData.append('tax', tax);
@@ -1410,8 +1416,7 @@ async function processBankTransferOrder(totalAmount, email) {
         const data = await response.json();
 
         if (response.ok) {
-            // 2. ⭐ TRIGGER ADMIN NOTIFICATION
-            // Using your existing helper function with the data returned from server
+            // 2. TRIGGER ADMIN NOTIFICATION
             try {
                 await sendAdminOrderNotification(data.orderReference, 'Bank Transfer', data.paymentReceiptUrl);
             } catch (notifErr) {
@@ -1428,6 +1433,7 @@ async function processBankTransferOrder(totalAmount, email) {
             }, 'banktransfer');
 
         } else {
+            // ⭐ BETTER ERROR HANDLING: If the backend throws a validation error, we show it
             throw new Error(data.message || "Failed to place order.");
         }
 
