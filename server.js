@@ -2989,115 +2989,158 @@ app.post('/api/admin/newsletter/send', verifyToken, async (req, res) => {
 
 app.get('/api/admin/users/all', verifyToken, async (req, res) => {
     try {
-        // Fetch all users. Select only necessary fields and exclude the password (which is selected: false by default, but we re-specify for clarity).
+        // 1. Fetch Registered Users
         const users = await User.find({})
-            .select('email profile address status membership')
-            .lean(); // Use .lean() for faster query performance since we are only reading
+            .select('email profile status membership')
+            .lean();
 
-        // Transform the data to match the frontend's expected format (if needed, but here we just return the array)
         const transformedUsers = users.map(user => ({
             _id: user._id,
-            name: `${user.profile.firstName || ''} ${user.profile.lastName || ''}`.trim() || 'N/A',
+            name: `${user.profile?.firstName || ''} ${user.profile?.lastName || ''}`.trim() || 'N/A',
             email: user.email,
-            isMember: user.status.role === 'vip', // Determine membership status
-            createdAt: user.membership.memberSince,
-            // Include other fields if the admin needs them, but for the table, this is enough
+            isMember: user.status?.role === 'vip',
+            isGuest: false, // Explicitly marked as registered
+            createdAt: user.membership?.memberSince,
         }));
 
+        // 2. Fetch Unique Guest Emails from Orders
+        // We look for orders where userId is null
+        const guestOrders = await Order.find({ userId: null })
+            .select('guestEmail shippingAddress createdAt')
+            .sort({ createdAt: -1 })
+            .lean();
 
-        // Success Response
+        // Use a Map to keep only the most recent entry for each guest email
+        const guestMap = new Map();
+        guestOrders.forEach(order => {
+            const email = order.guestEmail || order.shippingAddress?.email;
+            if (email && !guestMap.has(email)) {
+                guestMap.set(email, {
+                    _id: order._id, // Using Order ID as a reference for guests
+                    name: `${order.shippingAddress?.firstName || ''} ${order.shippingAddress?.lastName || ''}`.trim() || 'Guest User',
+                    email: email,
+                    isMember: false,
+                    isGuest: true, // Explicitly marked as guest
+                    createdAt: order.createdAt,
+                });
+            }
+        });
+
+        // 3. Combine and Return
+        const allUsers = [...transformedUsers, ...Array.from(guestMap.values())];
+
         return res.status(200).json({ 
-            users: transformedUsers,
-            count: transformedUsers.length
+            users: allUsers,
+            count: allUsers.length
         });
 
     } catch (error) {
         console.error('Admin user fetch error:', error);
-        // Return a generic server error
         return res.status(500).json({ message: 'Server error: Failed to retrieve user list.' });
     }
 });
-
-// EXISTING: 1. GET /api/admin/users/:id (Fetch Single User Profile - Protected Admin)
 app.get('/api/admin/users/:id', verifyToken, async (req, res) => {
     try {
-        const userId = req.params.id;
+        const id = req.params.id;
+        let detailedUser = null;
 
-        const user = await User.findById(userId)
+        // Try to find a Registered User first
+        const user = await User.findById(id)
             .select('email profile address status membership')
             .lean();
 
-        if (!user) {
-            return res.status(404).json({ message: 'User not found.' });
+        if (user) {
+            const addressParts = [
+                user.address?.street, user.address?.city, user.address?.state, user.address?.zip, user.address?.country
+            ].filter(Boolean);
+            
+            detailedUser = {
+                _id: user._id,
+                name: `${user.profile?.firstName || ''} ${user.profile?.lastName || ''}`.trim() || 'N/A',
+                email: user.email,
+                isMember: user.status?.role === 'vip',
+                isGuest: false,
+                createdAt: user.membership?.memberSince,
+                phone: user.profile?.phone || 'N/A',
+                whatsappNumber: user.profile?.whatsapp || 'N/A', 
+                contactAddress: addressParts.length > 0 ? addressParts.join(', ') : 'No Address Provided'
+            };
+        } else {
+            // If no user found, look for a Guest Order using this ID (or email)
+            const latestOrder = await Order.findOne({ 
+                $or: [{ _id: id }, { guestEmail: id }, { "shippingAddress.email": id }],
+                userId: null 
+            }).sort({ createdAt: -1 }).lean();
+
+            if (latestOrder) {
+                const s = latestOrder.shippingAddress;
+                detailedUser = {
+                    _id: latestOrder._id,
+                    name: s ? `${s.firstName || ''} ${s.lastName || ''}`.trim() : 'Guest Customer',
+                    email: latestOrder.guestEmail || s?.email,
+                    isMember: false,
+                    isGuest: true,
+                    createdAt: latestOrder.createdAt,
+                    phone: s?.phone || 'N/A',
+                    whatsappNumber: s?.whatsapp || 'N/A',
+                    contactAddress: s ? `${s.street}, ${s.city}, ${s.state}` : 'No Address Provided'
+                };
+            }
         }
 
-        const addressParts = [
-            user.address?.street,
-            user.address?.city,
-            user.address?.state,
-            user.address?.zip,
-            user.address?.country
-        ].filter(Boolean);
-        
-        const contactAddress = addressParts.length > 0 ? addressParts.join(', ') : 'No Address Provided';
+        if (!detailedUser) return res.status(404).json({ message: 'Customer record not found.' });
 
-        const detailedUser = {
-            _id: user._id,
-            name: `${user.profile.firstName || ''} ${user.profile.lastName || ''}`.trim() || 'N/A',
-            email: user.email,
-            isMember: user.status.role === 'vip',
-            createdAt: user.membership.memberSince,
-            phone: user.profile.phone || 'N/A',
-            // --- 📢 NEW ADDITION FOR WHATSAPP CONTACT 📢 ---
-            whatsappNumber: user.profile.whatsapp || 'N/A', 
-            // ----------------------------------------------------
-            contactAddress: contactAddress
-        };
-
-        return res.status(200).json({ 
-            user: detailedUser
-        });
+        return res.status(200).json({ user: detailedUser });
 
     } catch (error) {
-        if (error.kind === 'ObjectId') {
-            return res.status(400).json({ message: 'Invalid User ID format.' });
-        }
-        console.error('Admin single user fetch error:', error);
-        return res.status(500).json({ message: 'Server error: Failed to retrieve user details.' });
+        console.error('Admin profile fetch error:', error);
+        return res.status(500).json({ message: 'Server error retrieving details.' });
     }
 });
+
 
 app.get('/api/admin/users/:userId/orders', verifyToken, async (req, res) => {
     try {
         const userId = req.params.userId;
-        const userExists = await User.exists({ _id: userId });
-        if (!userExists) return res.status(404).json({ message: 'User not found.' });
+        let query;
 
-        // ⭐️ STRICT QUERY: Fetch only "Real" orders directly from MongoDB
+        // Check if the ID belongs to a registered User
+        const userExists = await User.exists({ _id: userId });
+
+        if (userExists) {
+            // Query for Registered User
+            query = { userId: userId };
+        } else {
+            // Query for Guest: Find all orders with this guest's email 
+            // We first get the email from the "ID" (which might be an order ID or email)
+            const refOrder = await Order.findById(userId).select('guestEmail shippingAddress').lean();
+            const email = refOrder?.guestEmail || refOrder?.shippingAddress?.email || userId;
+
+            query = { 
+                userId: null, 
+                $or: [{ guestEmail: email }, { "shippingAddress.email": email }] 
+            };
+        }
+
+        // Apply your existing filters for "Real" orders
         const userOrders = await Order.find({ 
-            userId: userId,
+            ...query,
             $or: [
-                { paymentMethod: { $ne: 'Paystack' } }, // Include Bank Transfers
-                { paymentStatus: 'Paid' },              // Include Paid Paystack
-                { status: { $ne: 'Pending' } }          // Include anything Admin processed
+                { paymentMethod: { $ne: 'Paystack' } }, 
+                { paymentStatus: 'Paid' },             
+                { status: { $ne: 'Pending' } }         
             ]
         }) 
         .sort({ createdAt: -1 })
         .lean();
 
-        const augmentedOrders = userOrders.map(order => ({
-            ...order,
-            items: order.items || [], 
-        }));
-
         return res.status(200).json({ 
-            orders: augmentedOrders,
-            count: augmentedOrders.length
+            orders: userOrders.map(o => ({ ...o, items: o.items || [] })),
+            count: userOrders.length
         });
 
     } catch (error) {
-        if (error.kind === 'ObjectId') return res.status(400).json({ message: 'Invalid User ID.' });
-        res.status(500).json({ message: 'Server error: Failed to retrieve user history.' });
+        res.status(500).json({ message: 'Server error retrieving history.' });
     }
 });
 
