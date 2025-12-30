@@ -907,8 +907,9 @@ async function fetchUserData() {
 
 
 
-    /**
- * Fetches the initial cart data, CHECKING FOR A 'BUY NOW' ITEM FIRST.
+ /**
+ * ⭐ UPDATED: Fetches cart data from LocalStorage (Guest) or API (User).
+ * Removed all "Buy Now" logic and guest API calls to prevent 404/JSON errors.
  */
 async function fetchInitialCartData() {
     const subtotalEl = document.getElementById('summary-subtotal');
@@ -919,117 +920,74 @@ async function fetchInitialCartData() {
     const itemsListEl = document.getElementById('review-items-list');
     const paymentBtn = document.getElementById('checkout-next-btn');
     
-    // Set loading state
-    subtotalEl.textContent = '...';
-    shippingCostEl.textContent = '...';
-    taxEstimateEl.textContent = '...';
-    estimatedTotalEl.textContent = '...';
-    finalTotalEl.textContent = '...';
+    // 1. UI Reset & Loading State
+    const elements = [subtotalEl, shippingCostEl, taxEstimateEl, estimatedTotalEl, finalTotalEl];
+    elements.forEach(el => { if(el) el.textContent = '...'; });
     itemsListEl.innerHTML = '<div class="text-center py-6 text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i> Loading order details...</div>';
     paymentBtn.disabled = true;
 
-    let cartData;
-    
+    // 2. Remove any residual Buy Now data from session
+    sessionStorage.removeItem('outflickzBuyNowItem'); 
+
     const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-    const isStandardCartCheckout = localCart.length > 0;
-    const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
-    
-    // =========================================================================
-    // 🎯 BUY NOW / PRE-ORDER LOGIC START
-    // =========================================================================
-    if (buyNowItemJSON && !isStandardCartCheckout) { 
-        console.log("Processing Buy Now flow...");
-        
-        const storedData = JSON.parse(buyNowItemJSON);
-        
-        // ⭐ UNWRAP THE ARRAY: The backend destructures req.body directly
-        // It needs { productId: ... } NOT [ { productId: ... } ]
-        let item = Array.isArray(storedData) ? storedData[0] : storedData;
-
-        if (!item) {
-            itemsListEl.innerHTML = '<div class="text-center py-6 text-red-500">Item details missing.</div>';
-            return;
-        }
-
-        // ⭐ CRITICAL SANITIZATION FOR BACKEND VALIDATION
-        item.productType = (item.productType && item.productType !== "undefined" && item.productType !== "Uncategorized") 
-                           ? item.productType 
-                           : 'Wears'; 
-        
-        // Ensure size is never empty (backend requirement)
-        if (!item.size || item.size === "") {
-            item.size = item.variation || 'Standard';
-        }
-
-        // Ensure variationIndex is a number
-        item.variationIndex = parseInt(item.variationIndex, 10) || 1;
-
-        try {
-            // 🎯 THE FIX: Send 'item' (Object), not 'storedData' (Array)
-            const response = await secureUserFetch(`${API_BASE_URL}/api/orders/calculate-buy-now`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(item) 
-            });
-            
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Failed to calculate Buy Now totals.');
-            }
-
-            cartData = await response.json(); 
-            renderCartData(cartData, paymentBtn);
-            return; 
-
-        } catch (error) {
-            console.error('Error fetching Buy Now totals:', error);
-            itemsListEl.innerHTML = `<div class="text-center py-6 text-red-500">${error.message}</div>`;
-            displayMessage(error.message);
-            return;
-        }
-    }
-
-    // =========================================================================
-    // --- STANDARD CART LOGIC START ---
-    // =========================================================================
-    if (buyNowItemJSON && isStandardCartCheckout) {
-          console.warn('Clearing residual BUY_NOW_KEY to proceed with Standard Cart.');
-          sessionStorage.removeItem(BUY_NOW_KEY); 
-    }
-
-    if (!isUserLoggedIn() && localCart.length === 0) {
-        displayMessage('Your cart is empty. Redirecting to home.');
-        setTimeout(() => window.location.href = 'homepage.html', 1500);
-        return;
-    }
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
 
     try {
-        const url = isUserLoggedIn() ? `${API_BASE_URL}/api/users/cart` : `${API_BASE_URL}/api/guest/cart`;
-        const fetcher = isUserLoggedIn() ? secureUserFetch : fetch;
-        
-        const response = await fetcher(url, { method: 'GET' });
+        let cartData;
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to fetch cart data.');
+        if (!token) {
+            // --- GUEST LOGIC: Calculate totals locally to avoid 404 ---
+            if (localCart.length === 0) {
+                handleEmptyCheckout();
+                return;
+            }
+            
+            const subtotal = localCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            cartData = {
+                items: localCart,
+                subtotal: subtotal,
+                shipping: 0, // Force 0.00 shipping
+                tax: 0
+            };
+            console.log("Guest checkout processed locally.");
+        } else {
+            // --- LOGGED-IN USER LOGIC: Fetch from API ---
+            const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { method: 'GET' });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to fetch cart data.');
+            }
+
+            cartData = await response.json();
+            
+            // Force shipping to 0 in data object
+            cartData.shipping = 0; 
         }
 
-        cartData = await response.json();
-
         if (!cartData.items || cartData.items.length === 0) {
-            displayMessage('Your cart is empty. Redirecting to home.');
-            setTimeout(() => window.location.href = 'homepage.html', 1500);
+            handleEmptyCheckout();
             return;
         }
         
+        // 3. Render the final data
         renderCartData(cartData, paymentBtn);
         
     } catch (error) {
-        console.error('Error fetching cart data:', error);
-        itemsListEl.innerHTML = '<div class="text-center py-6 text-red-500">Error loading cart.</div>';
+        console.error('Checkout Error:', error);
+        itemsListEl.innerHTML = '<div class="text-center py-6 text-red-500">Error loading cart. Please try again.</div>';
         displayMessage(error.message);
-        paymentBtn.disabled = true;
     }
+}
+
+/**
+ * Helper to handle empty cart redirection
+ */
+function handleEmptyCheckout() {
+    const itemsListEl = document.getElementById('review-items-list');
+    itemsListEl.innerHTML = '<div class="text-center py-6 text-gray-500">Your cart is empty.</div>';
+    displayMessage('Your cart is empty. Redirecting to home.');
+    setTimeout(() => window.location.href = 'homepage.html', 1500);
 }
 
     /**
@@ -1107,87 +1065,65 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
      * @param {object} payload - The order and payment details.
      * @param {string} orderType - 'paystack' or 'banktransfer'.
      */
-    async function finalizeOrderOnServer(payload, orderType) {
-        const payBtn = document.getElementById('checkout-next-btn');
-        // NOTE: isBuyNow check is not strictly needed here as we don't hit the server API
-        
-        try {
-            payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Completing Order...';
+  async function finalizeOrderOnServer(payload, orderType) {
+    const payBtn = document.getElementById('checkout-next-btn');
+    
+    try {
+        payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Completing Order...';
 
-            // CRITICAL FIX: Paystack/Card orders MUST be finalized by the server-side webhook.
-            if (orderType === 'paystack') {
-                console.error('CRITICAL ERROR: Paystack order should be finalized by webhook, not by client-side call to finalizeOrderOnServer.');
-                // We throw an error here, preventing further execution if somehow Paystack flow reaches this point
-                throw new Error('Payment finalization error. Please contact support.');
-            }
+        if (orderType === 'paystack') {
+            console.error('CRITICAL ERROR: Paystack order should be finalized by webhook.');
+            throw new Error('Payment finalization error. Please contact support.');
+        }
 
-            // --- Logic for Bank Transfer (server work already done by /pending) ---
-            if (orderType === 'banktransfer') {
-                console.log('Bank Transfer: Skipping server finalization call. Performing client cleanup and redirect.');
-                
-                // 🎯 STEP 1: Send Admin Notification (using server-provided orderId)
-                sendAdminOrderNotification(
-                    payload.orderId || payload.orderRef, 
-                    payload.paymentMethod, 
-                    payload.receiptUrl
-                );
+        if (orderType === 'banktransfer') {
+            sendAdminOrderNotification(
+                payload.orderId || payload.orderRef, 
+                payload.paymentMethod, 
+                payload.receiptUrl
+            );
 
-                // STEP 2: Clear local storage items (cleanup)
-                localStorage.removeItem(LOCAL_CART_KEY);
-                localStorage.setItem(CART_STORAGE_KEY, '0');
-                localStorage.removeItem('outflickzOrderTotal');
-                localStorage.removeItem('outflickzOrderItems'); 
-                localStorage.removeItem('outflickzOrderSubtotal');
-                localStorage.removeItem('outflickzOrderShipping');
-                localStorage.removeItem('outflickzOrderTax');
-                sessionStorage.removeItem(BUY_NOW_KEY); // <-- Clean up BUY_NOW flag after successful order
+            // Cleanup
+            localStorage.removeItem(LOCAL_CART_KEY);
+            localStorage.setItem(CART_STORAGE_KEY, '0');
+            localStorage.removeItem('outflickzOrderTotal');
+            localStorage.removeItem('outflickzOrderItems'); 
+            // Removed Buy Now cleanup as it's no longer used
 
-                updateCartBadge();
-                displayMessage('Pending order placed successfully! Awaiting verification...');
+            updateCartBadge();
+            displayMessage('Pending order placed successfully!');
 
-                // STEP 3: Redirect
-                setTimeout(() => {
-                    const queryParam = `id=${payload.orderId}`; 
-                    window.location.href = `orderconfirmation.html?${queryParam}&method=${orderType}`;
-                }, 2000);
-                
-                return; // Terminate function execution for Bank Transfer
-            }
-
-        } catch (error) {
-            console.error('Order Finalization Error:', error);
-            displayMessage(error.message || 'A network error occurred during order finalization. Please contact support.');
-            payBtn.disabled = false;
-            payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
-        }
-    }
+            setTimeout(() => {
+                const queryParam = `id=${payload.orderId}`; 
+                window.location.href = `orderconfirmation.html?${queryParam}&method=${orderType}`;
+            }, 2000);
+            return;
+        }
+    } catch (error) {
+        console.error('Order Finalization Error:', error);
+        displayMessage(error.message || 'Error occurred.');
+        payBtn.disabled = false;
+        payBtn.innerHTML = 'Confirm & Pay Now';
+    }
+}
 
 async function processPaystackPayment(totalAmount, email) {
     const payBtn = document.getElementById('checkout-next-btn');
     const shippingAddress = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
     
-    let itemsToOrder = [];
-    const buyNowItemJSON = sessionStorage.getItem(BUY_NOW_KEY);
-
-    if (buyNowItemJSON) {
-        const item = JSON.parse(buyNowItemJSON);
-        // Ensure itemsToOrder is an array of objects for the backend
-        itemsToOrder = Array.isArray(item) ? item : [item];
-    } else {
-        itemsToOrder = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
-    }
+    // ⭐ ALWAYS get items from Local Cart now
+    const itemsToOrder = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
     
     if (itemsToOrder.length === 0) {
         displayMessage("Your cart is empty.");
+        payBtn.disabled = false;
+        payBtn.innerHTML = 'Confirm & Pay Now';
         return;
     }
 
     payBtn.disabled = true;
     payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Initializing...';
 
-    let mongoOrderId;
-    let paystackReference; 
-    
     try {
         const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/paystack`, {
             method: 'POST',
@@ -1196,8 +1132,8 @@ async function processPaystackPayment(totalAmount, email) {
                 shippingAddress, 
                 totalAmount, 
                 subtotal: localStorage.getItem('outflickzOrderSubtotal') || '0',
-                shippingFee: localStorage.getItem('outflickzOrderShipping') || '0',
-                tax: localStorage.getItem('outflickzOrderTax') || '0',
+                shippingFee: '0.00', // Making sure shipping is 0 as requested
+                tax: '0.00',
                 orderItems: itemsToOrder 
             })
         });
@@ -1205,41 +1141,31 @@ async function processPaystackPayment(totalAmount, email) {
         const data = await response.json();
         if (!response.ok) throw new Error(data.message);
         
-        mongoOrderId = data.orderId; 
-        paystackReference = data.orderReference;
+        const handler = PaystackPop.setup({
+            key: PAYSTACK_PUBLIC_KEY,
+            email: email,
+            amount: Math.round(totalAmount * 100), 
+            ref: data.orderReference,
+            currency: 'NGN',
+            metadata: { order_id: data.orderId },
+            callback: function(response) {
+                payBtn.innerHTML = '<i class="fas fa-sync fa-spin"></i> Verifying...';
+                verifyPayment(response.reference);
+            },
+            onClose: function() {
+                payBtn.disabled = false;
+                payBtn.innerHTML = 'Confirm & Pay Now';
+            }
+        });
+        handler.openIframe();
 
     } catch (error) {
         displayMessage(`Error: ${error.message}`);
         payBtn.disabled = false;
         payBtn.innerHTML = 'Confirm & Pay Now';
-        return;
     }
-
-    // ⭐ FIX: Paystack handler setup
-    const handler = PaystackPop.setup({
-        key: PAYSTACK_PUBLIC_KEY,
-        email: email,
-        amount: Math.round(totalAmount * 100), 
-        ref: paystackReference,
-        currency: 'NGN',
-        metadata: {
-            order_id: mongoOrderId 
-        },
-        // ⭐ FIX: Changed 'async function' to standard function to satisfy Paystack's validator
-        callback: function(response) {
-            payBtn.innerHTML = '<i class="fas fa-sync fa-spin"></i> Verifying...';
-            
-            // Execute the async verification inside the callback
-            verifyPayment(response.reference);
-        },
-        onClose: function() {
-            payBtn.disabled = false;
-            payBtn.innerHTML = 'Confirm & Pay Now';
-        }
-    });
-    
-    handler.openIframe();
 }
+
 
 async function verifyPayment(reference) {
     try {

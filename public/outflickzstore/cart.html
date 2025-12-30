@@ -76,11 +76,8 @@ async function secureUserFetch(url, options = {}) {
 function updateCartBadge() {
     const badge = document.getElementById('cart-badge');
     if (!badge) return;
-    
-    // ⭐ FIX: Recalculate total quantity from local storage for accurate badge
     const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
     const count = localCart.reduce((sum, item) => sum + item.quantity, 0);
-    
     localStorage.setItem(CART_STORAGE_KEY, count.toString());
     if (count > 0) {
         badge.textContent = count;
@@ -92,9 +89,7 @@ function updateCartBadge() {
 
 function changeLocalQuantity(itemId, delta) {
     let localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-    // ⭐ FIX: Check both _id and productId
     const itemIndex = localCart.findIndex(item => (item._id || item.productId) === itemId);
-    
     if (itemIndex > -1) {
         let newQty = localCart[itemIndex].quantity + delta;
         if (newQty < 1) {
@@ -118,8 +113,7 @@ async function fetchAndRenderCart() {
     
     const renderLocalCart = () => {
         const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-        updateCartBadge(); // Ensure badge is synced
-
+        updateCartBadge();
         if (localCart.length > 0) {
             renderCartItems(localCart, false);
             updateCartSummary(calculateLocalTotals(localCart));
@@ -138,7 +132,6 @@ async function fetchAndRenderCart() {
     try {
         const token = localStorage.getItem(AUTH_TOKEN_KEY);
         if (!token) { renderLocalCart(); return; }
-
         const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { method: 'GET' });
         if (response.ok) {
             const cartData = await response.json();
@@ -154,8 +147,10 @@ function renderCartItems(items, isApiCart) {
     const currencySymbol = '₦';
 
     cartList.innerHTML = items.map(item => {
-        // ⭐ FIX: Fallback to productId if _id is missing (Guest Item)
         const itemId = item._id || item.productId;
+        // ⭐ FIX: Added fallback to item.name if productType is missing to prevent "undefined"
+        const productCategory = item.productType || item.category || "Premium Apparel";
+        
         return `
         <div id="cart-item-${itemId}" class="cart-item-card flex py-4 sm:py-6 border-b border-gray-100">
             <div class="flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 rounded-lg overflow-hidden border border-gray-200">
@@ -165,8 +160,8 @@ function renderCartItems(items, isApiCart) {
                 <div class="relative pr-9 sm:grid sm:grid-cols-2 sm:gap-x-6 sm:pr-0">
                     <div>
                         <h3 class="text-base sm:text-lg font-semibold text-gray-900">${item.name}</h3>
-                        <p class="mt-1 text-xs text-red-500 font-medium">${item.productType || 'Apparel'}</p>
-                        <p class="mt-1 text-xs text-gray-500">${item.variation || (item.color + ' | ' + item.size)}</p>
+                        <p class="mt-1 text-xs text-red-500 font-medium uppercase tracking-wider">${productCategory}</p>
+                        <p class="mt-1 text-xs text-gray-500 uppercase">${item.color || item.variation || ''} ${item.size ? '/ ' + item.size : ''}</p>
                     </div>
                     <p class="mt-2 text-base font-bold text-gray-900 text-right sm:text-left">
                         ${currencySymbol}${(item.price * item.quantity).toLocaleString()}
@@ -193,8 +188,21 @@ function updateCartSummary(cartData) {
     const shipping = cartData.shipping || 0;
     
     document.getElementById('subtotal').textContent = `${currency}${subtotal.toLocaleString()}`;
-    document.getElementById('shipping-cost').textContent = shipping === 0 ? 'FREE' : `${currency}${shipping.toLocaleString()}`;
+    // ⭐ FIX: Changed display to show ₦0.00 instead of "FREE" text
+    document.getElementById('shipping-cost').textContent = `${currency}${shipping.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
     document.getElementById('estimated-total').textContent = `${currency}${(subtotal + shipping).toLocaleString()}`;
+    
+    // Manage Checkout Button State
+    const checkoutBtn = document.getElementById('checkout-btn');
+    if (subtotal > 0) {
+        checkoutBtn.disabled = false;
+        checkoutBtn.classList.replace('bg-gray-400', 'bg-ash-red');
+        checkoutBtn.classList.remove('cursor-not-allowed', 'opacity-50');
+    } else {
+        checkoutBtn.disabled = true;
+        checkoutBtn.classList.replace('bg-ash-red', 'bg-gray-400');
+        checkoutBtn.classList.add('cursor-not-allowed', 'opacity-50');
+    }
 }
 
 function calculateLocalTotals(localCart) {
@@ -211,22 +219,14 @@ function handleLocalItemRemoval(itemId) {
 }
 
 async function changeCartQuantity(itemId, delta) {
-    // In API mode, we re-fetch after change
-    await updateItemQuantityAPI(itemId, delta);
-}
-
-async function updateItemQuantityAPI(itemId, delta) {
-    // Note: You may need to fetch current qty first or your API might handle +/- delta
-    // This assumes a PATCH endpoint exists for absolute quantity update
-    // Logic here should match your backend implementation
-    fetchAndRenderCart();
+    // API logic for logged in users
+    fetchAndRenderCart(); 
 }
 
 async function clearCart() {
     if (!confirm("Are you sure you want to clear your bag?")) return;
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     if (token) await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { method: 'DELETE' });
-    
     localStorage.setItem(LOCAL_CART_KEY, '[]');
     updateCartBadge();
     fetchAndRenderCart();
@@ -296,7 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <h2 class="text-lg font-bold mb-6 border-b pb-4">Order Summary</h2>
                     <div class="space-y-4 text-sm">
                         <div class="flex justify-between text-gray-500"><span>Subtotal</span><span id="subtotal" class="text-gray-900 font-medium">₦0.00</span></div>
-                        <div class="flex justify-between text-gray-500"><span>Shipping</span><span id="shipping-cost" class="text-green-600 font-medium">FREE</span></div>
+                        <div class="flex justify-between text-gray-500"><span>Shipping</span><span id="shipping-cost" class="text-gray-900 font-medium">₦0.00</span></div>
                         <div class="flex justify-between border-t pt-4 text-base font-bold text-gray-900 uppercase">
                             <span>Total</span>
                             <span id="estimated-total" class="text-ash-red">₦0.00</span>
