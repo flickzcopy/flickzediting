@@ -1217,7 +1217,7 @@ async function verifyPayment(reference, mongoId) {
         if (paymentMethod.value === 'Paystack/Card') {
             processPaystackPayment(totalAmount, email);
         } else if (paymentMethod.value === 'Bank Transfer') {
-            await processBankTransferOrder(totalAmount, shippingAddress);
+        await processBankTransferOrder(totalAmount, email);
         } else {
             // Fallback for other payment methods if needed
             displayMessage(`Payment method ${paymentMethod.value} selected, but not yet implemented.`);
@@ -1362,7 +1362,7 @@ function toggleBankTransferDetails() {
  * Handles receipt upload and order creation.
  */
 async function processBankTransferOrder(totalAmount, email) {
-    const receiptFile = document.getElementById('receipt-upload').files[0];
+const receiptInput = document.getElementById('bank-receipt-upload');
     if (!receiptFile) {
         displayMessage("Please upload your transfer receipt.");
         return;
