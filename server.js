@@ -18,7 +18,7 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 // --- CORS Configuration (The Fix) ---
 const allowedOrigins = [
-    'https://outflickzz.netlify.app',
+    'https://outflickzs.netlify.app',
     'https://outflickzz.com' // Make sure you allow your primary domain too
 ];
 
@@ -6002,54 +6002,6 @@ app.get('/api/auth/status', (req, res) => {
         // Failed all checks.
         console.error("DEBUG STATUS: Session Cookie verification failed:", err.message);
         return res.status(401).json({ message: 'Session cookie invalid or expired. Re-login required.' });
-    }
-});
-
-// =========================================================
-// NEW: POST /api/orders/calculate-buy-now - Calculate Totals for Single Item (Buy Now/Pre-Order)
-// =========================================================
-app.post('/api/orders/calculate-buy-now', verifyUserToken, async (req, res) => {
-    // This endpoint calculates totals for a single item passed in the request body, 
-    // simulating a checkout from the product page (Buy Now).
-
-    // ⭐ CRITICAL FIX: Ensure productType is included as it is required by the OrderItemSchema
-    const { productId, name, productType, size, color, price, quantity, imageUrl, variationIndex, variation } = req.body;
-
-    // 1. Basic Input Validation
-    if (!productId || !name || !productType || !size || !price || !quantity || price <= 0 || quantity < 1 || variationIndex === undefined || variationIndex === null) {
-        return res.status(400).json({ message: 'Missing or invalid item details, including required productType or variation information, for calculation.' });
-    }
-
-    // 2. Construct the temporary cart item array, ensuring all necessary fields are present
-    // Note: For Cap items, 'size' will contain the variation identifier (e.g., color hex) as fixed on the client-side.
-    const temporaryItem = {
-        productId,
-        name,
-        productType, 
-        size,
-        color: color || 'N/A',
-        price, // This price acts as 'priceAtTimeOfPurchase' for the calculation
-        quantity,
-        imageUrl,
-        variationIndex,
-        // Use provided variation string, or construct one if only color/index is available
-        variation: variation || (color ? `Color: ${color}` : `Var Index: ${variationIndex}`),
-    };
-
-    try {
-        // 3. Calculate totals using the existing function (which handles shipping/tax rules)
-        // Since this is for Buy Now, we pass only the single item in an array.
-        const totals = calculateCartTotals([temporaryItem]); 
-
-        // 4. Respond with the single item (in an array) and the calculated totals
-        res.status(200).json({
-            items: [temporaryItem], // Return the item in an array structure consistent with the cart API
-            ...totals,
-        });
-
-    } catch (error) {
-        console.error('Error calculating Buy Now totals:', error);
-        res.status(500).json({ message: 'Failed to calculate order totals.' });
     }
 });
 
