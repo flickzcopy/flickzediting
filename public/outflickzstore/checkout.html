@@ -246,89 +246,81 @@
                     </div>
                 </section>
 
-             <section id="payment-section" class="bg-white p-6 sm:p-8 rounded-lg shadow-md border border-gray-100 hidden">
+           <section id="payment-section" class="bg-white p-6 sm:p-8 rounded-lg shadow-md border border-gray-100 hidden">
     <h2 class="text-xl sm:text-2xl font-bold text-ash-dark mb-6 border-b pb-4">3. Payment</h2>
     
     <div class="space-y-6">
         <p class="text-gray-700">Please select your preferred payment method:</p>
 
         <div class="space-y-4">
-            
             <div class="relative flex items-start border border-gray-300 rounded-md p-4 transition-all focus-within:ring-2 focus-within:ring-ash-red">
                 <div class="flex items-center h-5">
-                    <input id="payment-paystack" name="payment-method" type="radio" value="Paystack/Card" checked class="focus:ring-ash-red h-4 w-4 text-ash-red border-gray-300" onchange="hideBankTransferDetails()">
+                    <input id="payment-paystack" name="payment-method" type="radio" value="Paystack/Card" checked class="focus:ring-ash-red h-4 w-4 text-ash-red border-gray-300" onchange="toggleBankTransferDetails()">
                 </div>
                 <div class="ml-3 text-sm flex-1">
                     <label for="payment-paystack" class="font-medium text-gray-900 flex justify-between items-center">
                         Paystack
                         <img src="https://i.imgur.com/fuT8ucM.png" alt="Paystack" class="h-5">
                     </label>
-                    
-                    <p id="paystack-description" class="text-gray-500 mt-1">
-                        Pay securely with your Visa, MasterCard, or Verve card.
-                    </p>
-                    <div id="paystack-redirection-message" class="flex items-center text-sm font-semibold text-ash-red mt-2 p-2 bg-red-50 rounded-md">
-                        <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg>
-                        After clicking “Confirm & Pay Now”, you will be redirected to Paystack to complete your purchase securely.
-                    </div>
+                    <p class="text-gray-500 mt-1">Pay securely with your Visa, MasterCard, or Verve card.</p>
                 </div>
             </div>
+
             <div class="relative flex items-start border border-gray-300 rounded-md p-4 transition-all focus-within:ring-2 focus-within:ring-ash-red">
                 <div class="flex items-center h-5">
-                    <input id="payment-bank" name="payment-method" type="radio" value="Bank Transfer" class="focus:ring-ash-red h-4 w-4 text-ash-red border-gray-300" onchange="showBankTransferDetails()">
+                    <input id="payment-bank" name="payment-method" type="radio" value="Bank Transfer" class="focus:ring-ash-red h-4 w-4 text-ash-red border-gray-300" onchange="toggleBankTransferDetails()">
                 </div>
-
 
                 <div class="ml-3 text-sm flex-1">
                     <label for="payment-bank" class="font-medium text-gray-900">
                         Direct Bank Transfer (Manual)
                     </label>
-                    <p id="bank-description" class="text-gray-500">View details below and complete payment manually.</p>
+                    <p class="text-gray-500">View details below and complete payment manually.</p>
                     
                     <div id="bank-details-info" class="mt-3 p-3 bg-gray-100 rounded-md border border-gray-200" style="display:none;">
+                        <div class="mb-4 p-2 bg-amber-50 border-l-4 border-amber-500 text-amber-800 text-xs">
+                            <strong>⚠️ IMPORTANT:</strong> Please use your <strong>Full Name</strong> as the transfer narration (remark) so we can identify your payment.
+                        </div>
+
                         <h4 class="font-bold text-ash-dark mb-3 text-base">Select Account for Transfer:</h4>
 
                         <div id="account-dropdowns" class="space-y-3">
-                            
                             <div class="border border-gray-300 rounded-lg overflow-hidden">
                                 <button type="button" 
                                         class="bank-toggle w-full flex justify-between items-center p-3 font-semibold text-left transition duration-150 text-base" 
                                         data-target="moniepoint-details" 
-                                        data-name="Moniepoint"
-                                        aria-expanded="false"
                                         onclick="toggleBankDetails('moniepoint-details')">
                                     <span class="flex items-center">
                                         <img src="https://i.imgur.com/GlrvtEQ.png" alt="Moniepoint Logo" class="h-5 w-auto mr-3">
                                         Moniepoint MFB
                                     </span>
-                                    <svg class="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                    <svg class="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                                 </button>
                                 <div id="moniepoint-details" class="bank-details-content p-3 pt-0 bg-white" style="display: none;">
                                     <hr class="mb-2 border-gray-200">
                                     <p class="text-sm font-mono break-words">
                                         <span class="font-bold block">Account Name: Outflickz Limited</span>
-                                        <span class="font-bold block mt-1">Account Number: 6515769257</span>
+                                        <span class="font-bold block mt-1 text-ash-red">Account Number: 6515769257</span>
                                     </p>
                                 </div>
                             </div>
-
                         </div>
+
                         <div id="bank-transfer-receipt-upload" class="hidden mt-4 pt-3 border-t border-gray-300">
                             <h4 class="font-bold text-ash-dark mb-2 text-base">Upload Payment Receipt <span class="text-ash-red">*</span></h4>
-                            <p class="text-xs text-gray-500 mb-2">Upload a screenshot/proof of payment to proceed with manual verification.</p>
-                            <input type="file" id="bank-receipt-upload" name="bank-receipt-upload" accept="image/*, application/pdf" class="w-full text-sm text-gray-900 border border-gray-300 rounded-sm cursor-pointer bg-white file:py-2 file:px-4 file:border-0 file:bg-ash-red file:text-white hover:file:bg-red-700 transition">
+                            <p class="text-xs text-gray-500 mb-2">Upload a screenshot/proof of payment to proceed.</p>
+                            <input type="file" id="bank-receipt-upload" name="bank-receipt-upload" accept="image/*" class="w-full text-sm text-gray-900 border border-gray-300 rounded-sm cursor-pointer bg-white file:py-2 file:px-4 file:border-0 file:bg-ash-red file:text-white hover:file:bg-red-700 transition">
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-        
-        <div class="mt-6 border-t border-gray-200 pt-4">
-            <div class="flex justify-between items-center">
-                <p class="text-lg font-bold text-ash-dark">Total Due Now</p>
-                <p class="text-2xl font-extrabold text-ash-red">₦<span id="summary-estimated-total-final">0.00</span></p>
-            </div>
-            <p class="text-xs text-gray-500 mt-1">By clicking "Confirm & Pay Now", you agree to our Terms of Use.</p>
+    </div>
+
+    <div class="mt-6 border-t border-gray-200 pt-4">
+        <div class="flex justify-between items-center">
+            <p class="text-lg font-bold text-ash-dark">Total Due Now</p>
+            <p class="text-2xl font-extrabold text-ash-red">₦<span id="summary-estimated-total-final">0.00</span></p>
         </div>
     </div>
 </section>
@@ -1107,12 +1099,16 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
     }
 }
 
+/**
+ * ⭐ UPDATED: Processes Paystack payment using the items currently in the cart.
+ * Ensures productType alignment and proper metadata for webhooks.
+ */
 async function processPaystackPayment(totalAmount, email) {
     const payBtn = document.getElementById('checkout-next-btn');
     const shippingAddress = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
     
-    // ⭐ ALWAYS get items from Local Cart now
-    const itemsToOrder = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
+    // Get items from local storage
+    let itemsToOrder = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
     
     if (itemsToOrder.length === 0) {
         displayMessage("Your cart is empty.");
@@ -1121,10 +1117,19 @@ async function processPaystackPayment(totalAmount, email) {
         return;
     }
 
+    // ⭐ FIX: Ensure every item has a schema-compliant productType before sending to API
+    itemsToOrder = itemsToOrder.map(item => {
+        let pType = item.productType;
+        if (pType === 'Wears') pType = 'WearsCollection';
+        else if (pType === 'Caps') pType = 'CapCollection';
+        return { ...item, productType: pType };
+    });
+
     payBtn.disabled = true;
     payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Initializing...';
 
     try {
+        // Step 1: Create the pending order in the database
         const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/paystack`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1132,25 +1137,30 @@ async function processPaystackPayment(totalAmount, email) {
                 shippingAddress, 
                 totalAmount, 
                 subtotal: localStorage.getItem('outflickzOrderSubtotal') || '0',
-                shippingFee: '0.00', // Making sure shipping is 0 as requested
+                shippingFee: '0.00', 
                 tax: '0.00',
                 orderItems: itemsToOrder 
             })
         });
 
         const data = await response.json();
-        if (!response.ok) throw new Error(data.message);
+        if (!response.ok) throw new Error(data.message || "Failed to initialize order");
         
+        // Step 2: Open Paystack Pop
         const handler = PaystackPop.setup({
             key: PAYSTACK_PUBLIC_KEY,
             email: email,
-            amount: Math.round(totalAmount * 100), 
+            amount: Math.round(totalAmount * 100), // Convert to Kobo
             ref: data.orderReference,
             currency: 'NGN',
-            metadata: { order_id: data.orderId },
+            metadata: { 
+                order_id: data.orderId,
+                custom_fields: [{ display_name: "Order ID", variable_name: "order_id", value: data.orderId }]
+            },
             callback: function(response) {
                 payBtn.innerHTML = '<i class="fas fa-sync fa-spin"></i> Verifying...';
-                verifyPayment(response.reference);
+                // Step 3: Verify and Redirect
+                verifyPayment(response.reference, data.orderId);
             },
             onClose: function() {
                 payBtn.disabled = false;
@@ -1160,25 +1170,36 @@ async function processPaystackPayment(totalAmount, email) {
         handler.openIframe();
 
     } catch (error) {
+        console.error("Paystack Init Error:", error);
         displayMessage(`Error: ${error.message}`);
         payBtn.disabled = false;
         payBtn.innerHTML = 'Confirm & Pay Now';
     }
 }
 
-
-async function verifyPayment(reference) {
+/**
+ * ⭐ UPDATED: Verifies payment and handles the redirect to confirmation page.
+ */
+async function verifyPayment(reference, mongoId) {
     try {
-        await secureUserFetch(`${API_BASE_URL}/api/orders/verify/${reference}`);
+        const response = await secureUserFetch(`${API_BASE_URL}/api/orders/verify/${reference}`);
         
-        // SUCCESS! Update the redirect to include the method
-        localStorage.removeItem(LOCAL_CART_KEY);
-        sessionStorage.removeItem(BUY_NOW_KEY);
-        // FIX: Added &method=paystack
-        window.location.href = `orderconfirmation.html?ref=${reference}&method=paystack`; 
+        if (response.ok) {
+            // Cleanup on success
+            localStorage.removeItem(LOCAL_CART_KEY);
+            localStorage.setItem(CART_STORAGE_KEY, '0');
+            sessionStorage.removeItem(BUY_NOW_KEY);
+            
+            // Redirect using the MongoDB ID as the primary key for the confirmation page
+            window.location.href = `orderconfirmation.html?id=${mongoId}&ref=${reference}&method=paystack`;
+        } else {
+            // Even if verification fetch fails, we redirect to confirmation 
+            // The confirmation page will poll the status.
+            window.location.href = `orderconfirmation.html?id=${mongoId}&ref=${reference}&method=paystack`;
+        }
     } catch (err) {
-        // FALLBACK: Update this redirect as well
-        window.location.href = `orderconfirmation.html?ref=${reference}&method=paystack`;
+        console.error("Verification Error:", err);
+        window.location.href = `orderconfirmation.html?id=${mongoId}&ref=${reference}&method=paystack`;
     }
 }
 
@@ -1293,58 +1314,59 @@ function toggleBankDetails(targetId) {
         if (targetToggle) targetToggle.querySelector('svg').classList.add('rotate-180');
     }
 }
-
-    /**
- * Toggles the visibility of the main manual bank transfer details section 
- * and the receipt upload field based on which payment radio button is checked.
- * This resolves the ReferenceError you were seeing. (No fix needed here, logic is correct)
- */
+/**
+ * ⭐ CONSOLIDATED: Toggles all Bank Transfer UI elements.
+ * Handles the main container, the receipt upload requirement, and accordion resets.
+ */
 function toggleBankTransferDetails() {
-    // Get the radio buttons
-    const paystackRadio = document.getElementById('payment-paystack');
-    const bankRadio = document.getElementById('payment-bank');
-    
-    // Get the main bank transfer containers
-    const bankDetailsInfo = document.getElementById('bank-details-info');
-    const receiptUpload = document.getElementById('bank-transfer-receipt-upload');
-    
-    // Check if the Bank Transfer radio button is checked
-    if (bankRadio && bankRadio.checked) {
-        // --- Bank Transfer selected: SHOW DETAILS ---
-        
-        // Ensure the main bank details section is visible
-        if (bankDetailsInfo) {
-            bankDetailsInfo.style.display = 'block';
-        }
-        
-        // Ensure the receipt upload is visible (as it's a manual process)
-        if (receiptUpload) {
-            receiptUpload.style.display = 'block';
-        }
+    const bankRadio = document.getElementById('payment-bank');
+    const bankDetailsInfo = document.getElementById('bank-details-info');
+    const receiptUploadSection = document.getElementById('bank-transfer-receipt-upload');
+    const receiptInput = document.getElementById('bank-receipt-upload');
+    
+    const isBankChecked = bankRadio && bankRadio.checked;
 
-        // OPTIONAL: If the bank details accordion should auto-open one account, 
-        // you would call toggleBankDetails('moniepoint-details') here.
+    // 1. Toggle Visibility of the Bank Information and Receipt Upload
+    if (bankDetailsInfo) {
+        bankDetailsInfo.style.display = isBankChecked ? 'block' : 'none';
+    }
+    
+    if (receiptUploadSection) {
+        // We use classList.toggle for Tailwind 'hidden' consistency
+        if (isBankChecked) {
+            receiptUploadSection.classList.remove('hidden');
+            receiptUploadSection.style.display = 'block'; // Double-down for safety
+        } else {
+            receiptUploadSection.classList.add('hidden');
+            receiptUploadSection.style.display = 'none';
+        }
+    }
 
-    } else {
-        // --- Paystack/Card selected: HIDE DETAILS ---
-
-        // Hide the main bank details section
-        if (bankDetailsInfo) {
-            bankDetailsInfo.style.display = 'none';
-        }
-        
-        // Hide the receipt upload field
-        if (receiptUpload) {
-            receiptUpload.style.display = 'none';
-        }
-        
-        // OPTIONAL: Close any open bank accordions when switching away
-        // const allContent = document.querySelectorAll('.bank-details-content');
-        // allContent.forEach(content => {
-        //     content.style.display = 'none';
-        //     // Logic to reset the SVG icon (similar to your toggleBankDetails logic)
-        // });
-    }
+    // 2. Handle 'required' attribute for the Receipt Image
+    if (receiptInput) {
+        if (isBankChecked) {
+            receiptInput.setAttribute('required', 'required');
+        } else {
+            receiptInput.removeAttribute('required');
+            receiptInput.value = ""; // Clear file if they switch back to Paystack
+        }
+    }
+    
+    // 3. Cleanup: Close all internal bank accordions if Bank Transfer is deselected
+    if (!isBankChecked) {
+        document.querySelectorAll('.bank-details-content').forEach(content => {
+            content.style.display = 'none';
+        });
+        document.querySelectorAll('.bank-toggle svg').forEach(icon => {
+            icon.classList.remove('rotate-180');
+        });
+    } else {
+        // OPTIONAL: Auto-open the first bank (Moniepoint) to help the user
+        const moniepoint = document.getElementById('moniepoint-details');
+        if (moniepoint && moniepoint.style.display === 'none') {
+            toggleBankDetails('moniepoint-details');
+        }
+    }
 }
 
 /**

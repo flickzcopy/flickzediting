@@ -146,11 +146,27 @@ function renderCartItems(items, isApiCart) {
     const cartList = document.getElementById('cart-items-list');
     const currencySymbol = '₦';
 
+    // Map your Database Collection names to Clean Display Names for the frontend
+    const typeLabels = {
+        'WearsCollection': 'Wears',
+        'CapCollection': 'Caps',
+        'NewArrivals': 'New Arrival',
+        'PreOrderCollection': 'Pre-Order'
+    };
+
     cartList.innerHTML = items.map(item => {
         const itemId = item._id || item.productId;
-        // ⭐ FIX: Added fallback to item.name if productType is missing to prevent "undefined"
-        const productCategory = item.productType || item.category || "Premium Apparel";
         
+        // Match the Schema productType and map to a clean label, or fallback to name/category
+        let displayCategory = 'Premium Apparel';
+        if (item.productType && typeLabels[item.productType]) {
+            displayCategory = typeLabels[item.productType];
+        } else if (item.productType && item.productType !== "undefined") {
+            displayCategory = item.productType.replace('Collection', '');
+        } else if (item.category) {
+            displayCategory = item.category;
+        }
+
         return `
         <div id="cart-item-${itemId}" class="cart-item-card flex py-4 sm:py-6 border-b border-gray-100">
             <div class="flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 rounded-lg overflow-hidden border border-gray-200">
@@ -160,8 +176,11 @@ function renderCartItems(items, isApiCart) {
                 <div class="relative pr-9 sm:grid sm:grid-cols-2 sm:gap-x-6 sm:pr-0">
                     <div>
                         <h3 class="text-base sm:text-lg font-semibold text-gray-900">${item.name}</h3>
-                        <p class="mt-1 text-xs text-red-500 font-medium uppercase tracking-wider">${productCategory}</p>
-                        <p class="mt-1 text-xs text-gray-500 uppercase">${item.color || item.variation || ''} ${item.size ? '/ ' + item.size : ''}</p>
+                        <p class="mt-1 text-xs text-red-500 font-medium uppercase tracking-wider">${displayCategory}</p>
+                        <p class="mt-1 text-xs text-gray-500 uppercase">
+                            ${item.color || item.variation || ''} 
+                            ${item.size ? ' / ' + item.size : ''}
+                        </p>
                     </div>
                     <p class="mt-2 text-base font-bold text-gray-900 text-right sm:text-left">
                         ${currencySymbol}${(item.price * item.quantity).toLocaleString()}
@@ -188,11 +207,9 @@ function updateCartSummary(cartData) {
     const shipping = cartData.shipping || 0;
     
     document.getElementById('subtotal').textContent = `${currency}${subtotal.toLocaleString()}`;
-    // ⭐ FIX: Changed display to show ₦0.00 instead of "FREE" text
     document.getElementById('shipping-cost').textContent = `${currency}${shipping.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
     document.getElementById('estimated-total').textContent = `${currency}${(subtotal + shipping).toLocaleString()}`;
     
-    // Manage Checkout Button State
     const checkoutBtn = document.getElementById('checkout-btn');
     if (subtotal > 0) {
         checkoutBtn.disabled = false;
@@ -219,8 +236,25 @@ function handleLocalItemRemoval(itemId) {
 }
 
 async function changeCartQuantity(itemId, delta) {
-    // API logic for logged in users
-    fetchAndRenderCart(); 
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (!token) return;
+    try {
+        const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/quantity`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ productId: itemId, delta })
+        });
+        if (response.ok) fetchAndRenderCart();
+    } catch (e) { console.error(e); }
+}
+
+async function removeItemFromCart(itemId) {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (!token) return;
+    try {
+        const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/${itemId}`, { method: 'DELETE' });
+        if (response.ok) fetchAndRenderCart();
+    } catch (e) { console.error(e); }
 }
 
 async function clearCart() {

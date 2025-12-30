@@ -526,7 +526,7 @@ function addToCart(collectionId, quantity) {
 }
 /**
  * Handles adding an item to the cart. 
- * Integrated with Size Validation, Guest logic, and API Sync.
+ * Integrated with Schema-specific ProductTypes and API Sync.
  */
 async function simulateAddToCart(productDetails) {
     // --- 1. Gather all item details from DOM ---
@@ -536,14 +536,13 @@ async function simulateAddToCart(productDetails) {
         return;
     }
     
-    // Selectors for size and color
     const selectedSizeInput = card.querySelector(`input[name="size-${productDetails.productId}"]:checked`);
     const selectedColorInput = card.querySelector(`input[name="color-${productDetails.productId}"]:checked`);
     
     // --- 2. Validation ---
     const sizeOptions = card.querySelectorAll(`input[name="size-${productDetails.productId}"]`);
     if (sizeOptions.length > 0 && !selectedSizeInput) {
-        displayCartAlert("Please select a size before adding to bag.", "error");
+        displayCartAlert("Please select a size before adding to cart.", "error");
         const sizeContainer = card.querySelector('.flex.gap-1.text-gray-700.flex-wrap');
         sizeContainer?.classList.add('ring-1', 'ring-red-500', 'p-1', 'rounded');
         setTimeout(() => sizeContainer?.classList.remove('ring-1', 'ring-red-500', 'p-1'), 2000);
@@ -567,7 +566,8 @@ async function simulateAddToCart(productDetails) {
                     selectedImageUrl = newImageUrls.frontImageUrl; 
                     const colorMapKeys = Object.keys(colorMap);
                     const inferredIndex = colorMapKeys.indexOf(color);
-                    if (inferredIndex !== -1) variationIndex = inferredIndex + 1;
+                    // Ensure variationIndex is within schema range 1-4
+                    if (inferredIndex !== -1) variationIndex = Math.min(inferredIndex + 1, 4);
                 }
             } catch (e) { console.error("Color map parsing error", e); }
         }
@@ -580,10 +580,22 @@ async function simulateAddToCart(productDetails) {
     const quantityInput = card.querySelector(`#quantity-input-${productDetails.productId}`);
     const quantity = parseInt(quantityInput?.value) || 1;
 
+    // ⭐ FIX: Aligning with Backend Schema Enums
+    // We ensure the productType matches 'WearsCollection', 'CapCollection', etc.
+    const validTypes = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
+    let finalProductType = productDetails.productType;
+    
+    if (!validTypes.includes(finalProductType)) {
+        // Fallback logic if the incoming type is just "Wears"
+        if (finalProductType === 'Wears') finalProductType = 'WearsCollection';
+        else if (finalProductType === 'Caps') finalProductType = 'CapCollection';
+        else finalProductType = 'WearsCollection'; // Default fallback
+    }
+
     const itemData = {
         productId: productDetails.productId,
         name: productDetails.name, 
-        productType: productDetails.productType || 'Wears', 
+        productType: finalProductType, // Matches Schema
         price: productDetails.price, 
         quantity: quantity,
         size: size,
@@ -597,7 +609,7 @@ async function simulateAddToCart(productDetails) {
     const handleLocalCartOnly = (details) => {
         let localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
         const existingItemIndex = localCart.findIndex(item => 
-            item.productId === details.productId && 
+            (item.productId === details.productId || item._id === details.productId) && 
             item.size === details.size &&
             item.color === details.color
         );
@@ -609,42 +621,35 @@ async function simulateAddToCart(productDetails) {
         }
 
         localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
-        updateCartBadge();
+        updateCartBadge(); // Ensure this function exists in your homepage script
         displayCartAlert(`"${details.name}" added to bag!`, 'info');
     };
 
     // --- 4. Logic Switch: Guest vs Logged In ---
-    // Assuming your auth token is stored in localStorage
-    const isLoggedIn = !!localStorage.getItem('outflickzToken'); 
+    // ⭐ FIX: Use the same key used in cart.html (userAccessToken)
+    const isLoggedIn = !!localStorage.getItem('userAccessToken'); 
 
     if (!isLoggedIn) {
-        console.log('[CART] Guest mode: Saving to LocalStorage.');
         handleLocalCartOnly(itemData);
-        return; // 🔥 CRITICAL: Prevent the 500 error by stopping here
+        return;
     }
-
-    console.log('[CART] Logged-in mode: Syncing with API...');
 
     // --- 5. API Execution (Only for Logged-in Users) ---
     try {
-        const response = await secureUserFetch('/api/users/cart', {
+        const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(itemData),
-            credentials: 'include' 
+            body: JSON.stringify(itemData)
         });
 
-        let data;
-        try { data = await response.json(); } catch (e) { data = {}; }
-
         if (response.ok) {
+            const data = await response.json();
+            // Optional: Sync local storage with the returned server cart
             if (data.items) localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(data.items));
             updateCartBadge();
-            displayCartAlert('Item added to your permanent bag!', 'success');
+            displayCartAlert('Item added to your bag!', 'success');
         } else {
-            // If API fails (even for logged in users), fallback to local so they can still shop
             handleLocalCartOnly(itemData);
-            console.warn('[CART] API sync failed, used local fallback.', data.message);
         }
     } catch (error) {
         console.error('[CART] Network Error:', error);
