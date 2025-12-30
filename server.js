@@ -6347,7 +6347,7 @@ app.post('/api/paystack/webhook', async (req, res) => {
                 const targetEmail = updatedOrder.guestEmail || updatedOrder.shippingAddress?.email;
                 
                 try {
-                    await sendOrderConfirmationEmailForAdmin(targetEmail, updatedOrder);
+                    await  sendAdminOrderNotification(targetEmail, updatedOrder);
                     console.log("✅ Admin Notified via Webhook");
                 } catch (emailErr) {
                     console.error("❌ Admin Email Error (Webhook):", emailErr);
@@ -6391,7 +6391,7 @@ app.get('/api/orders/verify/:reference', async (req, res) => {
                 const targetEmail = updated.guestEmail || updated.shippingAddress?.email;
                 
                 try {
-                    await sendOrderConfirmationEmailForAdmin(targetEmail, updated);
+                    await  sendAdminOrderNotification(targetEmail, updated);
                     console.log("✅ Admin Notified via Verify Route");
                 } catch (emailErr) {
                     console.error("❌ Admin Email Error (Verify Route):", emailErr);
