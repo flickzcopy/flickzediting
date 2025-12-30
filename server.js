@@ -2987,7 +2987,7 @@ app.post('/api/admin/newsletter/send', verifyToken, async (req, res) => {
     }
 });
 
-aapp.get('/api/admin/users/all', verifyToken, async (req, res) => {
+app.get('/api/admin/users/all', verifyToken, async (req, res) => {
     try {
         // 1. Fetch Registered Users from the User Collection
         // We MUST explicitly select 'createdAt' to avoid N/A in the Joined column
@@ -3351,7 +3351,7 @@ app.get('/api/admin/orders/:orderId', verifyToken, async (req, res) => {
     }
 });
 
-
+// =========================================================
 // 9. PUT /api/admin/orders/:orderId/confirm - Confirm an Order (Admin Protected)
 // =========================================================
 app.put('/api/admin/orders/:orderId/confirm', verifyToken, async (req, res) => {
@@ -3363,7 +3363,8 @@ app.put('/api/admin/orders/:orderId/confirm', verifyToken, async (req, res) => {
     }
 
     try {
-        // 1. Initial status change from 'Pending' to 'Processing' (The "CLAIM" step.)
+        // 1. Initial status change from 'Pending' to 'Processing'
+        // We removed the restrictive '.select()' to ensure we have all address/email data
         const updatedOrder = await Order.findOneAndUpdate(
             { 
                 _id: orderId, 
@@ -3376,79 +3377,78 @@ app.put('/api/admin/orders/:orderId/confirm', verifyToken, async (req, res) => {
                     confirmedBy: adminId 
                 } 
             },
-            { new: true, select: 'userId status totalAmount items email' } // 👈 Added 'email' to selection
+            { new: true } 
         ).lean();
 
         if (!updatedOrder) {
             const checkOrder = await Order.findById(orderId).select('status').lean();
-            console.warn(`[Inventory Skip] Order ${orderId} is in status: ${checkOrder?.status || 'Not Found'}`);
             return res.status(409).json({ message: 'Order not found or is already processed.' });
         }
         
-        // 2. CRITICAL STEP: Deduct Inventory and finalize status to 'Confirmed' atomically
+        // 2. Atomic Inventory Deduction
         let finalOrder;
         try {
-            console.log(`[Inventory] Attempting atomic inventory deduction for Order ${orderId}.`);
             finalOrder = await processOrderCompletion(orderId, adminId); 
-            console.log(`[Inventory Success] Deduction completed. Final status: ${finalOrder.status}.`);
-            
         } catch (inventoryError) {
             if (inventoryError.isRaceCondition) {
                 const confirmedOrder = await Order.findById(orderId).lean();
-                return res.status(200).json({ 
-                    message: `Order ${orderId} was confirmed by a concurrent request.`,
-                    order: confirmedOrder 
-                });
+                return res.status(200).json({ message: `Already confirmed.`, order: confirmedOrder });
             }
             
-            console.error('Inventory deduction failed:', inventoryError.message);
             await Order.findByIdAndUpdate(orderId, { 
-                $push: { notes: `Inventory deduction failed on ${new Date().toISOString()}: ${inventoryError.message}` }
+                $push: { notes: `Inventory failure: ${inventoryError.message}` }
             });
             
-            return res.status(409).json({ 
-                message: 'Payment confirmed, but inventory deduction failed. Flagged for review.',
-                error: inventoryError.message
-            });
+            return res.status(409).json({ message: 'Inventory failure.', error: inventoryError.message });
         }
         
-        // 3. GET CUSTOMER EMAIL (Works for both Registered Users and Guests) 📧
-        // Attempt to find a registered user first
-        const registeredUser = await User.findById(updatedOrder.userId).select('email').lean();
-        
-        /**
-         * DUAL-PATH EMAIL LOGIC:
-         * If the user is registered, we use their account email.
-         * If they are a GUEST, the User search returns null, so we use the email stored on the Order.
-         */
-        const customerEmail = registeredUser ? registeredUser.email : (finalOrder.email || updatedOrder.email);
+        // 3. ROBUST EMAIL EXTRACTION 📧
+        let customerEmail = null;
+        let isGuest = false;
 
-        if (customerEmail) {
+        // Path A: Registered User lookup
+        if (updatedOrder.userId) {
+            const registeredUser = await User.findById(updatedOrder.userId).select('email').lean();
+            if (registeredUser) customerEmail = registeredUser.email;
+        }
+
+        // Path B: Guest User lookup (Checks multiple possible database locations)
+        if (!customerEmail) {
+            customerEmail = updatedOrder.guestEmail || 
+                            updatedOrder.shippingAddress?.email || 
+                            updatedOrder.email || 
+                            finalOrder.guestEmail ||
+                            finalOrder.shippingAddress?.email;
+            isGuest = true;
+        }
+
+        // 4. Send Notification
+        if (customerEmail && customerEmail !== 'N/A') {
             try {
-                const userLabel = registeredUser ? "Registered Member" : "Guest User";
-                console.log(`[Email] Sending confirmation to ${userLabel}: ${customerEmail}`);
+                const userLabel = isGuest ? "Guest User" : "Registered Member";
+                console.log(`[Email] Dispatching to ${userLabel}: ${customerEmail}`);
                 
+                // Use finalOrder as it contains the finalized 'Confirmed' status
                 await sendOrderConfirmationEmailForAdmin(customerEmail, finalOrder);
                 
-                console.log(`[Email Success] Confirmation sent to ${customerEmail}.`);
+                console.log(`[Email Success] Sent to ${customerEmail}.`);
             } catch (emailError) {
-                console.error(`[Email Failure] CRITICAL WARNING: Could not email ${customerEmail}:`, emailError.message);
+                console.error(`[Email Failure] ${customerEmail}:`, emailError.message);
             }
         } else {
-            console.warn(`[Email Skip] No email address found for order ${orderId} (Guest or Member).`);
+            console.warn(`[Email Skip] No email found for order ${orderId}.`);
             await Order.findByIdAndUpdate(orderId, { 
-                $push: { notes: `Warning: Confirmation email not sent because no email address was found.` }
+                $push: { notes: `System: Confirmation email skipped - No recipient email found.` }
             });
         }
         
-        // ⭐ INTEGRATION: Log the successful confirmation action
+        // 5. Log Action
         if (finalOrder) {
             await logAdminOrderAction(finalOrder, adminId, 'ORDER_CONFIRMED'); 
         }
 
-        // 4. Success Response
         res.status(200).json({ 
-            message: `Order ${orderId} confirmed, inventory deducted, and customer notified.`,
+            message: `Order confirmed and customer notified.`,
             order: finalOrder 
         });
 
@@ -3538,59 +3538,77 @@ app.put('/api/admin/orders/:orderId/status', verifyToken, async (req, res) => {
     const { orderId } = req.params;
     const { newStatus } = req.body; 
     
-    // 1. Define the strict logical flow of the store
     const validTransitions = {
         'Pending': ['Confirmed', 'Cancelled'],
         'Processing': ['Confirmed', 'Cancelled'],
         'Inventory Failure (Manual Review)': ['Confirmed', 'Cancelled'],
         'Confirmed': ['Shipped', 'Cancelled'], 
         'Shipped': ['Delivered'],
-        'Delivered': [], // Final state
-        'Cancelled': []  // Final state
+        'Delivered': [], 
+        'Cancelled': []
     };
     
     try {
         const order = await Order.findById(orderId);
         if (!order) return res.status(404).json({ message: 'Order not found.' });
 
-        // 2. BLOCKER: Force use of the "Confirm" button for inventory deduction
-        // This ensures the stock is actually removed before shipping starts
+        // 2. BLOCKER: Force use of atomic confirmation
         if (['Pending', 'Processing', 'Inventory Failure (Manual Review)'].includes(order.status) && 
             !['Confirmed', 'Cancelled'].includes(newStatus)) {
             return res.status(400).json({ 
-                message: `Order must be Confirmed (Inventory Deducted) before moving to ${newStatus}. Please click the 'Confirm' button on the User Orders page first.` 
+                message: `Order must be Confirmed (Inventory Deducted) before moving to ${newStatus}.` 
             });
         }
 
-        // 3. LOGIC CHECK: Ensure the transition is allowed based on current status
+        // 3. LOGIC CHECK
         const allowedNext = validTransitions[order.status] || [];
         if (order.status !== newStatus && !allowedNext.includes(newStatus)) {
             return res.status(400).json({ 
-                message: `Invalid movement. You cannot move an order from ${order.status} directly to ${newStatus}.` 
+                message: `Invalid movement from ${order.status} to ${newStatus}.` 
             });
         }
         
         // 4. Update order fields
         order.status = newStatus;
         order.updatedAt = Date.now();
-        
         if (newStatus === 'Shipped') order.shippedAt = new Date();
         if (newStatus === 'Delivered') order.deliveredAt = new Date();
 
         const updatedOrder = await order.save();
 
-        // 5. Trigger Customer Notifications
-        const user = await User.findById(updatedOrder.userId).select('email').lean();
-        if (user?.email) {
+        // 5. ⭐ ROBUST EMAIL EXTRACTION (DETERMINE RECIPIENT) ⭐
+        let recipientEmail = null;
+
+        // Path A: Registered User
+        if (updatedOrder.userId) {
+            const user = await User.findById(updatedOrder.userId).select('email').lean();
+            if (user) recipientEmail = user.email;
+        }
+
+        // Path B: Guest User (Fallbacks)
+        if (!recipientEmail) {
+            recipientEmail = updatedOrder.guestEmail || 
+                             updatedOrder.shippingAddress?.email || 
+                             updatedOrder.email;
+        }
+
+        // 6. Trigger Notifications if email exists
+        if (recipientEmail && recipientEmail !== 'N/A') {
             try {
-                if (newStatus === 'Shipped') await sendShippingUpdateEmail(user.email, updatedOrder); 
-                else if (newStatus === 'Delivered') await sendDeliveredEmail(user.email, updatedOrder);
+                if (newStatus === 'Shipped') {
+                    await sendShippingUpdateEmail(recipientEmail, updatedOrder);
+                } else if (newStatus === 'Delivered') {
+                    await sendDeliveredEmail(recipientEmail, updatedOrder);
+                }
+                console.log(`[Status Email] Success: ${newStatus} sent to ${recipientEmail}`);
             } catch (e) { 
-                console.error("Fulfillment email failed:", e.message); 
+                console.error(`[Status Email] Failed for ${recipientEmail}:`, e.message); 
             }
+        } else {
+            console.warn(`[Status Email] Skipped: No email found for order ${orderId}`);
         }
         
-        // 6. Log for Admin Audit Trail
+        // 7. Log for Admin Audit Trail
         await logAdminStatusUpdate(updatedOrder, req.adminId, `ORDER_${newStatus.toUpperCase()}`); 
 
         res.status(200).json({ message: `Order successfully moved to ${newStatus}.`, order: updatedOrder });
