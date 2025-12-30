@@ -149,7 +149,6 @@ function renderCartItems(items, isApiCart) {
     const cartList = document.getElementById('cart-items-list');
     const currencySymbol = '₦';
 
-    // ⭐ UPDATED: Matches the exact collection names seen in your MongoDB Compass screenshot
     const typeLabels = {
         'wearcollections': 'Wears',
         'capcollections': 'Caps',
@@ -158,41 +157,45 @@ function renderCartItems(items, isApiCart) {
     };
 
     cartList.innerHTML = items.map(item => {
-        // Handle ID mapping from either API (productId) or Local Storage (_id)
+        // 1. Handle ID mapping: API usually nests product info, Local Storage is flat
         const itemId = item.productId || item._id;
         
-        // ⭐ NAME LOGIC: Uses the 'name' field directly from your database document
-        // Examples: "Outflickz Black Sleeveless" or "Outflickz White Sleeveless"
-        const productName = item.name || 'Premium Product';
+        // 2. ⭐ THE FIX FOR "UNDEFINED":
+        // We look for 'name' in the top level (local) or inside 'item.product' (API)
+        const productName = item.name || (item.product && item.product.name) || 'Premium Product';
 
-        // ⭐ COLLECTION LABEL LOGIC: 
-        // Checks the productType against the specific lowercase collection names in your DB
+        // 3. Handle Prices and Tags similarly
+        const unitPrice = item.price || (item.product && item.product.price) || 0;
+        const productTag = item.tag || (item.product && item.product.tag) || "";
+        const imageUrl = item.imageUrl || (item.product && item.product.imageUrl) || 'placeholder.jpg';
+
+        // 4. COLLECTION LABEL LOGIC
         let displayCategory = 'Premium Apparel';
-        const rawType = item.productType ? item.productType.toLowerCase() : "";
+        const rawType = item.productType ? item.productType.toLowerCase() : 
+                        (item.product && item.product.productType ? item.product.productType.toLowerCase() : "");
         
         if (rawType && typeLabels[rawType]) {
             displayCategory = typeLabels[rawType];
         } else if (rawType) {
-            // Fallback: strip "collections" and capitalize (e.g., wearcollections -> Wear)
-            displayCategory = rawType.replace('collections', '');
+            displayCategory = rawType.replace('collections', '').toUpperCase();
         }
 
         return `
         <div id="cart-item-${itemId}" class="cart-item-card flex py-4 sm:py-6 border-b border-gray-100">
             <div class="flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 rounded-lg overflow-hidden border border-gray-200">
-                <img src="${item.imageUrl}" alt="${productName}" class="w-full h-full object-cover object-center">
+                <img src="${imageUrl}" alt="${productName}" class="w-full h-full object-cover object-center">
             </div>
             <div class="ml-4 flex flex-1 flex-col justify-between">
                 <div class="relative pr-9 sm:grid sm:grid-cols-2 sm:gap-x-6 sm:pr-0">
                     <div>
                         <h3 class="text-base sm:text-lg font-semibold text-gray-900">${productName}</h3>
-                        <p class="mt-1 text-xs text-red-500 font-medium uppercase tracking-wider">${displayCategory}</p>
+                        <p class="mt-1 text-xs text-red-500 font-medium uppercase tracking-wider">${displayCategory} ${productTag ? '• ' + productTag : ''}</p>
                         <p class="mt-1 text-xs text-gray-500 uppercase">
                             ${item.color || ''} ${item.size ? ' / ' + item.size : ''}
                         </p>
                     </div>
                     <p class="mt-2 text-base font-bold text-gray-900 text-right sm:text-left">
-                        ${currencySymbol}${(item.price * item.quantity).toLocaleString()}
+                        ${currencySymbol}${(unitPrice * item.quantity).toLocaleString()}
                     </p>
                 </div>
                 <div class="flex items-center justify-between mt-3">
@@ -201,7 +204,7 @@ function renderCartItems(items, isApiCart) {
                         <span class="w-8 text-center text-sm font-medium">${item.quantity}</span>
                         <button onclick="${isApiCart ? `changeCartQuantity('${itemId}', 1)` : `changeLocalQuantity('${itemId}', 1)`}" class="w-8 h-8 hover:bg-gray-100">+</button>
                     </div>
-                    <button onclick="${isApiCart ? `removeItemFromCart('${itemId}')` : `handleLocalItemRemoval('${itemId}')`}" class="text-xs text-gray-400 hover:text-ash-red">
+                    <button onclick="${isApiCart ? `removeItemFromCart('${itemId}')` : `handleLocalItemRemoval('${itemId}')`}" class="text-xs text-gray-400 hover:text-red-600">
                         <i class="fas fa-trash-alt mr-1"></i> Remove
                     </button>
                 </div>
