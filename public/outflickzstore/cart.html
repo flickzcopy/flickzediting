@@ -28,6 +28,90 @@ tailwind.config = {
     }
 }
 
+
+// Simple JS for Toggling Mobile Menu
+function toggleMenu() {
+    document.getElementById('mobile-menu').classList.toggle('hidden');
+}
+
+// Function to be called when the user clicks the Profile button
+async function redirectToProfileOrLogin() {
+    const token = localStorage.getItem('userAccessToken');
+    const headers = token 
+        ? { 'Authorization': `Bearer ${token}` } 
+        : {}; // If no token, headers is empty
+    
+    // NOTE: This approach requires your /api/auth/status endpoint to 
+    // accept the Authorization: Bearer header.
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
+            method: 'GET',
+            headers: headers, // <-- NEW: Sends the Access Token
+            credentials: 'include' // Still sends the cookie if the browser allows it
+        });
+
+        // If the Access Token is valid, we get 200 immediately.
+        if (response.status === 200) {
+            console.log("Profile click: Auth check successful via Token/Cookie. Redirecting to userprofile.html");
+            window.location.href = 'userprofile.html'; 
+            
+        } else if (response.status === 401 || response.status === 403) {
+            // The Access Token or Cookie Session is invalid/missing.
+            console.warn(`Profile click: Auth check failed (Status ${response.status}). Redirecting to useraccount.html`);
+            
+            // Note: Since this fetch is simple, it doesn't auto-refresh the token like secureUserFetch.
+            // If the 401 is due to an expired Access Token, the subsequent fetchUserData on the profile page
+            // will catch the 401 and attempt the secure cookie refresh.
+            
+            window.location.href = 'useraccount.html';
+        } else {
+            console.error(`Profile click: Unexpected status ${response.status}. Redirecting to useraccount.html`);
+            window.location.href = 'useraccount.html';
+        }
+
+    } catch (error) {
+        // Network failure
+        console.error('Authentication status check failed (Network Error):', error);
+        window.location.href = 'useraccount.html';
+    }
+}
+
+
+
+/**
+ * CONCEPTUAL: This function should be called ONLY after a successful login API response 
+ * from your server (in useraccount.html). It sets the login flag and redirects 
+ * to the homepage (or profile).
+ */
+function onSuccessfulLogin() {
+    // Save the login state to the browser's storage
+    localStorage.setItem('isLoggedIn', 'true');
+    console.log("Login successful! isLoggedIn set to true.");
+
+    // Redirect the user to the homepage after login
+    window.location.href = 'homepage.html'; 
+}
+
+
+// --- SHOP NOW DROPDOWN JS ---
+function toggleShopDropdown() {
+    const dropdown = document.getElementById('shop-dropdown-menu');
+    dropdown.classList.toggle('hidden');
+}
+
+// Optional: Close the dropdown if the user clicks anywhere outside of it
+document.addEventListener('click', function(event) {
+    const dropdown = document.getElementById('shop-dropdown-menu');
+    const button = document.getElementById('shop-now-btn');
+
+    // Check if the click occurred outside the button and outside the dropdown
+    if (dropdown && button && !button.contains(event.target) && !dropdown.contains(event.target)) {
+        dropdown.classList.add('hidden');
+    }
+});
+// --- END SHOP NOW DROPDOWN JS ---
+
 const API_BASE_URL = 'https://outflickzs.netlify.app';
 const CART_STORAGE_KEY = 'outflickzCartCount';
 const LOCAL_CART_KEY = 'outflickzLocalCart';
