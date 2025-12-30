@@ -1202,17 +1202,17 @@ function updateStockStatusDisplay(productData, productElementId) {
         }
     }
 }
-
 function openProductQuickView(jsonPayload) {
     const product = JSON.parse(jsonPayload);
     
-    // Remove existing modal if any
+    // 1. Identify if the product is a Cap to exclude size logic
+    const isCap = product.category === 'CapCollection' || product.collectionType === 'CapCollection';
+
     const existingModal = document.getElementById('quick-view-modal');
     if (existingModal) existingModal.remove();
 
     const modalOverlay = document.createElement('div');
     modalOverlay.id = 'quick-view-modal';
-    // Optimized overlay for responsiveness
     modalOverlay.className = 'fixed inset-0 z-[1000] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm transition-opacity duration-300';
     
     const formattedPrice = product.price.toLocaleString('en-US');
@@ -1262,7 +1262,7 @@ function openProductQuickView(jsonPayload) {
                         <div class="mb-6">
                             <h4 class="text-[0.7rem] font-bold text-gray-400 uppercase tracking-[0.15em] mb-2">Description</h4>
                             <p class="text-gray-700 text-sm leading-relaxed">
-                                ${product.description || "Designed for ultimate style and comfort. Part of our latest seasonal collection."}
+                                ${product.description || "Designed for ultimate style and comfort."}
                             </p>
                         </div>
 
@@ -1274,7 +1274,7 @@ function openProductQuickView(jsonPayload) {
                                 </div>
                             </div>
 
-                            <div>
+                            <div class="${isCap ? 'hidden' : ''}">
                                 <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-3">Select Size</span>
                                 <div class="flex flex-wrap gap-2">
                                     ${createSizeList(product._id, product.sizeStockMap, false)}
@@ -1284,11 +1284,10 @@ function openProductQuickView(jsonPayload) {
                     </div>
 
                     <div class="mt-10">
-                      // Locate this line in your openProductQuickView function and update it:
-<button onclick="handleModalAddToCart('${product._id}', '${product.productType}')" 
-        class="w-full bg-black text-white py-4 rounded-md font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3 active:scale-[0.97] shadow-lg shadow-black/10">
-    <i class="fas fa-shopping-bag text-sm"></i> Add to Bag
-</button>
+                        <button onclick="handleModalAddToCart('${product._id}', ${isCap})" 
+                                class="w-full bg-black text-white py-4 rounded-md font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3 active:scale-[0.97] shadow-lg shadow-black/10">
+                            <i class="fas fa-shopping-bag text-sm"></i> Add to Bag
+                        </button>
                         
                         <div class="flex items-center justify-center gap-4 mt-6 opacity-50">
                             <div class="flex items-center gap-1.5">
