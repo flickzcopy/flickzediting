@@ -1086,6 +1086,7 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
         payBtn.innerHTML = 'Confirm & Pay Now';
     }
 }
+
 /**
  * ⭐ UPDATED: Processes Paystack payment with Guest detection.
  */
@@ -1200,6 +1201,37 @@ async function processPaystackPayment(totalAmount, email) {
         }
     }
 
+async function verifyPayment(paymentReference, mongoId, internalOrderRef) {
+    const payBtn = document.getElementById('checkout-next-btn');
+    
+    try {
+        // Use standard fetch so Guests (who have no token) aren't blocked
+        const response = await fetch(`${API_BASE_URL}/api/orders/verify/${paymentReference}`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && (data.status === 'Paid' || data.message === 'Verified')) {
+            console.log("✅ Payment verified by backend.");
+            
+            // Use the ID returned by the backend or the one we had
+            const finalId = data.orderId || mongoId;
+            
+            // Clean up cart and redirect
+            handlePaystackSuccessRedirect(finalId, paymentReference);
+        } else {
+            throw new Error(data.message || "Verification failed");
+        }
+    } catch (error) {
+        console.error("❌ Verification Error:", error);
+        displayMessage("We couldn't confirm the payment automatically. Please refresh or contact support with Ref: " + paymentReference);
+        
+        payBtn.disabled = false;
+        payBtn.innerHTML = 'Confirm & Pay Now';
+    }
+}
 
     // -----------------------------------------------------------------
     // ⭐ NEW ACCORDION/DROPDOWN LOGIC FOR BANK TRANSFER DETAILS ⭐ (Unchanged - Logic is correct)

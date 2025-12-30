@@ -6309,6 +6309,7 @@ app.delete('/api/users/cart', verifyUserToken, async (req, res) => {
         res.status(500).json({ message: 'Failed to clear shopping bag.' });
     }
 });
+
 // --- 1. WEBHOOK ENDPOINT ---
 app.post('/api/paystack/webhook', async (req, res) => {
     const secret = process.env.PAYSTACK_SECRET_KEY;
@@ -6365,42 +6366,46 @@ app.post('/api/paystack/webhook', async (req, res) => {
     }
     res.status(200).send('Event acknowledged');
 });
-
-// --- 2. MANUAL VERIFY ROUTE ---
-app.get('/api/orders/verify/:reference', verifyUserToken, async (req, res) => {
+app.get('/api/orders/verify/:reference', async (req, res) => {
     const { reference } = req.params;
-    // ⭐ FIX: Define OrderModel clearly here
     const OrderModel = mongoose.models.Order || mongoose.model('Order');
 
     try {
+        // 1. Double check with Paystack API
         const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
             headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }
         });
         const data = await response.json();
 
         if (data.status && data.data.status === 'success') {
-            // ⭐ FIX: Changed 'Order' to 'OrderModel' to match definition
+            // 2. Update the Order (Works for both Guests and Users)
             const updated = await OrderModel.findOneAndUpdate(
                 { orderReference: reference },
                 { 
                     paymentStatus: 'Paid', 
                     status: 'Processing',
                     amountPaidKobo: data.data.amount,
-                    isPaystackPending: false // Release for Dashboard
+                    isPaystackPending: false,
+                    paidAt: new Date()
                 },
                 { new: true }
             );
 
             if (updated) {
-                return res.status(200).json({ message: 'Verified', status: 'Paid' });
+                return res.status(200).json({ 
+                    message: 'Verified', 
+                    status: 'Paid', 
+                    orderId: updated._id 
+                });
             }
         }
         res.status(400).json({ message: 'Payment verification failed at Paystack' });
     } catch (error) {
         console.error("Manual Verify Error:", error);
-        res.status(500).json({ message: error.message });
+        res.status(500).json({ message: "Internal Server Error" });
     }
 });
+
 app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
     // 1. Identify if User or Guest
     const userId = req.userId || null;
