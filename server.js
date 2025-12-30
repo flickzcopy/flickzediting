@@ -6768,6 +6768,7 @@ app.post('/api/notifications/admin-order-email', async (req, res) => {
         res.status(500).json({ message: 'Failed to dispatch admin email notification due to server error.' });
     }
 });
+
 // =========================================================
 // 7. POST /api/orders/place/pending - Unified Member & Guest Order
 // =========================================================

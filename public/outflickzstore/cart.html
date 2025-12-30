@@ -196,12 +196,29 @@ function handleLocalItemRemoval(itemId) {
 }
 
 async function changeCartQuantity(cartItemId, delta) {
+    // 1. Find the current item in the UI to calculate the new quantity
+    // This prevents sending 0 or negative numbers to the server
+    const cartItems = await (await secureUserFetch(`${API_BASE_URL}/api/users/cart`)).json();
+    const item = cartItems.items.find(i => i._id === cartItemId);
+    
+    if (!item) return;
+
+    const newQuantity = item.quantity + delta;
+
+    // 2. If quantity would be 0, use the delete method instead
+    if (newQuantity <= 0) {
+        return removeItemFromCart(cartItemId);
+    }
+
     try {
         const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/quantity`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            // Ensure the key matches your backend expectation (usually 'itemId' or 'productId')
-            body: JSON.stringify({ itemId: cartItemId, delta }) 
+            // ⭐ FIX: Sending the specific Database Item ID and the calculated new quantity
+            body: JSON.stringify({ 
+                itemId: cartItemId, 
+                quantity: newQuantity 
+            }) 
         });
 
         if (response.ok) {
@@ -209,7 +226,9 @@ async function changeCartQuantity(cartItemId, delta) {
         } else {
             const errorData = await response.json();
             console.error("Server rejected quantity change:", errorData);
-            displayMessage("Could not update quantity.");
+            // If the server strictly wants 'delta' instead of 'quantity', 
+            // swap the body to: body: JSON.stringify({ itemId: cartItemId, delta: delta })
+            displayMessage("Could not update quantity: " + errorData.message);
         }
     } catch (e) { 
         console.error("Network error updating quantity:", e); 

@@ -1370,45 +1370,43 @@ async function processBankTransferOrder(totalAmount, email) {
 
     const payBtn = document.getElementById('checkout-next-btn');
     payBtn.disabled = true;
-    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Uploading...';
+    payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Processing Order...';
 
     try {
-        // 1. Create FormData for the image upload
-        const formData = new FormData();
-        formData.append('receipt', receiptFile);
-
-        // 2. Upload the receipt
-        // ⭐ FIX: Ensure this URL matches your backend folder structure exactly
-        const uploadResponse = await secureUserFetch(`${API_BASE_URL}/api/orders/upload-receipt`, {
-            method: 'POST',
-            body: formData 
-            // Note: Don't manually set Content-Type header for FormData, 
-            // secureUserFetch/Fetch will handle the boundary automatically.
-        });
-
-        if (!uploadResponse.ok) throw new Error("Failed to upload receipt.");
-        const { receiptUrl } = await uploadResponse.json();
-
-        // 3. Place the order with the receipt URL
-        const shippingAddress = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
+        const shippingData = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
         const orderItems = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
 
-        const orderResponse = await secureUserFetch(`${API_BASE_URL}/api/orders/place/bank-transfer`, {
+        // ⭐ CRITICAL: The backend expects multipart/form-data
+        const formData = new FormData();
+        
+        // Append File
+        formData.append('receipt', receiptFile); // Matches backend 'singleReceiptUpload'
+        
+        // Append JSON strings (Backend uses JSON.parse on these fields)
+        formData.append('shippingAddress', JSON.stringify(shippingData));
+        formData.append('orderItems', JSON.stringify(orderItems));
+        formData.append('paymentMethod', 'Bank Transfer');
+        formData.append('totalAmount', totalAmount.toString());
+        formData.append('email', email);
+
+        // Send to the UNIFIED endpoint
+        const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/pending`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                shippingAddress,
-                totalAmount,
-                orderItems,
-                receiptUrl
-            })
+            body: formData 
+            // Do NOT set Content-Type header; fetch sets the boundary automatically for FormData
         });
 
-        const orderData = await orderResponse.json();
-        if (orderResponse.ok) {
-            finalizeOrderOnServer({ orderId: orderData.orderId, receiptUrl }, 'banktransfer');
+        const data = await response.json();
+
+        if (response.ok) {
+            // Success! Redirect using the data returned from the backend
+            finalizeOrderOnServer({ 
+                orderId: data.orderId, 
+                orderRef: data.orderReference,
+                paymentMethod: 'Bank Transfer'
+            }, 'banktransfer');
         } else {
-            throw new Error(orderData.message || "Order placement failed.");
+            throw new Error(data.message || "Failed to place order.");
         }
 
     } catch (error) {
