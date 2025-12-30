@@ -1362,9 +1362,22 @@ function toggleBankTransferDetails() {
  * Handles receipt upload and order creation.
  */
 async function processBankTransferOrder(totalAmount, email) {
-const receiptInput = document.getElementById('bank-receipt-upload');
+    // 1. Get the input element
+    const receiptInput = document.getElementById('bank-receipt-upload');
+    
+    // 2. Extract the file from the input
+    const receiptFile = receiptInput ? receiptInput.files[0] : null;
+
+    // 3. Validate the file exists
     if (!receiptFile) {
         displayMessage("Please upload your transfer receipt.");
+        
+        // ⭐ IMPORTANT: Re-enable the button so the user can try again after picking a file
+        const payBtn = document.getElementById('checkout-next-btn');
+        if (payBtn) {
+            payBtn.disabled = false;
+            payBtn.innerHTML = 'Confirm & Pay Now';
+        }
         return;
     }
 
@@ -1376,30 +1389,25 @@ const receiptInput = document.getElementById('bank-receipt-upload');
         const shippingData = JSON.parse(localStorage.getItem('outflickzShippingData') || "{}");
         const orderItems = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
 
-        // ⭐ CRITICAL: The backend expects multipart/form-data
         const formData = new FormData();
         
-        // Append File
-        formData.append('receipt', receiptFile); // Matches backend 'singleReceiptUpload'
+        // Now 'receiptFile' is correctly defined above
+        formData.append('receipt', receiptFile); 
         
-        // Append JSON strings (Backend uses JSON.parse on these fields)
         formData.append('shippingAddress', JSON.stringify(shippingData));
         formData.append('orderItems', JSON.stringify(orderItems));
         formData.append('paymentMethod', 'Bank Transfer');
         formData.append('totalAmount', totalAmount.toString());
         formData.append('email', email);
 
-        // Send to the UNIFIED endpoint
         const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/pending`, {
             method: 'POST',
             body: formData 
-            // Do NOT set Content-Type header; fetch sets the boundary automatically for FormData
         });
 
         const data = await response.json();
 
         if (response.ok) {
-            // Success! Redirect using the data returned from the backend
             finalizeOrderOnServer({ 
                 orderId: data.orderId, 
                 orderRef: data.orderReference,
