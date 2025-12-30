@@ -2987,28 +2987,30 @@ app.post('/api/admin/newsletter/send', verifyToken, async (req, res) => {
     }
 });
 
-app.get('/api/admin/users/all', verifyToken, async (req, res) => {
+aapp.get('/api/admin/users/all', verifyToken, async (req, res) => {
     try {
         // 1. Fetch Registered Users from the User Collection
+        // We MUST explicitly select 'createdAt' to avoid N/A in the Joined column
         const registeredUsers = await User.find({})
-            .select('email profile status membership')
+            .select('email profile status membership createdAt') 
             .lean();
 
         const transformedRegistered = registeredUsers.map(user => ({
             _id: user._id,
             name: `${user.profile?.firstName || ''} ${user.profile?.lastName || ''}`.trim() || 'N/A',
             email: user.email,
-            // If they are in this collection, they are NOT Guests. 
-            // We check their role for VIP vs Basic.
+            // Distinction: Checks role for VIP vs Basic
             statusLabel: user.status?.role === 'vip' ? 'VIP Member' : 'Basic User',
             statusColor: user.status?.role === 'vip' ? 'emerald' : 'blue',
             isGuest: false,
-            joinedDate: user.membership?.memberSince || user.createdAt
+            // Use memberSince if available, otherwise the document's creation date
+            createdAt: user.membership?.memberSince || user.createdAt 
         }));
 
         // 2. Fetch Guest Orders (where userId is null)
         const guestOrders = await Order.find({ userId: null })
             .select('guestEmail shippingAddress createdAt isGuest')
+            .sort({ createdAt: 1 }) // Sort oldest first so the guestMap captures the first purchase
             .lean();
 
         // Unique Guests by Email
@@ -3018,12 +3020,12 @@ app.get('/api/admin/users/all', verifyToken, async (req, res) => {
             if (email && !guestMap.has(email)) {
                 guestMap.set(email, {
                     _id: order._id, 
-                    name: `${order.shippingAddress?.firstName || ''} ${order.shippingAddress?.lastName || ''}`.trim() || 'Guest',
+                    name: `${order.shippingAddress?.firstName || ''} ${order.shippingAddress?.lastName || ''}`.trim() || 'Guest Customer',
                     email: email,
-                    statusLabel: 'Guest', // Explicit Guest Label
-                    statusColor: 'orange', // Orange for Guests
+                    statusLabel: 'Guest', 
+                    statusColor: 'orange', 
                     isGuest: true,
-                    joinedDate: order.createdAt
+                    createdAt: order.createdAt 
                 });
             }
         });
@@ -3036,6 +3038,7 @@ app.get('/api/admin/users/all', verifyToken, async (req, res) => {
             count: allRecords.length 
         });
     } catch (error) {
+        console.error('Fetch all users error:', error);
         res.status(500).json({ message: 'Error fetching membership list' });
     }
 });
