@@ -614,11 +614,12 @@ async function secureUserFetch(url, options = {}) {
             badge.classList.add('hidden');
         }
     }
-// --- FETCH USER DATA TO PRE-FILL FORM (FIXED) ---
+ /**
+ * ⭐ UPDATED: Fetches user account details and pre-fills the checkout form.
+ * Now includes Phone and WhatsApp mapping for Step 1 and Step 2.
+ */
 async function fetchUserData() {
-    if (!isUserLoggedIn()) {
-        return;
-    }
+    if (!isUserLoggedIn()) return;
 
     try {
         const response = await secureUserFetch(`${API_BASE_URL}/api/users/account`, {
@@ -633,39 +634,43 @@ async function fetchUserData() {
         const userProfile = userData.profile || {};
         const userAddress = userData.address || {};
 
-        // Pre-fill Contact Info
+        // 1. Pre-fill Contact Information
         document.getElementById('email').value = userData.email || '';
+        // Ensure your API returns phone/whatsapp inside the profile or root
+        if (userProfile.phone) document.getElementById('phone').value = userProfile.phone;
+        if (userProfile.whatsapp) document.getElementById('whatsapp').value = userProfile.whatsapp;
 
-        // Pre-fill Shipping Info
-        const firstNameEl = document.getElementById('first-name');
-        const lastNameEl = document.getElementById('last-name');
+        // 2. Pre-fill Shipping Name
+        if (userProfile.firstName) document.getElementById('first-name').value = userProfile.firstName;
+        if (userProfile.lastName) document.getElementById('last-name').value = userProfile.lastName;
 
-        if (userProfile.firstName) firstNameEl.value = userProfile.firstName;
-        if (userProfile.lastName) lastNameEl.value = userProfile.lastName;
+        // 3. Pre-fill Address details
+        if (userAddress.street) document.getElementById('address-line-1').value = userAddress.street;
+        if (userAddress.city) document.getElementById('city').value = userAddress.city;
+        if (userAddress.state) document.getElementById('state').value = userAddress.state;
+        if (userAddress.zipCode) document.getElementById('zip-code').value = userAddress.zipCode;
+        if (userAddress.country) document.getElementById('country').value = userAddress.country;
 
-        if (userData.address) {
-            if (userAddress.street) document.getElementById('address-line-1').value = userAddress.street;
-            if (userAddress.city) document.getElementById('city').value = userAddress.city;
-            if (userAddress.state) document.getElementById('state').value = userAddress.state;
-            if (userAddress.zipCode) document.getElementById('zip-code').value = userAddress.zipCode;
-            if (userAddress.country) document.getElementById('country').value = userAddress.country;
-        }
-
-        // Save to local storage for use in the review step (Step 2)
-        localStorage.setItem('outflickzShippingData', JSON.stringify({
-            firstName: userProfile.firstName, 
-            lastName: userProfile.lastName, 
-            email: userData.email,
-            street: userAddress.street,
-            city: userAddress.city,
-            state: userAddress.state,
-            zipCode: userAddress.zipCode,
-            country: userAddress.country
-        }));
+        // 4. ⭐ Sync to Local Storage 
+        // This ensures that even if the user doesn't type anything, Step 2 (Review) has the data.
+        const shippingData = {
+            firstName: userProfile.firstName || '',
+            lastName: userProfile.lastName || '',
+            email: userData.email || '',
+            phone: userProfile.phone || '',
+            whatsapp: userProfile.whatsapp || '',
+            street: userAddress.street || '',
+            city: userAddress.city || '',
+            state: userAddress.state || '',
+            zipCode: userAddress.zipCode || '',
+            country: userAddress.country || 'Nigeria'
+        };
+        
+        localStorage.setItem('outflickzShippingData', JSON.stringify(shippingData));
 
     } catch (error) {
         console.error('Error fetching user data:', error);
-        displayMessage('Could not load saved address. Please enter manually.');
+        // Silent fail or minor notification is better here so users can still type manually
     }
 }
 
@@ -1338,41 +1343,40 @@ function handleBuyNowImmediateLogout() {
     
     return false; // Indicate no redirect happened
 }
-// --- Main Initialization (Modified to handle both Logged-In and Guest users) ---
+// --- Main Initialization (Optimized for Netlify/Production) ---
 document.addEventListener('DOMContentLoaded', () => {
     
-    // Check 'buyNowItem' from sessionStorage
-    sessionStorage.getItem(BUY_NOW_KEY); 
     console.log("Initialization: Checking auth and cart data.");
 
-    // Pre-fill form if logged in
+    // 1. DATA LOADING
+    // Pre-fill form if logged in (This handles the requirement to fetch registered user details)
     if (isUserLoggedIn()) {
-        fetchUserData(); 
+        fetchUserData(); //
     }
     
     updateCartBadge();
-    fetchInitialCartData(); 
-    updateCheckoutView(); // This renders Step 1
+    fetchInitialCartData(); // Fetches items and handles "Empty Cart" redirect
+    updateCheckoutView();   // Ensures Step 1 (Shipping Form) is visible first
     
-    // --- SAFE EVENT ATTACHMENTS ---
-
-    // 1. Next Button
+    // 2. NAVIGATION & BUTTON LOGIC
+    // Next Button (Proceed to Review)
     const nextBtn = document.getElementById('checkout-next-btn');
     if (nextBtn) {
-        nextBtn.onclick = validateAndProceedToReview;
+        // Correctly triggers the validation and data capture logic
+        nextBtn.onclick = validateAndProceedToReview; 
     }
     
-    // 2. Edit Shipping Button (Fixing the "null" error)
+    // Edit Shipping (Back to Step 1)
     const editShippingBtn = document.getElementById('edit-shipping-btn');
     if (editShippingBtn) {
         editShippingBtn.onclick = () => {
             checkoutStep = 1;
             updateCheckoutView();
-            window.scrollTo(0, 0); 
+            window.scrollTo({ top: 0, behavior: 'smooth' }); 
         };
     }
     
-    // 3. Edit Order Button (Fixing the "null" error)
+    // Edit Order (Back to Cart)
     const editOrderBtn = document.getElementById('edit-order-btn');
     if (editOrderBtn) {
         editOrderBtn.onclick = () => {
@@ -1380,24 +1384,23 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
     
-    // ----------------------------------------------------------------------
-    // BANK TRANSFER UI LOGIC
-    // ----------------------------------------------------------------------
+    // 3. PAYMENT UI LOGIC
     const bankRadio = document.getElementById('payment-bank');
     const paystackRadio = document.getElementById('payment-paystack');
 
+    // These ensure the bank details container shows/hides based on selection
     if (paystackRadio) {
-        paystackRadio.onclick = toggleBankTransferDetails; // Note: Use toggleBankTransferDetails here
+        paystackRadio.onclick = toggleBankTransferDetails;
     }
     
     if (bankRadio) {
         bankRadio.onclick = toggleBankTransferDetails; 
     }
     
-    // Hide bank details by default on load
+    // Initial state check for payment UI
     toggleBankTransferDetails(); 
     
-    // 4. Close Modal Button
+    // 4. MODAL & UI FEEDBACK
     const closeButton = document.getElementById('message-modal-close-btn');
     if (closeButton) {
         closeButton.addEventListener('click', hideMessageModal);

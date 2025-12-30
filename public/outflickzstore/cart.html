@@ -93,12 +93,28 @@ function changeLocalQuantity(itemId, delta) {
         }
     }
 }
-
 async function fetchAndRenderCart() {
     const cartList = document.getElementById('cart-items-list');
     const checkoutBtn = document.getElementById('checkout-btn');
     const clearCartBtn = document.getElementById('clear-cart-btn');
-    
+
+    // ⭐ NEW: Helper to control the "Proceed to Checkout" button appearance
+    const updateCheckoutButtonState = (hasItems) => {
+        if (hasItems) {
+            checkoutBtn.disabled = false;
+            // Change color to Ash Red and make it look clickable
+            checkoutBtn.classList.replace('bg-gray-400', 'bg-ash-red');
+            checkoutBtn.classList.remove('cursor-not-allowed', 'opacity-50');
+            checkoutBtn.onclick = () => window.location.href = 'checkout.html';
+        } else {
+            checkoutBtn.disabled = true;
+            // Change color to Grey and show "disabled" cursor
+            checkoutBtn.classList.replace('bg-ash-red', 'bg-gray-400');
+            checkoutBtn.classList.add('cursor-not-allowed', 'opacity-50');
+            checkoutBtn.onclick = null;
+        }
+    };
+
     const renderLocalCart = () => {
         const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
         updateCartBadge();
@@ -106,17 +122,12 @@ async function fetchAndRenderCart() {
             renderCartItems(localCart, false);
             updateCartSummary(calculateLocalTotals(localCart));
             clearCartBtn.disabled = false;
-            checkoutBtn.disabled = false; 
-            checkoutBtn.classList.replace('bg-gray-400', 'bg-ash-red');
-            checkoutBtn.classList.remove('cursor-not-allowed', 'opacity-50');
-            checkoutBtn.onclick = () => window.location.href = 'checkout.html';
+            updateCheckoutButtonState(true); // Enable button
         } else {
-            cartList.innerHTML = '<div class="text-center py-10 text-gray-500">Your bag is empty. <a href="homepage.html" class="text-ash-red font-semibold underline">Start shopping</a>.</div>';
+            cartList.innerHTML = '<div class="text-center py-10 text-gray-500">Your bag is empty.</div>';
             updateCartSummary({ subtotal: 0, shipping: 0 });
             clearCartBtn.disabled = true;
-            checkoutBtn.disabled = true;
-            checkoutBtn.classList.replace('bg-ash-red', 'bg-gray-400');
-            checkoutBtn.classList.add('cursor-not-allowed', 'opacity-50');
+            updateCheckoutButtonState(false); // Disable button
         }
     };
 
@@ -128,7 +139,8 @@ async function fetchAndRenderCart() {
             const cartData = await response.json();
             renderCartItems(cartData.items, true);
             updateCartSummary(cartData);
-            checkoutBtn.onclick = () => window.location.href = 'checkout.html';
+            // Check if items array is empty from API
+            updateCheckoutButtonState(cartData.items && cartData.items.length > 0);
         } else { renderLocalCart(); }
     } catch (error) { renderLocalCart(); }
 }
@@ -137,11 +149,9 @@ function renderCartItems(items, isApiCart) {
     const cartList = document.getElementById('cart-items-list');
     const currencySymbol = '₦';
 
-    // 1. IMPROVED MAPPING: Ensures database types match UI labels
     const typeLabels = {
         'WearsCollection': 'Wears',
         'CapCollection': 'Caps',
-        'Caps': 'Caps', // Catch-all for simple strings
         'NewArrivals': 'New Arrival',
         'PreOrderCollection': 'Pre-Order'
     };
@@ -149,34 +159,27 @@ function renderCartItems(items, isApiCart) {
     cartList.innerHTML = items.map(item => {
         const itemId = item._id || item.productId;
         
-        // 2. DYNAMIC CATEGORY LOGIC:
-        // Prioritize productType, then fallback to category, then clean the string
+        // ⭐ FIX: Logic to determine the red label (e.g., Caps vs Wears)
         let displayCategory = 'Premium Apparel';
-        const rawType = item.productType || item.category || "";
-
+        const rawType = item.productType || "";
         if (rawType && typeLabels[rawType]) {
             displayCategory = typeLabels[rawType];
-        } else if (rawType && rawType !== "undefined") {
-            // Automatically turns "CapCollection" into "Cap" or "SleevelessCollection" into "Sleeveless"
-            displayCategory = rawType.replace(/Collection$/i, '');
+        } else if (rawType) {
+            displayCategory = rawType.replace('Collection', '');
         }
-
-        // Use the dynamic name from your data (e.g., "Outflickz Brown Baseball Cap")
-        const displayName = item.name || "Outflickz Premium";
 
         return `
         <div id="cart-item-${itemId}" class="cart-item-card flex py-4 sm:py-6 border-b border-gray-100">
             <div class="flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 rounded-lg overflow-hidden border border-gray-200">
-                <img src="${item.imageUrl}" alt="${displayName}" class="w-full h-full object-cover object-center">
+                <img src="${item.imageUrl}" alt="${item.name}" class="w-full h-full object-cover object-center">
             </div>
             <div class="ml-4 flex flex-1 flex-col justify-between">
                 <div class="relative pr-9 sm:grid sm:grid-cols-2 sm:gap-x-6 sm:pr-0">
                     <div>
-                        <h3 class="text-base sm:text-lg font-semibold text-gray-900">${displayName}</h3>
+                        <h3 class="text-base sm:text-lg font-semibold text-gray-900">${item.name}</h3>
                         <p class="mt-1 text-xs text-red-500 font-medium uppercase tracking-wider">${displayCategory}</p>
                         <p class="mt-1 text-xs text-gray-500 uppercase">
-                            ${item.color || item.variation || ''} 
-                            ${item.size ? ' / ' + item.size : ''}
+                            ${item.color || ''} ${item.size ? ' / ' + item.size : ''}
                         </p>
                     </div>
                     <p class="mt-2 text-base font-bold text-gray-900 text-right sm:text-left">
@@ -185,17 +188,18 @@ function renderCartItems(items, isApiCart) {
                 </div>
                 <div class="flex items-center justify-between mt-3">
                     <div class="flex items-center border border-gray-300 rounded-sm">
-                        <button onclick="${isApiCart ? `changeCartQuantity('${itemId}', -1)` : `changeLocalQuantity('${itemId}', -1)`}" class="w-8 h-8 font-bold hover:bg-gray-100">-</button>
+                        <button onclick="${isApiCart ? `changeCartQuantity('${itemId}', -1)` : `changeLocalQuantity('${itemId}', -1)`}" class="w-8 h-8 hover:bg-gray-100">-</button>
                         <span class="w-8 text-center text-sm font-medium">${item.quantity}</span>
-                        <button onclick="${isApiCart ? `changeCartQuantity('${itemId}', 1)` : `changeLocalQuantity('${itemId}', 1)`}" class="w-8 h-8 font-bold hover:bg-gray-100">+</button>
+                        <button onclick="${isApiCart ? `changeCartQuantity('${itemId}', 1)` : `changeLocalQuantity('${itemId}', 1)`}" class="w-8 h-8 hover:bg-gray-100">+</button>
                     </div>
-                    <button onclick="${isApiCart ? `removeItemFromCart('${itemId}')` : `handleLocalItemRemoval('${itemId}')`}" class="text-xs text-gray-400 hover:text-ash-red transition-colors">
+                    <button onclick="${isApiCart ? `removeItemFromCart('${itemId}')` : `handleLocalItemRemoval('${itemId}')`}" class="text-xs text-gray-400 hover:text-ash-red">
                         <i class="fas fa-trash-alt mr-1"></i> Remove
                     </button>
                 </div>
             </div>
         </div>
-    `}).join('');
+    `;
+    }).join('');
 }
 
 function updateCartSummary(cartData) {

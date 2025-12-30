@@ -524,6 +524,7 @@ function addToCart(collectionId, quantity) {
 
     console.log(`Added ${quantity} of item ${collectionId}. New cart total: ${newCount}`);
 }
+
 /**
  * Handles adding an item to the cart. 
  * Integrated with Schema-specific ProductTypes and API Sync.
@@ -580,24 +581,20 @@ async function simulateAddToCart(productDetails) {
     const quantity = parseInt(quantityInput?.value) || 1;
 
     // --- ⭐ UPDATED FIX: Aligning with Backend Schema Enums ---
-    const validTypes = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
-    let finalProductType = productDetails.productType;
+   // --- Normalized Fix for Backend Enums ---
+const validTypes = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
+let finalProductType = productDetails.productType;
 
-    // Normalize strings from Homepage UI to match Database/Cart labels
-    if (finalProductType === 'Wears') {
-        finalProductType = 'WearsCollection';
-    } else if (finalProductType === 'Caps' || finalProductType === 'Cap') {
-        finalProductType = 'CapCollection';
-    } else if (finalProductType === 'New Arrivals' || finalProductType === 'New Arrival') {
-        finalProductType = 'NewArrivals';
-    } else if (finalProductType === 'Pre Order' || finalProductType === 'Pre-Order') {
-        finalProductType = 'PreOrderCollection';
-    }
-
-    // Default fallback if type is missing or unrecognized
-    if (!validTypes.includes(finalProductType)) {
-        finalProductType = 'WearsCollection';
-    }
+// Ensure "Caps" or "Cap" from the UI becomes "CapCollection"
+if (finalProductType === 'Wears') {
+    finalProductType = 'WearsCollection';
+} else if (finalProductType === 'Caps' || finalProductType === 'Cap') {
+    finalProductType = 'CapCollection'; // This ensures the backend gets the right string
+} else if (finalProductType === 'New Arrivals' || finalProductType === 'New Arrival') {
+    finalProductType = 'NewArrivals';
+} else if (finalProductType === 'Pre Order' || finalProductType === 'Pre-Order') {
+    finalProductType = 'PreOrderCollection';
+}
 
     const itemData = {
         productId: productDetails.productId,
