@@ -236,74 +236,9 @@
         <i class="fab fa-whatsapp fa-2x"></i>
     </a>
     
-<script>    
-// Function to be called when the user clicks the Profile button
-async function redirectToProfileOrLogin() {
-    const token = localStorage.getItem('userAccessToken');
-    const headers = token 
-        ? { 'Authorization': `Bearer ${token}` } 
-        : {}; // If no token, headers is empty
-    
-    // NOTE: This approach requires your /api/auth/status endpoint to 
-    // accept the Authorization: Bearer header.
-    
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
-            method: 'GET',
-            headers: headers, // <-- NEW: Sends the Access Token
-            credentials: 'include' // Still sends the cookie if the browser allows it
-        });
-
-        // If the Access Token is valid, we get 200 immediately.
-        if (response.status === 200) {
-            console.log("Profile click: Auth check successful via Token/Cookie. Redirecting to userprofile.html");
-            window.location.href = 'userprofile.html'; 
-            
-        } else if (response.status === 401 || response.status === 403) {
-            // The Access Token or Cookie Session is invalid/missing.
-            console.warn(`Profile click: Auth check failed (Status ${response.status}). Redirecting to useraccount.html`);
-            
-            // Note: Since this fetch is simple, it doesn't auto-refresh the token like secureUserFetch.
-            // If the 401 is due to an expired Access Token, the subsequent fetchUserData on the profile page
-            // will catch the 401 and attempt the secure cookie refresh.
-            
-            window.location.href = 'useraccount.html';
-        } else {
-            console.error(`Profile click: Unexpected status ${response.status}. Redirecting to useraccount.html`);
-            window.location.href = 'useraccount.html';
-        }
-
-    } catch (error) {
-        // Network failure
-        console.error('Authentication status check failed (Network Error):', error);
-        window.location.href = 'useraccount.html';
-    }
-}
-
-// 2. **CRITICAL SECURITY GATE**: Enforces redirect immediately on page load
-//    if the user is not authenticated.
-function enforceAuthGate() {
-    fetch(`${API_BASE_URL}/api/auth/status`, { 
-        method: 'GET',
-        credentials: 'include' // <-- CRITICAL FIX: Ensures the secure cookie is sent.
-    })
-    .then(response => {
-        if (response.status !== 200) {
-            // If not authenticated, redirect to login page (use replace to disable back button)
-            console.warn(`Auth gate failed (Status ${response.status}). Redirecting.`);
-            window.location.replace('useraccount.html');
-        } else {
-            console.log("Auth gate passed (Status 200). User session confirmed.");
-        }
-    })
-    .catch(error => {
-        // Treat network failure as unauthenticated/unverified
-        console.error('Initial Auth Check Failed (Network Error):', error);
-        window.location.replace('useraccount.html');
-    });
-}
-
-const API_BASE_URL = 'https://outflickzz.netlify.app';
+<script>
+// --- CONFIGURATION ---
+const API_BASE_URL = 'https://outflickzs.netlify.app';
 const LOCAL_TAX_RATE = 0.00; 
 const LOCAL_CART_KEY = 'outflickzLocalCart'; 
 const CART_STORAGE_KEY = 'outflickzCartCount';
@@ -311,479 +246,195 @@ const AUTH_TOKEN_KEY = 'userAccessToken';
 const REFRESH_ENDPOINT = `${API_BASE_URL}/api/auth/refresh`;
 const CURRENCY_SYMBOL = '₦'; 
 
+// --- AUTH UTILITIES ---
 
- /**
- * Utility function to check if a user is currently logged in based on client-side status.
- * (Note: The server is the ultimate authority, but this client-side check provides quick UI guidance.)
- */
+async function redirectToProfileOrLogin() {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
+            method: 'GET',
+            headers: headers,
+            credentials: 'include'
+        });
+
+        if (response.status === 200) {
+            window.location.href = 'userprofile.html'; 
+        } else {
+            window.location.href = 'useraccount.html';
+        }
+    } catch (error) {
+        console.error('Auth check failed:', error);
+        window.location.href = 'useraccount.html';
+    }
+}
+
 function isUserLoggedIn() {
-    // We check the status flag set by the login/logout process or secureUserFetch.
-    const authStatus = localStorage.getItem('outflickzAuthStatus');
-    return authStatus === 'loggedIn';
+    return localStorage.getItem('outflickzAuthStatus') === 'loggedIn';
 }
 
-    // --- MESSAGE & MODAL DISPLAY FUNCTION (Unchanged) ---
-    function displayMessage(message) {
-        const modalContainer = document.getElementById('message-modal-container');
-        const modalText = document.getElementById('message-modal-text');
-
-        if (modalContainer && modalText) {
-            modalText.textContent = message;
-            modalContainer.classList.remove('hidden');
-
-            modalContainer.onclick = (e) => {
-                if (e.target === modalContainer) {
-                    hideMessageModal();
-                }
-            };
-
-            setTimeout(hideMessageModal, 4000);
-        } else {
-            console.warn("Modal elements not found. Message:", message);
-        }
-    }
-
-    function hideMessageModal() {
-        const modalContainer = document.getElementById('message-modal-container');
-        if (modalContainer) {
-            modalContainer.classList.add('hidden');
-            modalContainer.onclick = null;
-        }
-    }
-
- 
-/**
- * Handles user logout by clearing tokens and redirecting.
- * Used by secureUserFetch on non-recoverable token failure.
- */
 function handleLogout() {
-    console.warn("Token refresh failed or expired. User must re-authenticate.");
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-    // You should implement a proper redirection here, e.g., to the login page
-    // window.location.href = '/login.html'; 
-    alert("Session expired. Please log in again."); 
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem('outflickzAuthStatus');
+    alert("Session expired. Please log in again."); 
+    window.location.href = 'useraccount.html';
 }
 
-// --- SECURE USER FETCH FUNCTION (CRITICAL AUTH MECHANISM) ---
+// --- UI HELPERS ---
 
-async function secureUserFetch(url, options = {}) {
-    let token = localStorage.getItem(AUTH_TOKEN_KEY);
-    
-    // Add Authorization header if a token exists
-    if (token) {
-        options.headers = {
-            ...options.headers,
-            'Authorization': `Bearer ${token}`
-        };
-    }
-
-    let response = await fetch(url, options);
-
-    // If response is 401, attempt token refresh
-    if (response.status === 401) {
-        console.log("Token expired (401). Attempting refresh...");
-        
-        try {
-            const refreshResponse = await fetch(REFRESH_ENDPOINT, { method: 'POST' });
-
-            if (refreshResponse.ok) {
-                const data = await refreshResponse.json();
-                const newToken = data.accessToken;
-                
-                if (!newToken) {
-                    throw new Error("Refresh successful, but no new token received.");
-                }
-
-                // Store new token and retry the original request
-                localStorage.setItem(AUTH_TOKEN_KEY, newToken);
-                token = newToken; // Update token for retry
-
-                console.log("Token refreshed successfully. Retrying original request...");
-                
-                // Update Authorization header with the new token
-                options.headers['Authorization'] = `Bearer ${token}`;
-                
-                // Retry the original request
-                response = await fetch(url, options);
-
-            } else {
-                console.error("Token refresh failed.");
-                handleLogout(); // Log out user if refresh fails
-                // Return original 401 response for the caller to handle (e.g., disable cart)
-                return response; 
-            }
-        } catch (error) {
-            console.error("Error during token refresh process:", error);
-            handleLogout();
-            return response; // Return original 401 response
-        }
-    }
-    return response;
+function displayMessage(message) {
+    const modalContainer = document.getElementById('message-modal-container');
+    const modalText = document.getElementById('message-modal-text');
+    if (modalContainer && modalText) {
+        modalText.textContent = message;
+        modalContainer.classList.remove('hidden');
+        setTimeout(hideMessageModal, 4000);
+    }
 }
 
+function hideMessageModal() {
+    const modalContainer = document.getElementById('message-modal-container');
+    if (modalContainer) modalContainer.classList.add('hidden');
+}
 
-/**
- * Helper function for currency formatting (NGN)
- * NOTE: This is not explicitly in your provided code but is needed for display in confirmation.
- */
 const formatNaira = (amount) => amount.toLocaleString(undefined, { minimumFractionDigits: 2 });
 
-/**
- * Updates the visual cart badge count in the header.
- */
 function updateCartBadge() {
-    const count = parseInt(localStorage.getItem(CART_STORAGE_KEY) || '0', 10);
-    const badgeEl = document.getElementById('cart-badge');
-    if (badgeEl) {
-        badgeEl.textContent = count;
-        if (count > 0) {
-            badgeEl.classList.remove('hidden');
-        } else {
-            badgeEl.classList.add('hidden');
-        }
-    }
-    console.log(`[Cart] Cart badge updated with count: ${count}`);
+    const count = parseInt(localStorage.getItem(CART_STORAGE_KEY) || '0', 10);
+    const badgeEl = document.getElementById('cart-badge');
+    if (badgeEl) {
+        badgeEl.textContent = count;
+        count > 0 ? badgeEl.classList.remove('hidden') : badgeEl.classList.add('hidden');
+    }
 }
 
-
-/**
- * Toggles the mobile menu open/closed state using CSS transitions.
- */
-function toggleMenu() {
-    const mobileMenu = document.getElementById('mobile-menu');
-    const menuIcon = document.getElementById('mobile-menu-icon');
-    const isExpanded = mobileMenu.classList.contains('mobile-menu-open');
-    
-    if (isExpanded) {
-        console.log('[UI] Closing mobile menu.');
-        // Closing: Start transition by removing open class
-        mobileMenu.classList.remove('mobile-menu-open');
-        // Add 'hidden' only after the transition completes (300ms)
-        setTimeout(() => {
-            // Note: 'hidden' class should ONLY be added here to avoid breaking the transition on close
-            mobileMenu.classList.add('hidden'); 
-        }, 300); 
-        
-        menuIcon.classList.replace('fa-times', 'fa-bars');
-        document.querySelector('button[aria-controls="mobile-menu"]').setAttribute('aria-expanded', 'false');
-    } else {
-        console.log('[UI] Opening mobile menu.');
-        // Opening: Remove hidden immediately, then force reflow and add open class
-        // NOTE: The 'hidden' class was removed from the HTML for better CSS transition control
-        mobileMenu.classList.remove('hidden');
-        void mobileMenu.offsetWidth; 
-        mobileMenu.classList.add('mobile-menu-open');
-        menuIcon.classList.replace('fa-bars', 'fa-times');
-        document.querySelector('button[aria-controls="mobile-menu"]').setAttribute('aria-expanded', 'true');
-    }
-}
-
-/**
- * Updates the profile icon's appearance and Aria label based on login status.
- */
 async function updateProfileIconStatus() {
-    console.log('[UI] Updating profile icon status...');
-    // Check status using the primary cookie method
-    const isLoggedIn = await isUserLoggedIn(); 
-    const profileIconBtn = document.getElementById('profile-icon');
-    
-    if (profileIconBtn) {
-        profileIconBtn.classList.remove('hidden'); // Ensure the button is visible on desktop
-        if (isLoggedIn) {
-            // User is logged in
-            console.log('[UI] Profile icon set to LOGGED IN state.');
-            profileIconBtn.setAttribute('aria-label', 'User Account');
-            profileIconBtn.classList.add('text-primary-indigo', 'border-primary-indigo', 'border');
-            profileIconBtn.classList.remove('text-gray-700', 'border-transparent');
-        } else {
-            // User is logged out
-            console.log('[UI] Profile icon set to LOGGED OUT state.');
-            profileIconBtn.setAttribute('aria-label', 'Login or Register');
-            profileIconBtn.classList.add('text-gray-700');
-            profileIconBtn.classList.remove('text-primary-indigo', 'border-primary-indigo', 'border');
-        }
-    }
+    const isLoggedIn = isUserLoggedIn(); 
+    const profileIconBtn = document.getElementById('profile-icon');
+    if (profileIconBtn) {
+        if (isLoggedIn) {
+            profileIconBtn.classList.add('text-primary-indigo', 'border-primary-indigo', 'border');
+            profileIconBtn.classList.remove('text-gray-700');
+        } else {
+            profileIconBtn.classList.add('text-gray-700');
+            profileIconBtn.classList.remove('text-primary-indigo', 'border-primary-indigo', 'border');
+        }
+    }
 }
-    
-/**
- * Fetches the full order details (items, final amount) from the server.
- * @param {string} orderId - The MongoDB _id or reference of the order.
- */
+
+// --- ⭐ CORE FIX: FETCH ORDER (GUEST & USER COMPATIBLE) ---
+
 async function fetchOrderCollection(orderId) {
     console.log(`[OrderFetch] Starting fetch for Order ID: ${orderId}`);
     const itemsListEl = document.getElementById('order-items-list');
     const priceSummaryEl = document.getElementById('price-summary');
     
-    // 1. Get the token using the defined CONSTANT
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    const headers = { 'Content-Type': 'application/json' };
     
-    // Helper function to render login prompt
-    const renderLoginPrompt = (isExpired = false) => {
-        const currentUrl = window.location.pathname + window.location.search;
-        const redirectUrl = `useraccount.html?redirect=${encodeURIComponent(currentUrl)}`;
-        const message = isExpired 
-            ? 'Your session has expired or you do not have permission.' 
-            : 'You must be logged in to view detailed order history.';
-        
-        return `<div class="text-center py-4 text-red-500">
-            <i class="fas fa-exclamation-triangle mr-2"></i> ${message} 
-            <a href="${redirectUrl}" class="font-semibold underline text-primary-indigo hover:text-indigo-800">Click here to log in.</a>
-        </div>`;
-    };
-
-    // 2. Auth Check: Verify cookie status via server-side authority
-    const isLoggedIn = await isUserLoggedIn();
-
-    if (!isLoggedIn) {
-        console.warn('[OrderFetch] User is NOT logged in. Displaying login prompt.');
-        itemsListEl.innerHTML = renderLoginPrompt(false);
-        priceSummaryEl.innerHTML = '';
-        return;
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
     }
-
-    if (!token) {
-        console.error('[OrderFetch] 🛑 Session Mismatch: Cookie valid, but JWT token missing.');
-        itemsListEl.innerHTML = `<div class="text-center py-4 text-orange-500">
-            <i class="fas fa-exclamation-circle mr-2"></i> **Session Mismatch:** Your session is active, but the access token is missing. Please <a href="useraccount.html" class="underline">log in again</a>.
-        </div>`;
-        priceSummaryEl.innerHTML = '';
-        return;
-    }
-    
-    console.log('[OrderFetch] Pre-check passed. Proceeding to API call.');
 
     try {
-        const fetchUrl = `${API_BASE_URL}/api/orders/${orderId}`;
-        
-        const response = await fetch(fetchUrl, {
+        const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}`, {
             method: 'GET',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`, 
-            },
-            // ⭐ CRITICAL: Ensure secure cookies are sent for cross-site verification
+            headers: headers,
             credentials: 'include' 
         });
 
         if (!response.ok) {
-            // 3. Handle Unauthorized/Expired Tokens
+            // Only show login prompt if the server explicitly requires auth for this specific order
             if (response.status === 401 || response.status === 403) {
-                console.error(`[OrderFetch] API failed (${response.status}). Clearing invalid token key: ${AUTH_TOKEN_KEY}`);
-                
-                // FIX: Use the constant to remove the token
-                localStorage.removeItem(AUTH_TOKEN_KEY);
-                localStorage.removeItem('outflickzAuthStatus'); 
-                
-                updateProfileIconStatus(); 
-                itemsListEl.innerHTML = renderLoginPrompt(true);
-                priceSummaryEl.innerHTML = '';
+                const currentUrl = window.location.pathname + window.location.search;
+                itemsListEl.innerHTML = `
+                    <div class="text-center py-4 text-orange-600">
+                        <i class="fas fa-lock mr-2"></i> This order is linked to an account. 
+                        <a href="useraccount.html?redirect=${encodeURIComponent(currentUrl)}" class="underline font-bold">Log in to view details.</a>
+                    </div>`;
                 return;
             }
-
-            const errorData = await response.json().catch(() => ({ message: 'Server error' }));
-            throw new Error(errorData.message || `Error ${response.status}`);
+            throw new Error(`Order not found or Server Error (${response.status})`);
         }
 
         const orderDetails = await response.json(); 
-        console.log('[OrderFetch] Success:', orderDetails);
         
-        if (!orderDetails.items || orderDetails.items.length === 0) {
-            itemsListEl.innerHTML = `<div class="text-center py-4 text-gray-500">No items found for this order.</div>`;
-            return;
-        }
-
-        // 4. Data Parsing
-        const subtotal = orderDetails.subtotal || 0.00;
-        const shippingFee = orderDetails.shippingFee || 0.00;
-        const tax = orderDetails.tax || 0.00; 
-        const total = orderDetails.totalAmount || (subtotal + shippingFee + tax); 
-
-        // 5. Render Items
+        // Render Items
         itemsListEl.innerHTML = orderDetails.items.map(item => `
-            <div class="flex flex-col sm:flex-row justify-between items-start py-4 border-b border-gray-100 last:border-b-0 transition duration-150 hover:bg-gray-50 rounded-md px-2">
+            <div class="flex flex-col sm:flex-row justify-between items-start py-4 border-b border-gray-100 last:border-b-0">
                 <div class="flex items-start flex-grow w-full"> 
-                    <img src="${item.imageUrl || 'https://placehold.co/80x80?text=No+Image'}" alt="${item.name}" class="w-20 h-20 rounded-lg border mr-4 object-cover flex-shrink-0">
-                    <div class="text-sm pt-0.5 flex-grow">
+                    <img src="${item.imageUrl || 'https://placehold.co/80x80?text=No+Image'}" class="w-20 h-20 rounded-lg border mr-4 object-cover">
+                    <div class="text-sm">
                         <p class="font-bold text-gray-900">${item.name}</p>
-                        <p class="text-xs text-gray-500 mt-1">
-                            <span class="font-medium">Size:</span> ${item.size || 'N/A'} <span class="mx-1 text-gray-300">|</span> 
-                            <span class="font-medium">Color:</span> ${item.color || 'N/A'}
-                        </p>
-                        <p class="text-xs text-gray-500"><span class="font-medium">Qty:</span> ${item.quantity}</p>
+                        <p class="text-xs text-gray-500">Size: ${item.size || 'N/A'} | Color: ${item.color || 'N/A'}</p>
+                        <p class="text-xs text-gray-500">Qty: ${item.quantity}</p>
                     </div>
                 </div>
-                <div class="mt-2 sm:mt-0 text-right sm:pl-4 w-full sm:w-auto">
-                    <span class="text-sm sm:text-base font-bold text-gray-900">${CURRENCY_SYMBOL}${formatNaira(item.priceAtTimeOfPurchase * item.quantity)}</span>
-                    <p class="text-xs text-gray-400">@ ${CURRENCY_SYMBOL}${formatNaira(item.priceAtTimeOfPurchase)} each</p>
+                <div class="mt-2 sm:mt-0 text-right">
+                    <span class="font-bold text-gray-900">${CURRENCY_SYMBOL}${formatNaira(item.priceAtTimeOfPurchase * item.quantity)}</span>
                 </div>
             </div>
         `).join('');
 
-        // 6. Render Price Summary
+        // Render Summary
         priceSummaryEl.innerHTML = `
             <div class="space-y-2">
-                <div class="flex justify-between text-sm text-gray-700">
-                    <span>Subtotal:</span>
-                    <span class="font-semibold">${CURRENCY_SYMBOL}${formatNaira(subtotal)}</span>
+                <div class="flex justify-between text-sm"><span>Subtotal:</span><span class="font-semibold">${CURRENCY_SYMBOL}${formatNaira(orderDetails.subtotal || 0)}</span></div>
+                <div class="flex justify-between text-sm"><span>Shipping:</span><span class="font-semibold">${CURRENCY_SYMBOL}${formatNaira(orderDetails.shippingFee || 0)}</span></div>
+                <div class="flex justify-between text-xl font-extrabold text-primary-indigo border-t pt-4">
+                    <span>Total:</span><span>${CURRENCY_SYMBOL}${formatNaira(orderDetails.totalAmount || 0)}</span>
                 </div>
-                <div class="flex justify-between text-sm text-gray-700">
-                    <span>Shipping:</span>
-                    <span class="font-semibold">${CURRENCY_SYMBOL}${formatNaira(shippingFee)}</span>
-                </div>
-                <div class="flex justify-between text-sm text-gray-700">
-                    <span>Tax:</span>
-                    <span class="font-semibold">${CURRENCY_SYMBOL}${formatNaira(tax)}</span>
-                </div>
-                <div class="flex justify-between text-xl font-extrabold text-primary-indigo border-t pt-4 mt-2">
-                    <span>Order Total:</span>
-                    <span>${CURRENCY_SYMBOL}${formatNaira(total)}</span>
-                </div>
-            </div>
-        `;
+            </div>`;
 
     } catch (error) {
-        console.error('[OrderFetch] Fatal Error:', error);
-        itemsListEl.innerHTML = `<div class="text-center py-4 text-red-500"><i class="fas fa-exclamation-triangle mr-2"></i> Error loading order details. Please try refreshing.</div>`;
+        console.error('[OrderFetch] Error:', error);
+        itemsListEl.innerHTML = `<div class="text-center py-4 text-red-500">Unable to load order details.</div>`;
     }
 }
 
-/**
- * Parses the URL parameters and displays the appropriate confirmation message.
- * Also handles clearing the local cart and badge count upon successful order creation.
- */
+// --- CONFIRMATION LOGIC ---
+
 function displayConfirmationDetails() {
-    console.log('[Confirmation] Starting displayConfirmationDetails.');
-    const urlParams = new URLSearchParams(window.location.search);
-    // ⭐ CRITICAL FIX: Prioritize 'id' (MongoDB ID) first, then fallback to 'ref' (Paystack Ref)
-    const orderId = urlParams.get('id') || urlParams.get('ref'); 
-// 2. FIX: Provide a fallback for 'method' so the page doesn't crash
-    const method = urlParams.get('method') || 'paystack';    
-    console.log(`[Confirmation] URL Params - ID/Ref: ${orderId}, Method: ${method}`);
+    const urlParams = new URLSearchParams(window.location.search);
+    const orderId = urlParams.get('id') || urlParams.get('ref'); 
+    const method = urlParams.get('method') || 'paystack';    
 
-    const orderRefEl = document.getElementById('order-ref-number');
-    const confTitleEl = document.getElementById('confirmation-title');
-    const confMsgEl = document.getElementById('confirmation-message');
-    const confIconEl = document.getElementById('confirmation-icon');
-    const payMethodMsgEl = document.getElementById('payment-method-message');
-    const bankDetailsEl = document.getElementById('bank-transfer-details');
+    const orderRefEl = document.getElementById('order-ref-number');
+    const confTitleEl = document.getElementById('confirmation-title');
+    const confIconEl = document.getElementById('confirmation-icon');
+    const payMethodMsgEl = document.getElementById('payment-method-message');
+    const bankDetailsEl = document.getElementById('bank-transfer-details');
 
-    if (!orderId || !method) {
-        console.error('[Confirmation] Missing order ID or payment method in URL.');
-        orderRefEl.textContent = 'N/A';
-        // Assuming 'ash-red' is defined in your Tailwind config
-        confIconEl.classList.remove('fa-check-circle', 'text-green-500', 'animate-pulse');
-        confIconEl.classList.add('fa-exclamation-circle', 'text-ash-red');
-        confTitleEl.textContent = 'Confirmation Error';
-        confMsgEl.textContent = 'Order details were not provided in the link. Please check your email or contact support.';
-        return;
-    }
+    if (!orderId) {
+        orderRefEl.textContent = 'N/A';
+        return;
+    }
 
-    // Set default successful state
-    confIconEl.classList.remove('fa-clock', 'text-yellow-600', 'fa-exclamation-circle', 'text-ash-red');
-    confIconEl.classList.add('fa-check-circle', 'text-green-500', 'animate-pulse');
-    confTitleEl.textContent = 'Order Confirmed!';
-    
-    // Hide bank details by default
-    if (bankDetailsEl) {
-        bankDetailsEl.classList.add('hidden');
-    }
+    orderRefEl.textContent = `#${orderId}`;
 
-    if (method === 'paystack') {
-        console.log('[Confirmation] Processing successful Paystack payment.');
-        // Successful Paystack/Card Payment
-        
-        // --- 🎯 CRITICAL CART CLEARING FIXES APPLIED HERE ---
-        
-        // 1. Remove ALL temporary checkout data
-        localStorage.removeItem('outflickzShippingData'); 
-        localStorage.removeItem('outflickzOrderTotal');
-        localStorage.removeItem('outflickzOrderSubtotal');
-        localStorage.removeItem('outflickzOrderShipping');
-        localStorage.removeItem('outflickzOrderTax');
-        
-        // 2. Remove the actual cart item array (LOCAL_CART_KEY)
-        localStorage.removeItem(LOCAL_CART_KEY); 
-        
-        // 3. Clear the count storage key to zero
-        localStorage.setItem(CART_STORAGE_KEY, '0');
-        
-        // 4. Clear Buy Now flag from sessionStorage
-        sessionStorage.removeItem('BUY_NOW_KEY');
-        
-        console.log('[Confirmation] Cleared all checkout data, local cart array, and reset cart count.');
+    // --- CLEAR CART & DATA ---
+    const keysToClear = ['outflickzShippingData', 'outflickzOrderTotal', 'outflickzOrderSubtotal', 'outflickzOrderShipping', 'outflickzOrderTax', LOCAL_CART_KEY];
+    keysToClear.forEach(key => localStorage.removeItem(key));
+    localStorage.setItem(CART_STORAGE_KEY, '0');
+    sessionStorage.removeItem('BUY_NOW_KEY');
 
-        // Update UI elements for successful payment
-        orderRefEl.textContent = `#${orderId}`;
-        payMethodMsgEl.textContent = `Payment was completed successfully via Paystack (Card). Your order will be shipped soon!`;
+    if (method === 'banktransfer') {
+        confIconEl.className = "fas fa-clock text-yellow-600 text-5xl";
+        confTitleEl.textContent = 'Order Created (Pending)';
+        payMethodMsgEl.textContent = 'Please complete your bank transfer to finalize the order.';
+        if (bankDetailsEl) bankDetailsEl.classList.remove('hidden');
+    }
 
-    } else if (method === 'banktransfer') {
-        console.log('[Confirmation] Processing pending Bank Transfer order.');
-        // Pending Bank Transfer Order
-        
-        // --- 🎯 CRITICAL CART CLEARING FIXES APPLIED HERE ---
-        // Bank transfer finalization on the previous page already did the bulk of this, 
-        // but we ensure all temporary checkout data is scrubbed here too for redundancy.
-        
-        // 1. Remove ALL temporary checkout data
-        localStorage.removeItem('outflickzShippingData'); 
-        localStorage.removeItem('outflickzOrderTotal');
-        localStorage.removeItem('outflickzOrderSubtotal');
-        localStorage.removeItem('outflickzOrderShipping');
-        localStorage.removeItem('outflickzOrderTax');
-        
-        // 2. Remove the actual cart item array (LOCAL_CART_KEY)
-        localStorage.removeItem(LOCAL_CART_KEY); 
-        
-        // 3. Clear the count storage key to zero
-        localStorage.setItem(CART_STORAGE_KEY, '0');
-        
-        // 4. Clear Buy Now flag from sessionStorage
-        sessionStorage.removeItem('BUY_NOW_KEY');
-        
-        console.log('[Confirmation] Order created via Bank Transfer. Local checkout data cleared.');
-
-        // Update UI elements for pending bank transfer
-        orderRefEl.textContent = `#${orderId}`;
-        confIconEl.classList.remove('fa-check-circle', 'text-green-500', 'animate-pulse');
-        confIconEl.classList.add('fa-clock', 'text-yellow-600');
-        confTitleEl.textContent = 'Order Created (Payment Pending)';
-        confMsgEl.textContent = 'Thank you for your order! We are now waiting for your bank transfer confirmation. You will receive an email once payment is verified.';
-        payMethodMsgEl.textContent = `You selected **Bank Transfer**. Please transfer the total amount using the order number above as reference.`;
-        
-        // Display bank transfer instructions
-        if (bankDetailsEl) {
-            bankDetailsEl.classList.remove('hidden');
-            console.log('[Confirmation] Displaying bank transfer instructions.');
-        }
-
-    } else {
-        console.warn(`[Confirmation] Unknown payment method: ${method}`);
-        // Fallback for unknown method, keep successful state but log warning
-        orderRefEl.textContent = `#${orderId}`;
-        payMethodMsgEl.textContent = `Order successfully placed. Payment method: ${method}.`;
-    }
-    
-    // ⭐ CRITICAL FIX: Wrap the API call in a setTimeout to mitigate the race condition.
-    // This gives the backend a crucial 500ms to finalize the order record in the database.
-    console.log('[Confirmation] Applying 500ms delay before fetching order details...');
-    setTimeout(() => {
-        // **CRITICAL**: Call function to fetch collection details using the Order ID.
-        fetchOrderCollection(orderId);
-    }, 500); // Wait 500 milliseconds before fetching
-
-    // Ensure the cart badge is updated (This runs after both payment clearing paths)
-    updateCartBadge();
+    // Wait 1 second for Netlify DB consistency then fetch
+    setTimeout(() => fetchOrderCollection(orderId), 1000);
+    updateCartBadge();
 }
 
-// --- Main Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('--- Document Loaded: Initializing Order Confirmation Page ---');
-    // We don't need enforceAuthGate() here since this page is confirmation, 
-    // but we use the new check for the header icon
-    updateCartBadge(); 
-    updateProfileIconStatus(); // Use the new cookie-based check to update the profile icon
-    displayConfirmationDetails(); 
-    console.log('--- Initialization Complete ---');
+    updateCartBadge(); 
+    updateProfileIconStatus();
+    displayConfirmationDetails(); 
 });
 </script>
 </body>
