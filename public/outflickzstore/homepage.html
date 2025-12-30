@@ -1242,40 +1242,49 @@ function handleModalAddToCart(productId, productType) {
     const modal = document.getElementById('quick-view-modal');
     if (!modal) return;
 
-    const selectedSize = window.selectedSizes ? window.selectedSizes[productId] : null;
-    const selectedColor = window.selectedColors ? window.selectedColors[productId] : null;
+    // 🔍 DEBUG LOGS
+    console.log("--- Add to Cart Debug ---");
+    console.log("Product ID:", productId);
+    console.log("Product Type:", productType);
+    console.log("Global Selected Sizes Object:", window.selectedSizes);
     
-    // Get quantity from the new input
-    const quantityInput = document.getElementById(`modal-qty-${productId}`);
-    const quantity = quantityInput ? parseInt(quantityInput.value) : 1;
+    const selectedSize = window.selectedSizes ? window.selectedSizes[productId] : null;
+    console.log("Retrieved Size for this Product:", selectedSize);
 
     const isCap = productType === 'CapCollection';
     
     if (!isCap && !selectedSize) {
+        console.error("Validation Failed: No size found in window.selectedSizes for " + productId);
         alert("Please select a size first.");
         return;
     }
 
-    const mainCard = document.querySelector(`[data-collection-id="${productId}"]`);
-    if (!mainCard) return;
+    // ... rest of your existing logic ...
+    const quantityInput = document.getElementById(`modal-qty-${productId}`);
+    const quantity = quantityInput ? parseInt(quantityInput.value) : 1;
+    console.log("Quantity to add:", quantity);
 
-    const name = mainCard.querySelector('h3').innerText;
+    const mainCard = document.querySelector(`[data-collection-id="${productId}"]`);
+    if (!mainCard) {
+        console.error("Error: Could not find main card with data-collection-id:", productId);
+        return;
+    }
+
     const priceText = mainCard.querySelector('p[class*="price"]').innerText.replace('₦', '').replace(/,/g, '');
     const price = parseFloat(priceText);
     const imageUrl = document.getElementById('modal-main-image').src;
-    const description = modal.querySelector('p.text-gray-700')?.innerText || "";
 
     if (typeof simulateAddToCart === 'function') {
         simulateAddToCart({
             productId: productId,
-            name: name,
-            description: description,
+            name: mainCard.querySelector('h3').innerText,
             price: price,
             imageUrl: imageUrl,
             size: isCap ? "O/S" : selectedSize,
-            color: selectedColor,
-            quantity: quantity // ⭐ Now uses the selected quantity
+            quantity: quantity
         });
+        
+        console.log("Successfully sent to simulateAddToCart");
 
         // Success UI Feedback
         const modalBtn = modal.querySelector('button[onclick^="handleModalAddToCart"]');
@@ -1283,10 +1292,29 @@ function handleModalAddToCart(productId, productType) {
         modalBtn.classList.replace('bg-black', 'bg-green-600');
         modalBtn.disabled = true;
 
-        setTimeout(() => {
-            closeQuickView();
-        }, 1000);
+        setTimeout(() => closeQuickView(), 1000);
     }
+}
+
+// Make sure your size selection function (likely inside createSizeList) does this:
+function selectSize(productId, size, element) {
+    // 1. Initialize the global object if it doesn't exist
+    if (!window.selectedSizes) window.selectedSizes = {};
+    
+    // 2. Save the selection
+    window.selectedSizes[productId] = size;
+    console.log(`Size ${size} selected for product ${productId}`);
+
+    // 3. Visual feedback (UI update)
+    const container = element.parentElement;
+    container.querySelectorAll('button').forEach(btn => {
+        btn.classList.remove('bg-black', 'text-white', 'border-black');
+        btn.classList.add('bg-white', 'text-gray-900', 'border-gray-200');
+    });
+    
+    element.classList.replace('bg-white', 'bg-black');
+    element.classList.replace('text-gray-900', 'text-white');
+    element.classList.replace('border-gray-200', 'border-black');
 }
 
 // 3. IMAGE TOGGLE (With dot active state)
