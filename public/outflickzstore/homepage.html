@@ -1284,10 +1284,11 @@ function openProductQuickView(jsonPayload) {
                     </div>
 
                     <div class="mt-10">
-                        <button onclick="handleModalAddToCart('${product._id}')" 
-                                class="w-full bg-black text-white py-4 rounded-md font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3 active:scale-[0.97] shadow-lg shadow-black/10">
-                            <i class="fas fa-shopping-bag text-sm"></i> Add to Bag
-                        </button>
+                      // Locate this line in your openProductQuickView function and update it:
+<button onclick="handleModalAddToCart('${product._id}', '${product.productType}')" 
+        class="w-full bg-black text-white py-4 rounded-md font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3 active:scale-[0.97] shadow-lg shadow-black/10">
+    <i class="fas fa-shopping-bag text-sm"></i> Add to Bag
+</button>
                         
                         <div class="flex items-center justify-center gap-4 mt-6 opacity-50">
                             <div class="flex items-center gap-1.5">
@@ -1321,15 +1322,17 @@ function closeQuickView() {
     }
 }
 
-// 2. MODAL ADD TO CART HANDLER
-function handleModalAddToCart(productId) {
+function handleModalAddToCart(productId, productType) {
     const modal = document.getElementById('quick-view-modal');
     if (!modal) return;
 
     const selectedSize = window.selectedSizes ? window.selectedSizes[productId] : null;
     const selectedColor = window.selectedColors ? window.selectedColors[productId] : null;
 
-    if (!selectedSize) {
+    // ⭐ NEW LOGIC: Only require size if it's NOT a Cap
+    const isCap = productType === 'CapCollection';
+    
+    if (!isCap && !selectedSize) {
         alert("Please select a size first.");
         return;
     }
@@ -1341,20 +1344,18 @@ function handleModalAddToCart(productId) {
     const priceText = mainCard.querySelector('p[class*="price"]').innerText.replace('₦', '').replace(/,/g, '');
     const price = parseFloat(priceText);
     const imageUrl = document.getElementById('modal-main-image').src;
-
-    // 🔥 NEW: Grab the description from the modal UI
-    const description = modal.querySelector('p.text-gray-600')?.innerText || "";
+    const description = modal.querySelector('p.text-gray-700')?.innerText || "";
 
     if (typeof simulateAddToCart === 'function') {
         simulateAddToCart({
             productId: productId,
             name: name,
-            description: description, // 🔥 NOW IT CARRIES THE DESCRIPTION
+            description: description,
             price: price,
             imageUrl: imageUrl,
-            size: selectedSize,
+            size: isCap ? "O/S" : selectedSize, // Set "O/S" (One Size) for caps
             color: selectedColor,
-            quantity: parseInt(document.getElementById(`quantity-input-${productId}`)?.value || 1)
+            quantity: 1
         });
 
         // Success UI Feedback
