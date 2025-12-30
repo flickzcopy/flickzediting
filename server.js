@@ -990,6 +990,12 @@ const CapCollection = mongoose.models.CapCollection || mongoose.model('CapCollec
 const PreOrderCollectionSchema = new mongoose.Schema({
     // General Product Information
     name: { type: String, required: [true, 'Collection name is required'], trim: true },
+      description: { 
+        type: String, 
+        trim: true, 
+        maxlength: [1000, 'Description cannot exceed 1000 characters'],
+        default: '' 
+    },
     tag: { type: String, required: [true, 'Tag is required'], enum: ['Pre-Order', 'Coming Soon', 'Limited Drop', 'Seasonal'] }, 
     price: { type: Number, required: [true, 'Price is required'], min: [0.01, 'Price must be greater than zero'] },
     
@@ -4550,6 +4556,7 @@ app.get(
         }
     }
 );
+
 // 1. POST /api/admin/preordercollections (Create New Pre-Order Collection) 
 app.post('/api/admin/preordercollections', verifyToken, upload.fields(uploadFields), async (req, res) => {
     try {
@@ -4601,10 +4608,9 @@ app.post('/api/admin/preordercollections', verifyToken, upload.fields(uploadFiel
         // C. Create the Final Collection Object
         const newCollection = new PreOrderCollection({
             name: collectionData.name,
+            description: collectionData.description, // 🔑 ADDED: Link the new description field
             tag: collectionData.tag,
             price: collectionData.price,
-            // REMOVED: sizes - now nested in variations
-            // REMOVED: totalStock - calculated automatically by pre('save') middleware
             isActive: collectionData.isActive,
             availableDate: collectionData.availableDate,
             variations: finalVariations,
@@ -4739,8 +4745,8 @@ app.put(
             // Update the Document Fields
             existingCollection.name = collectionData.name;
             existingCollection.tag = collectionData.tag;
+            existingCollection.description = collectionData.description; // 🔑 ADDED: Update description
             existingCollection.price = collectionData.price;
-            // REMOVED: sizes and totalStock from top-level update
             existingCollection.isActive = collectionData.isActive;
             existingCollection.availableDate = collectionData.availableDate;
 
@@ -4786,7 +4792,7 @@ app.get(
             // Fetch all collections, selecting only necessary and consistent fields
             const collections = await PreOrderCollection.find({})
                 // 🔑 UPDATED: Removed top-level 'sizes' from select list
-                .select('_id name tag price variations totalStock isActive availableDate') 
+                .select('_id name tag description price variations totalStock isActive availableDate') 
                 .sort({ createdAt: -1 })
                 .lean();
 
@@ -5118,7 +5124,7 @@ app.get('/api/collections/newarrivals', async (req, res) => {
 app.get('/api/collections/preorder', async (req, res) => {
     try {
         const collections = await PreOrderCollection.find({ isActive: true })
-            .select('_id name tag price totalStock availableDate variations')
+            .select('_id name tag description price totalStock availableDate variations')
             .sort({ createdAt: -1 })
             .lean();
 
@@ -5186,6 +5192,7 @@ app.get('/api/collections/preorder', async (req, res) => {
             return {
                 _id: collection._id,
                 name: collection.name,
+                description: collection.description || '', // 🔑 ADDED: Include description
                 tag: collection.tag,
                 price: collection.price, 
                 sizeStockMap: sizeStockMap, 
@@ -5212,7 +5219,7 @@ app.get('/api/collections/preorder', async (req, res) => {
 app.get('/api/collections/caps', async (req, res) => {
     try {
         const collections = await CapCollection.find({ isActive: true }) 
-            .select('_id name tag price variations totalStock') 
+            .select('_id name tag description price variations totalStock') 
             .sort({ createdAt: -1 })
             .lean(); 
 
@@ -5267,6 +5274,7 @@ app.get('/api/collections/caps', async (req, res) => {
                 _id: collection._id,
                 name: collection.name,
                 tag: collection.tag,
+                description: collection.description || '', // 🔑 ADDED: Include description
                 price: collection.price, 
                 sizeStockMap: {}, 
                 availableSizes: [], 

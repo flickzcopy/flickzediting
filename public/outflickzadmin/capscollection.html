@@ -140,8 +140,8 @@
                         
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label for="collection-description" class="block text-sm font-medium text-gray-700">Description/Tag</label>
-                                <select id="collection-description" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-emerald-500 focus:border-emerald-500">
+                                <label for="collection-tag" class="block text-sm font-medium text-gray-700">Description/Tag</label>
+                                <select id="collection-tag" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-emerald-500 focus:border-emerald-500">
                                     <option value="" disabled selected>Select a collection tag</option>
                                     <option value="Top Deal">Top Deal</option>
                                     <option value="Hot Deal">Hot Deal</option>
@@ -1063,16 +1063,20 @@ async function handleCollectionSubmit(event) {
     // --- 2. Collect General Form Data ---
     const isActive = document.getElementById('is-active').checked;
 
-    const collectionData = {
-        name: document.getElementById('collection-name').value,
-        tag: document.getElementById('collection-description').value,
-        description: document.getElementById('collection-description').value, // Add this line
-        price: parseFloat(document.getElementById('collection-price').value), 
-        // sizes field removed
-        totalStock: 0, // Placeholder. Backend middleware calculates this.
-        isActive: isActive,
-        variations: productVariationsMetadata
-    };
+ const collectionData = {
+    name: document.getElementById('collection-name').value,
+    
+    // Pulls from the Tag dropdown (e.g., "Hot Deal", "New")
+    tag: document.getElementById('collection-tag').value, 
+    
+    // Pulls from the separate Description textarea
+    description: document.getElementById('collection-description').value, 
+    
+    price: parseFloat(document.getElementById('collection-price').value),
+    totalStock: 0, // Calculated by backend middleware
+    isActive: isActive,
+    variations: productVariationsMetadata
+};
 
     // --- 3. Append JSON Data to FormData ---
     formData.append('collectionData', JSON.stringify(collectionData));
