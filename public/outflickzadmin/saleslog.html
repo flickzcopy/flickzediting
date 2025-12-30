@@ -203,43 +203,39 @@
      * Renders sales data into the table.
      * @param {Array} data - Filtered sales data (Order documents).
      */
-    function renderSalesTable(data) {
-        salesTableBody.innerHTML = '';
-        
-        if (data.length === 0) {
-            salesTableBody.innerHTML = `
-                <tr class="text-center">
-                    <td colspan="6" class="p-6 text-gray-500">No sales transactions match your criteria.</td>
-                </tr>
-            `;
-            return;
-        }
-
-        data.forEach(order => {
-            const dateObj = new Date(order.createdAt); // Use createdAt from the schema's timestamps
-            const formattedDate = dateObj.toLocaleDateString('en-US', { 
-                year: 'numeric', month: 'short', day: 'numeric' 
-            });
-
-            // Assuming the backend populates the userId field to get the customer's name/email.
-            const customerName = order.userId?.username || order.userId?.email || order.userId || 'N/A';
-            const totalAmount = order.totalAmount; // This is the total price in Naira
-
-            const row = document.createElement('tr');
-            row.className = 'hover:bg-gray-50 transition duration-100';
-            row.innerHTML = `
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${order.orderReference || order._id}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${customerName}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${order.items.length} items</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-600">${formatNaira(totalAmount)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${formattedDate}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm">
-                    ${getStatusBadge(order.status)}
-                </td>
-            `;
-            salesTableBody.appendChild(row);
-        });
+   function renderSalesTable(data) {
+    salesTableBody.innerHTML = '';
+    
+    if (data.length === 0) {
+        salesTableBody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-gray-500">No records found.</td></tr>`;
+        return;
     }
+
+    data.forEach(order => {
+        const dateObj = new Date(order.createdAt);
+        const formattedDate = dateObj.toLocaleDateString('en-US', { 
+            year: 'numeric', month: 'short', day: 'numeric' 
+        });
+
+        // ⭐ UPDATED: Use the sanitized displayEmail from the backend
+        const customerDisplay = order.displayEmail || 'N/A';
+        const totalAmount = order.totalAmount;
+
+        const row = document.createElement('tr');
+        row.className = 'hover:bg-gray-50 transition duration-100';
+        row.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${order.orderReference || order._id}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${customerDisplay}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${order.items.length} items</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-600">${formatNaira(totalAmount)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${formattedDate}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                ${getStatusBadge(order.status)}
+            </td>
+        `;
+        salesTableBody.appendChild(row);
+    });
+}
 
     /**
      * Filters the sales data based on search term AND collection (productType).

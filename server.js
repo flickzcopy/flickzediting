@@ -2887,27 +2887,32 @@ app.get('/api/analytics/visitors/:period', verifyToken, async (req, res) => {
         });
     }
 });
-
 app.get('/api/admin/orders/all', verifyToken, async (req, res) => {
     try {
-        // Fetch all orders using your existing helper
         const allOrders = await getAllOrders();
         
-        // ⭐️ STRICT FILTER: Exclude abandoned Paystack checkouts
         const validOrders = allOrders.filter(order => {
             if (order.paymentMethod === 'Paystack') {
-                // Show only if Paid, or if it's no longer in 'Pending' status
                 return order.paymentStatus === 'Paid' || order.status !== 'Pending';
             }
-            // Always include Bank Transfers for the Sales Log
             return true;
         });
 
-        const sanitizedOrders = validOrders.map(order => ({
-            ...order,
-            displayId: order.orderReference || order._id,
-            isAutomated: !!order.paymentTxnId 
-        }));
+        const sanitizedOrders = validOrders.map(order => {
+            // ⭐ LOGIC: Find the best email to display
+            const emailToDisplay = order.userId?.email || 
+                                   order.guestEmail || 
+                                   order.shippingAddress?.email || 
+                                   order.email || 
+                                   'N/A';
+
+            return {
+                ...order,
+                displayId: order.orderReference || order._id,
+                displayEmail: emailToDisplay, // Added for frontend use
+                isAutomated: !!order.paymentTxnId 
+            };
+        });
 
         res.status(200).json(sanitizedOrders);
         
