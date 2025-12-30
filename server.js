@@ -2537,8 +2537,8 @@ const verifySessionCookie = (req, res, next) => {
     }
 };
 
-// Use this for routes that MUST have a logged-in user (like /account)
-const requireUser = (req, res, next) => {
+// Change 'requireUser' to 'requireUserLogin'
+const requireUserLogin = (req, res, next) => {
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -7106,6 +7106,7 @@ module.exports = {
     Cart,
     ActivityLog,
     VisitorLog,
+    requireUserLogin,
     processOrderCompletion,
     inventoryRollback,
     getProductModel,
