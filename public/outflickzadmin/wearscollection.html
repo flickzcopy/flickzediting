@@ -129,18 +129,30 @@
                             <input type="text" id="collection-name" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-emerald-500 focus:border-emerald-500">
                         </div>
                         
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label for="collection-description" class="block text-sm font-medium text-gray-700">Description/Tag</label>
-                                <select id="collection-description" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-emerald-500 focus:border-emerald-500">
-                                    <option value="" disabled selected>Select a collection tag</option>
-                                    <option value="Top Deal">Top Deal</option>
-                                    <option value="Hot Deal">Hot Deal</option>
-                                    <option value="New">New</option>
-                                    <option value="Seasonal">Seasonal</option>
-                                    <option value="Clearance">Clearance</option>
-                                </select>
-                            </div>
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        <div>
+                            <label for="collection-name" class="block text-sm font-medium text-gray-700">Collection Name</label>
+                            <input type="text" id="collection-name" name="name" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        </div>
+                        <div>
+                            <label for="collection-description" class="block text-sm font-medium text-gray-700">Tag (Label)</label>
+                            <select id="collection-description" name="tag" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-emerald-500 focus:border-emerald-500">
+                                <option value="" disabled selected>Select a tag</option>
+                                <option value="New">New</option>
+                                <option value="Top Deal">Top Deal</option>
+                                <option value="Hot Deal">Hot Deal</option>
+                                <option value="Seasonal">Seasonal</option>
+                                <option value="Clearance">Clearance</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-6">
+                        <label for="product-note" class="block text-sm font-medium text-gray-700">Product Description (About/Note)</label>
+                        <textarea id="product-note" name="description" rows="3" required 
+                            placeholder="Describe the material, fit, or unique features..."
+                            class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-emerald-500 focus:border-emerald-500"></textarea>
+                    </div>
 
                             <div>
                                 <label for="collection-price" class="block text-sm font-medium text-gray-700">Collection Price (NGN)</label>
@@ -444,6 +456,7 @@ function getAuthToken() {
  */
 function resetForm() {
     document.getElementById('wears-collection-form').reset();
+    document.getElementById('product-note').value = ''; // Explicitly clear
     collectionIdToUpdate = null;
     formTitle.textContent = '➕ Create New Collection';
     submitBtn.textContent = 'Submit Collection';
@@ -614,6 +627,7 @@ async function editCollection(collectionId) {
         document.getElementById('collection-description').value = collection.tag;
         document.getElementById('collection-price').value = collection.price; 
         document.getElementById('is-active').checked = collection.isActive;
+        document.getElementById('product-note').value = collection.description || '';
 
         // **CRITICAL REMOVAL:** document.getElementById('available-sizes').value = collection.sizes.join(', ');
         // **CRITICAL REMOVAL:** document.getElementById('available-stock').value = collection.totalStock;
@@ -1067,6 +1081,7 @@ function getVariationSizes(section, variationIndex) {
 
     return { sizes, variationStock };
 }
+
 /**
  * Handles the form submission (CREATE or UPDATE) for the full form (including file uploads).
  */
@@ -1187,6 +1202,7 @@ async function handleCollectionSubmit(event) {
     const priceValue = parseFloat(document.getElementById('collection-price').value);
     const collectionTag = document.getElementById('collection-description').value; 
     const isActive = document.getElementById('is-active').checked;
+    const productDescription = document.getElementById('product-note').value.trim();
 
     if (!collectionName) {
         showErrorModal("Collection Name is required.");
@@ -1203,13 +1219,13 @@ async function handleCollectionSubmit(event) {
     // 2. Add main payload data to FormData (JSON stringified)
     const mainPayload = {
         name: collectionName,
+        description: productDescription,
         tag: collectionTag,
         price: priceValue,
         isActive: isActive, 
         totalStock: isActive ? calculatedTotalStock : 0, 
         sizesAndStock: sizesAndStock,
         variations: variations, 
-        // --- FIX 2: Include the unique client ID for idempotency ---
         clientId: clientId, 
     };
     

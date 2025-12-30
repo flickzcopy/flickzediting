@@ -741,6 +741,13 @@ const WearsCollectionSchema = new mongoose.Schema({
         trim: true,
         maxlength: [100, 'Collection name cannot exceed 100 characters']
     },
+    description: {
+        type: String,
+        required: [true, 'Product description is required'],
+        trim: true,
+        maxlength: [1000, 'Description cannot exceed 1000 characters'],
+        default: 'Quality premium apparel from Outflickz.'
+    },
     tag: {
         type: String,
         required: [true, 'Collection tag is required'],
@@ -4209,19 +4216,16 @@ app.delete('/api/admin/newarrivals/:id', verifyToken, async (req, res) => {
     }
 });
 
-// GET /api/admin/wearscollections/:id (Fetch Single Collection)
+// GET /api/admin/wearscollections/:id
 app.get('/api/admin/wearscollections/:id', verifyToken, async (req, res) => {
     try {
-        // --- FIX 1: Ensure totalStock is selected for fetching ---
+        // ADDED 'description' to the select list
         const collection = await WearsCollection.findById(req.params.id)
-            .select('_id name tag price variations sizesAndStock isActive totalStock') 
+            .select('_id name description tag price variations sizesAndStock isActive totalStock') 
             .lean(); 
         
-        if (!collection) {
-            return res.status(404).json({ message: 'Collection not found.' });
-        }
+        if (!collection) return res.status(404).json({ message: 'Collection not found.' });
 
-        // Sign URLs
         const signedVariations = await Promise.all(collection.variations.map(async (v) => ({
             ...v,
             frontImageUrl: await generateSignedUrl(v.frontImageUrl) || v.frontImageUrl, 
@@ -4229,10 +4233,8 @@ app.get('/api/admin/wearscollections/:id', verifyToken, async (req, res) => {
         })));
         
         collection.variations = signedVariations;
-
         res.status(200).json(collection);
     } catch (error) {
-        console.error('Error fetching wear collection:', error);
         res.status(500).json({ message: 'Server error fetching collection.' });
     }
 });
@@ -4299,6 +4301,7 @@ app.post(
             // C. Create the Final Collection Object
             const newCollection = new WearsCollection({
                 name: collectionData.name,
+                description: collectionData.description, 
                 tag: collectionData.tag,
                 price: collectionData.price, 
                 totalStock: collectionData.totalStock, 
@@ -4454,10 +4457,9 @@ app.put(
             
             // Update the Document Fields
             existingCollection.name = collectionData.name;
+            existingCollection.description = collectionData.description; 
             existingCollection.tag = collectionData.tag;
             existingCollection.price = collectionData.price;
-            
-            // --- FIX 5: Assign totalStock from client payload ---
             existingCollection.totalStock = collectionData.totalStock; 
             existingCollection.sizesAndStock = collectionData.sizesAndStock; 
             existingCollection.isActive = collectionData.isActive;
@@ -4962,88 +4964,71 @@ app.get('/api/admin/inventory/deductions', verifyToken, async (req, res) => {
 app.get('/api/collections/wears', async (req, res) => {
     try {
         const collections = await WearsCollection.find({ isActive: true }) 
-            .select('_id name tag price variations totalStock') // Ensure 'variations' is selected!
+            // 🔥 ADDED 'description' to the select string
+            .select('_id name description tag price variations totalStock') 
             .sort({ createdAt: -1 })
             .lean(); 
 
         const publicCollections = await Promise.all(collections.map(async (collection) => {
             
-            const sizeStockMap = {}; // Will store {S: 10, M: 0, L: 5}
-
-            // --- CRITICAL: Variables for OOS Image Fallback ---
-            // Stores the image URLs (SIGNED) of the very first variation encountered.
+            const sizeStockMap = {}; 
             let fallbackFrontImageUrl = null;
             let fallbackBackImageUrl = null;
-            const PLACEHOLDER_S3_PATH = 'public/placeholder-image-v1.jpg'; // Adjust if path is different
+            const PLACEHOLDER_S3_PATH = 'public/placeholder-image-v1.jpg';
 
-            // --- CRITICAL: Filter Variants and Aggregate Stock ---
             const filteredVariantsWithStock = [];
 
-            for (const v of collection.variations || []) { // Added || [] for safe iteration
-                
-                // 1. SIGN THE VARIATION IMAGES (always needed for the frontend variants array or fallback)
+            for (const v of collection.variations || []) { 
                 const signedFrontUrl = await generateSignedUrl(v.frontImageUrl);
                 const signedBackUrl = await generateSignedUrl(v.backImageUrl);
 
-                // 2. Capture the first signed URL encountered for the OOS fallback
                 if (!fallbackFrontImageUrl && signedFrontUrl) {
                     fallbackFrontImageUrl = signedFrontUrl;
                     fallbackBackImageUrl = signedBackUrl;
                 }
                 
-                // 3. Calculate total stock for THIS specific color (variant)
                 const variantTotalStock = (v.sizes || []).reduce((sum, s) => sum + (s.stock || 0), 0);
                 
-                // 4. ONLY INCLUDE THE VARIANT IF IT HAS STOCK
                 if (variantTotalStock > 0) {
-                    
-                    // 5. Aggregate size stock for the top-level sizeStockMap
                     (v.sizes || []).forEach(s => {
                         const normalizedSize = s.size.toUpperCase().trim();
-                        // Only aggregate if the size itself has stock
                         if (s.stock > 0) {
                             sizeStockMap[normalizedSize] = (sizeStockMap[normalizedSize] || 0) + s.stock;
                         }
                     });
 
-                    // 6. Map and prepare the public variant object (FOR IN-STOCK SELECTION)
                     filteredVariantsWithStock.push({
                         color: v.colorHex,
                         frontImageUrl: signedFrontUrl || 'https://placehold.co/400x400/111111/FFFFFF?text=Front+View+Error',
                         backImageUrl: signedBackUrl || 'https://placehold.co/400x400/111111/FFFFFF?text=Back+View+Error',
-                        // NOTE: Do NOT include sizes/stock here, as the client filters sizes based on sizeStockMap
                     });
                 }
             }
-            // --- END CRITICAL FILTERING ---
 
-            // --- CRITICAL IMAGE FIX: ENSURE A SIGNED FALLBACK URL IS ALWAYS PRESENT ---
             if (!fallbackFrontImageUrl) {
-                // If the variations array was empty or contained no valid URLs, 
-                // sign the generic placeholder path.
                 const signedPlaceholder = await generateSignedUrl(PLACEHOLDER_S3_PATH);
                 fallbackFrontImageUrl = signedPlaceholder;
                 fallbackBackImageUrl = signedPlaceholder;
             }
-            // --- END CRITICAL IMAGE FIX ---
             
             return {
                 _id: collection._id,
                 name: collection.name,
+                description: collection.description, // 🔥 ADDED THIS LINE
                 tag: collection.tag,
                 price: collection.price, 
-                frontImageUrl: fallbackFrontImageUrl,  // <<-- OOS/Fallback Image
-                backImageUrl: fallbackBackImageUrl,    // <<-- OOS/Fallback Image
+                frontImageUrl: fallbackFrontImageUrl,
+                backImageUrl: fallbackBackImageUrl,
                 sizeStockMap: sizeStockMap,
                 availableStock: collection.totalStock, 
-                variants: filteredVariantsWithStock      // <<-- In-Stock variants
+                variants: filteredVariantsWithStock
             };
         }));
 
         res.status(200).json(publicCollections);
     } catch (error) {
         console.error('Error fetching public wear collections:', error);
-        res.status(500).json({ message: 'Server error while fetching collections for homepage.', details: error.message });
+        res.status(500).json({ message: 'Server error.', details: error.message });
     }
 });
 

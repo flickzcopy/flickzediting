@@ -48,16 +48,35 @@ function displayMessage(message) {
     if (modalContainer && modalText) {
         modalText.innerHTML = message;
         modalContainer.classList.remove('hidden');
-        // Auto-hide after 3.5 seconds
         setTimeout(() => modalContainer.classList.add('hidden'), 3500);
     }
 }
 
-// --- SECURE FETCH ---
+// --- SECURE FETCH (Updated to handle 401s) ---
 async function secureUserFetch(url, options = {}) {
     let token = localStorage.getItem(AUTH_TOKEN_KEY);
-    if (token) options.headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
-    return fetch(url, options);
+    if (token) {
+        options.headers = { 
+            ...options.headers, 
+            'Authorization': `Bearer ${token}` 
+        };
+    }
+    
+    try {
+        const response = await fetch(url, options);
+        
+        // If Unauthorized, the token is expired or invalid
+        if (response.status === 401) {
+            console.warn("Unauthorized: Clearing session.");
+            localStorage.removeItem(AUTH_TOKEN_KEY);
+            // Re-render as a local guest instead of crashing
+            renderLocalCart(); 
+        }
+        return response;
+    } catch (err) {
+        console.error("Fetch error:", err);
+        throw err;
+    }
 }
 
 // --- CART LOGIC ---
@@ -75,40 +94,19 @@ function updateCartBadge() {
     }
 }
 
-function changeLocalQuantity(itemId, delta) {
-    let localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-    const itemIndex = localCart.findIndex(item => (item._id || item.productId) === itemId);
-    if (itemIndex > -1) {
-        let newQty = localCart[itemIndex].quantity + delta;
-        if (newQty < 1) {
-            handleLocalItemRemoval(itemId);
-        } else if (newQty <= 5) {
-            localCart[itemIndex].quantity = newQty;
-            localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
-            updateCartBadge();
-            renderCartItems(localCart, false);
-            updateCartSummary(calculateLocalTotals(localCart));
-        } else {
-            displayMessage("<i class='fas fa-exclamation-circle mr-2'></i> Maximum quantity is 5.");
-        }
-    }
-}
 async function fetchAndRenderCart() {
     const cartList = document.getElementById('cart-items-list');
     const checkoutBtn = document.getElementById('checkout-btn');
     const clearCartBtn = document.getElementById('clear-cart-btn');
 
-    // ⭐ NEW: Helper to control the "Proceed to Checkout" button appearance
     const updateCheckoutButtonState = (hasItems) => {
         if (hasItems) {
             checkoutBtn.disabled = false;
-            // Change color to Ash Red and make it look clickable
             checkoutBtn.classList.replace('bg-gray-400', 'bg-ash-red');
             checkoutBtn.classList.remove('cursor-not-allowed', 'opacity-50');
             checkoutBtn.onclick = () => window.location.href = 'checkout.html';
         } else {
             checkoutBtn.disabled = true;
-            // Change color to Grey and show "disabled" cursor
             checkoutBtn.classList.replace('bg-ash-red', 'bg-gray-400');
             checkoutBtn.classList.add('cursor-not-allowed', 'opacity-50');
             checkoutBtn.onclick = null;
@@ -122,27 +120,31 @@ async function fetchAndRenderCart() {
             renderCartItems(localCart, false);
             updateCartSummary(calculateLocalTotals(localCart));
             clearCartBtn.disabled = false;
-            updateCheckoutButtonState(true); // Enable button
+            updateCheckoutButtonState(true);
         } else {
             cartList.innerHTML = '<div class="text-center py-10 text-gray-500">Your bag is empty.</div>';
             updateCartSummary({ subtotal: 0, shipping: 0 });
             clearCartBtn.disabled = true;
-            updateCheckoutButtonState(false); // Disable button
+            updateCheckoutButtonState(false);
         }
     };
 
     try {
         const token = localStorage.getItem(AUTH_TOKEN_KEY);
         if (!token) { renderLocalCart(); return; }
+        
         const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { method: 'GET' });
-        if (response.ok) {
+        if (response && response.ok) {
             const cartData = await response.json();
-            renderCartItems(cartData.items, true);
+            renderCartItems(cartData.items || [], true);
             updateCartSummary(cartData);
-            // Check if items array is empty from API
             updateCheckoutButtonState(cartData.items && cartData.items.length > 0);
-        } else { renderLocalCart(); }
-    } catch (error) { renderLocalCart(); }
+        } else { 
+            renderLocalCart(); 
+        }
+    } catch (error) { 
+        renderLocalCart(); 
+    }
 }
 
 function renderCartItems(items, isApiCart) {
@@ -157,22 +159,16 @@ function renderCartItems(items, isApiCart) {
     };
 
     cartList.innerHTML = items.map(item => {
-        // 1. Handle ID mapping: API usually nests product info, Local Storage is flat
         const itemId = item.productId || item._id;
         
-        // 2. ⭐ THE FIX FOR "UNDEFINED":
-        // We look for 'name' in the top level (local) or inside 'item.product' (API)
+        // ⭐ RESOLVE NAME: Check item level AND nested product level (for API results)
         const productName = item.name || (item.product && item.product.name) || 'Premium Product';
-
-        // 3. Handle Prices and Tags similarly
         const unitPrice = item.price || (item.product && item.product.price) || 0;
         const productTag = item.tag || (item.product && item.product.tag) || "";
-        const imageUrl = item.imageUrl || (item.product && item.product.imageUrl) || 'placeholder.jpg';
+        const imageUrl = item.imageUrl || (item.product && item.product.imageUrl) || 'https://via.placeholder.com/150';
 
-        // 4. COLLECTION LABEL LOGIC
         let displayCategory = 'Premium Apparel';
-        const rawType = item.productType ? item.productType.toLowerCase() : 
-                        (item.product && item.product.productType ? item.product.productType.toLowerCase() : "");
+        const rawType = (item.productType || (item.product && item.product.productType) || "").toLowerCase();
         
         if (rawType && typeLabels[rawType]) {
             displayCategory = typeLabels[rawType];
@@ -204,7 +200,7 @@ function renderCartItems(items, isApiCart) {
                         <span class="w-8 text-center text-sm font-medium">${item.quantity}</span>
                         <button onclick="${isApiCart ? `changeCartQuantity('${itemId}', 1)` : `changeLocalQuantity('${itemId}', 1)`}" class="w-8 h-8 hover:bg-gray-100">+</button>
                     </div>
-                    <button onclick="${isApiCart ? `removeItemFromCart('${itemId}')` : `handleLocalItemRemoval('${itemId}')`}" class="text-xs text-gray-400 hover:text-red-600">
+                    <button onclick="${isApiCart ? `removeItemFromCart('${itemId}')` : `handleLocalItemRemoval('${itemId}')`}" class="text-xs text-gray-400 hover:text-ash-red">
                         <i class="fas fa-trash-alt mr-1"></i> Remove
                     </button>
                 </div>
@@ -247,7 +243,7 @@ async function changeCartQuantity(itemId, delta) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ productId: itemId, delta })
         });
-        if (response.ok) fetchAndRenderCart();
+        if (response && response.ok) fetchAndRenderCart();
     } catch (e) { console.error(e); }
 }
 
@@ -256,7 +252,7 @@ async function removeItemFromCart(itemId) {
     if (!token) return;
     try {
         const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/${itemId}`, { method: 'DELETE' });
-        if (response.ok) {
+        if (response && response.ok) {
             fetchAndRenderCart();
             displayMessage("<i class='fas fa-trash mr-2'></i> Item removed from your account cart.");
         }
@@ -264,11 +260,17 @@ async function removeItemFromCart(itemId) {
 }
 
 async function clearCart() {
-    // Custom modal logic for confirmation isn't built yet, using displayMessage for now
     if (!confirm("Are you sure you want to clear your bag?")) return;
     
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
-    if (token) await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { method: 'DELETE' });
+    if (token) {
+        // We attempt API delete, but proceed regardless to clear local view
+        try {
+            await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { method: 'DELETE' });
+        } catch (err) {
+            console.error("API Clear failed, clearing local storage anyway.");
+        }
+    }
     
     localStorage.setItem(LOCAL_CART_KEY, '[]');
     updateCartBadge();
@@ -276,7 +278,10 @@ async function clearCart() {
     displayMessage("<i class='fas fa-check-circle mr-2'></i> Bag cleared successfully.");
 }
 
-function toggleMenu() { document.getElementById('mobile-menu').classList.toggle('hidden'); }
+function toggleMenu() { 
+    const menu = document.getElementById('mobile-menu');
+    if (menu) menu.classList.toggle('hidden'); 
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     updateCartBadge();
