@@ -41,27 +41,15 @@ const CART_STORAGE_KEY = 'outflickzCartCount';
 const LOCAL_CART_KEY = 'outflickzLocalCart';
 const AUTH_TOKEN_KEY = 'userAccessToken';
 
-// --- AUTH & NAVIGATION ---
-async function redirectToProfileOrLogin() {
-    const token = localStorage.getItem(AUTH_TOKEN_KEY);
-    if (!token) { window.location.href = 'useraccount.html'; return; }
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
-            method: 'GET',
-            headers: { 'Authorization': `Bearer ${token}` },
-            credentials: 'include'
-        });
-        window.location.href = response.ok ? 'userprofile.html' : 'useraccount.html';
-    } catch (error) { window.location.href = 'useraccount.html'; }
-}
-
+// --- UI NOTIFICATIONS ---
 function displayMessage(message) {
     const modalContainer = document.getElementById('message-modal-container');
     const modalText = document.getElementById('message-modal-text');
     if (modalContainer && modalText) {
         modalText.innerHTML = message;
         modalContainer.classList.remove('hidden');
-        setTimeout(() => modalContainer.classList.add('hidden'), 4000);
+        // Auto-hide after 3.5 seconds
+        setTimeout(() => modalContainer.classList.add('hidden'), 3500);
     }
 }
 
@@ -101,7 +89,7 @@ function changeLocalQuantity(itemId, delta) {
             renderCartItems(localCart, false);
             updateCartSummary(calculateLocalTotals(localCart));
         } else {
-            displayMessage("Maximum quantity is 5.");
+            displayMessage("<i class='fas fa-exclamation-circle mr-2'></i> Maximum quantity is 5.");
         }
     }
 }
@@ -126,6 +114,9 @@ async function fetchAndRenderCart() {
             cartList.innerHTML = '<div class="text-center py-10 text-gray-500">Your bag is empty. <a href="homepage.html" class="text-ash-red font-semibold underline">Start shopping</a>.</div>';
             updateCartSummary({ subtotal: 0, shipping: 0 });
             clearCartBtn.disabled = true;
+            checkoutBtn.disabled = true;
+            checkoutBtn.classList.replace('bg-ash-red', 'bg-gray-400');
+            checkoutBtn.classList.add('cursor-not-allowed', 'opacity-50');
         }
     };
 
@@ -146,7 +137,6 @@ function renderCartItems(items, isApiCart) {
     const cartList = document.getElementById('cart-items-list');
     const currencySymbol = '₦';
 
-    // Map your Database Collection names to Clean Display Names for the frontend
     const typeLabels = {
         'WearsCollection': 'Wears',
         'CapCollection': 'Caps',
@@ -157,25 +147,26 @@ function renderCartItems(items, isApiCart) {
     cartList.innerHTML = items.map(item => {
         const itemId = item._id || item.productId;
         
-        // Match the Schema productType and map to a clean label, or fallback to name/category
         let displayCategory = 'Premium Apparel';
         if (item.productType && typeLabels[item.productType]) {
             displayCategory = typeLabels[item.productType];
+        } else if (item.category && typeLabels[item.category]) {
+            displayCategory = typeLabels[item.category];
         } else if (item.productType && item.productType !== "undefined") {
             displayCategory = item.productType.replace('Collection', '');
-        } else if (item.category) {
-            displayCategory = item.category;
         }
+
+        const displayName = item.name || "Outflickz Premium";
 
         return `
         <div id="cart-item-${itemId}" class="cart-item-card flex py-4 sm:py-6 border-b border-gray-100">
             <div class="flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 rounded-lg overflow-hidden border border-gray-200">
-                <img src="${item.imageUrl}" alt="${item.name}" class="w-full h-full object-cover object-center">
+                <img src="${item.imageUrl}" alt="${displayName}" class="w-full h-full object-cover object-center">
             </div>
             <div class="ml-4 flex flex-1 flex-col justify-between">
                 <div class="relative pr-9 sm:grid sm:grid-cols-2 sm:gap-x-6 sm:pr-0">
                     <div>
-                        <h3 class="text-base sm:text-lg font-semibold text-gray-900">${item.name}</h3>
+                        <h3 class="text-base sm:text-lg font-semibold text-gray-900">${displayName}</h3>
                         <p class="mt-1 text-xs text-red-500 font-medium uppercase tracking-wider">${displayCategory}</p>
                         <p class="mt-1 text-xs text-gray-500 uppercase">
                             ${item.color || item.variation || ''} 
@@ -209,17 +200,6 @@ function updateCartSummary(cartData) {
     document.getElementById('subtotal').textContent = `${currency}${subtotal.toLocaleString()}`;
     document.getElementById('shipping-cost').textContent = `${currency}${shipping.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
     document.getElementById('estimated-total').textContent = `${currency}${(subtotal + shipping).toLocaleString()}`;
-    
-    const checkoutBtn = document.getElementById('checkout-btn');
-    if (subtotal > 0) {
-        checkoutBtn.disabled = false;
-        checkoutBtn.classList.replace('bg-gray-400', 'bg-ash-red');
-        checkoutBtn.classList.remove('cursor-not-allowed', 'opacity-50');
-    } else {
-        checkoutBtn.disabled = true;
-        checkoutBtn.classList.replace('bg-ash-red', 'bg-gray-400');
-        checkoutBtn.classList.add('cursor-not-allowed', 'opacity-50');
-    }
 }
 
 function calculateLocalTotals(localCart) {
@@ -233,6 +213,7 @@ function handleLocalItemRemoval(itemId) {
     localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
     updateCartBadge();
     fetchAndRenderCart();
+    displayMessage("<i class='fas fa-trash mr-2'></i> Item removed from bag.");
 }
 
 async function changeCartQuantity(itemId, delta) {
@@ -253,17 +234,24 @@ async function removeItemFromCart(itemId) {
     if (!token) return;
     try {
         const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/${itemId}`, { method: 'DELETE' });
-        if (response.ok) fetchAndRenderCart();
+        if (response.ok) {
+            fetchAndRenderCart();
+            displayMessage("<i class='fas fa-trash mr-2'></i> Item removed from your account cart.");
+        }
     } catch (e) { console.error(e); }
 }
 
 async function clearCart() {
+    // Custom modal logic for confirmation isn't built yet, using displayMessage for now
     if (!confirm("Are you sure you want to clear your bag?")) return;
+    
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     if (token) await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { method: 'DELETE' });
+    
     localStorage.setItem(LOCAL_CART_KEY, '[]');
     updateCartBadge();
     fetchAndRenderCart();
+    displayMessage("<i class='fas fa-check-circle mr-2'></i> Bag cleared successfully.");
 }
 
 function toggleMenu() { document.getElementById('mobile-menu').classList.toggle('hidden'); }
@@ -275,9 +263,9 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </head>
 <body class="bg-gray-50 text-color-black min-h-screen">
-    <div id="message-modal-container" class="fixed inset-0 z-[100] hidden flex justify-center items-start pt-10">
-        <div class="modal-content bg-ash-dark text-white p-4 rounded-lg shadow-2xl max-w-sm w-full relative mx-4">
-            <p id="message-modal-text" class="text-sm font-medium"></p>
+    <div id="message-modal-container" class="fixed inset-0 z-[100] hidden flex justify-center items-start pt-10 px-4">
+        <div class="modal-content bg-ash-dark text-white p-4 rounded-lg shadow-2xl max-w-sm w-full relative">
+            <p id="message-modal-text" class="text-sm font-medium flex items-center"></p>
         </div>
     </div>
     
@@ -292,7 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <a href="capcollection.html" class="hover:text-ash-red transition-colors">Caps</a>
             </nav>
             <div class="flex items-center space-x-5">
-                <button onclick="redirectToProfileOrLogin()" class="text-gray-700 hover:text-ash-red"><i class="fas fa-user"></i></button>
+                <button onclick="window.location.href='useraccount.html'" class="text-gray-700 hover:text-ash-red"><i class="fas fa-user"></i></button>
                 <a href="cart.html" class="relative text-gray-700 hover:text-ash-red">
                     <i class="fas fa-shopping-bag"></i>
                     <span id="cart-badge" class="absolute -top-2 -right-2 bg-ash-red text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold hidden">0</span>
@@ -306,7 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <a href="homepage.html" class="block font-medium">Homepage</a>
         <a href="wearscollection.html" class="block font-medium">Wears</a>
         <a href="cart.html" class="block font-bold text-ash-red">Cart</a>
-        <a onclick="redirectToProfileOrLogin()" class="block cursor-pointer font-medium">Account</a>
+        <a href="useraccount.html" class="block cursor-pointer font-medium">Account</a>
     </div>
 
     <main class="max-w-7xl mx-auto px-4 py-8 sm:py-12">
@@ -336,7 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span id="estimated-total" class="text-ash-red">₦0.00</span>
                         </div>
                     </div>
-                    <button id="checkout-btn" class="mt-8 w-full bg-gray-400 text-white font-bold py-4 rounded-lg shadow-lg uppercase tracking-widest text-xs transition-all opacity-50 cursor-not-allowed disabled">
+                    <button id="checkout-btn" class="mt-8 w-full bg-gray-400 text-white font-bold py-4 rounded-lg shadow-lg uppercase tracking-widest text-xs transition-all opacity-50 cursor-not-allowed">
                         Proceed to Checkout
                     </button>
                     <div class="mt-4 flex items-center justify-center space-x-2 text-[10px] text-gray-400 uppercase tracking-tighter">

@@ -566,7 +566,6 @@ async function simulateAddToCart(productDetails) {
                     selectedImageUrl = newImageUrls.frontImageUrl; 
                     const colorMapKeys = Object.keys(colorMap);
                     const inferredIndex = colorMapKeys.indexOf(color);
-                    // Ensure variationIndex is within schema range 1-4
                     if (inferredIndex !== -1) variationIndex = Math.min(inferredIndex + 1, 4);
                 }
             } catch (e) { console.error("Color map parsing error", e); }
@@ -580,22 +579,30 @@ async function simulateAddToCart(productDetails) {
     const quantityInput = card.querySelector(`#quantity-input-${productDetails.productId}`);
     const quantity = parseInt(quantityInput?.value) || 1;
 
-    // ⭐ FIX: Aligning with Backend Schema Enums
-    // We ensure the productType matches 'WearsCollection', 'CapCollection', etc.
+    // --- ⭐ UPDATED FIX: Aligning with Backend Schema Enums ---
     const validTypes = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
     let finalProductType = productDetails.productType;
-    
+
+    // Normalize strings from Homepage UI to match Database/Cart labels
+    if (finalProductType === 'Wears') {
+        finalProductType = 'WearsCollection';
+    } else if (finalProductType === 'Caps' || finalProductType === 'Cap') {
+        finalProductType = 'CapCollection';
+    } else if (finalProductType === 'New Arrivals' || finalProductType === 'New Arrival') {
+        finalProductType = 'NewArrivals';
+    } else if (finalProductType === 'Pre Order' || finalProductType === 'Pre-Order') {
+        finalProductType = 'PreOrderCollection';
+    }
+
+    // Default fallback if type is missing or unrecognized
     if (!validTypes.includes(finalProductType)) {
-        // Fallback logic if the incoming type is just "Wears"
-        if (finalProductType === 'Wears') finalProductType = 'WearsCollection';
-        else if (finalProductType === 'Caps') finalProductType = 'CapCollection';
-        else finalProductType = 'WearsCollection'; // Default fallback
+        finalProductType = 'WearsCollection';
     }
 
     const itemData = {
         productId: productDetails.productId,
-        name: productDetails.name, 
-        productType: finalProductType, // Matches Schema
+        name: productDetails.name || 'Outflickz Premium', 
+        productType: finalProductType, 
         price: productDetails.price, 
         quantity: quantity,
         size: size,
@@ -621,12 +628,11 @@ async function simulateAddToCart(productDetails) {
         }
 
         localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
-        updateCartBadge(); // Ensure this function exists in your homepage script
-        displayCartAlert(`"${details.name}" added to bag!`, 'info');
+        if (typeof updateCartBadge === "function") updateCartBadge();
+        displayCartAlert(`"${details.name}" added to cart!`, 'info');
     };
 
     // --- 4. Logic Switch: Guest vs Logged In ---
-    // ⭐ FIX: Use the same key used in cart.html (userAccessToken)
     const isLoggedIn = !!localStorage.getItem('userAccessToken'); 
 
     if (!isLoggedIn) {
@@ -644,10 +650,9 @@ async function simulateAddToCart(productDetails) {
 
         if (response.ok) {
             const data = await response.json();
-            // Optional: Sync local storage with the returned server cart
             if (data.items) localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(data.items));
-            updateCartBadge();
-            displayCartAlert('Item added to your bag!', 'success');
+            if (typeof updateCartBadge === "function") updateCartBadge();
+            displayCartAlert('Item added to your cart!', 'success');
         } else {
             handleLocalCartOnly(itemData);
         }
