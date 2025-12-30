@@ -33,7 +33,6 @@ const CART_STORAGE_KEY = 'outflickzCartCount';
 const LOCAL_CART_KEY = 'outflickzLocalCart';
 const AUTH_TOKEN_KEY = 'userAccessToken';
 
-// Simple JS for Toggling Mobile Menu
 function toggleMenu() {
     document.getElementById('mobile-menu').classList.toggle('hidden');
 }
@@ -41,25 +40,18 @@ function toggleMenu() {
 async function redirectToProfileOrLogin() {
     const token = localStorage.getItem('userAccessToken');
     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-    
     try {
         const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
             method: 'GET',
             headers: headers,
             credentials: 'include'
         });
-
-        if (response.status === 200) {
-            window.location.href = 'userprofile.html'; 
-        } else {
-            window.location.href = 'useraccount.html';
-        }
+        window.location.href = (response.status === 200) ? 'userprofile.html' : 'useraccount.html';
     } catch (error) {
         window.location.href = 'useraccount.html';
     }
 }
 
-// --- UI NOTIFICATIONS ---
 function displayMessage(message) {
     const modalContainer = document.getElementById('message-modal-container');
     const modalText = document.getElementById('message-modal-text');
@@ -70,7 +62,6 @@ function displayMessage(message) {
     }
 }
 
-// --- SECURE FETCH ---
 async function secureUserFetch(url, options = {}) {
     let token = localStorage.getItem(AUTH_TOKEN_KEY);
     if (token) {
@@ -89,7 +80,6 @@ async function secureUserFetch(url, options = {}) {
     }
 }
 
-// --- CART LOGIC ---
 function updateCartBadge() {
     const badge = document.getElementById('cart-badge');
     const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
@@ -131,11 +121,11 @@ async function fetchAndRenderCart() {
         updateCartBadge();
         if (localCart.length > 0) {
             renderCartItems(localCart, false);
-            updateCartSummary({ items: localCart, subtotal: calculateLocalTotals(localCart).subtotal, shipping: 0 });
+            updateCartSummary({ items: localCart });
             updateUIState(true);
         } else {
             cartList.innerHTML = '<div class="text-center py-10 text-gray-400">Your bag is empty.</div>';
-            updateCartSummary({ items: [], subtotal: 0, shipping: 0 });
+            updateCartSummary({ items: [] });
             updateUIState(false);
         }
     };
@@ -154,7 +144,6 @@ async function fetchAndRenderCart() {
     } catch (error) { renderLocalCart(); }
 }
 
-// --- UPDATED RENDER LOGIC ---
 function renderCartItems(items, isApiCart) {
     const cartList = document.getElementById('cart-items-list');
     const currency = '₦';
@@ -165,16 +154,11 @@ function renderCartItems(items, isApiCart) {
     }
 
     cartList.innerHTML = items.map(item => {
-        // Ensure we find the ID regardless of data structure
         const id = item.productId || item._id || (item.product && item.product._id);
         const name = item.name || (item.product && item.product.name) || 'Premium Product';
         const price = item.price || (item.product && item.product.price) || 0;
-        
-        // Use the image from the payload, fallback to placeholder
         const img = item.imageUrl || (item.product && item.product.imageUrl) || 'https://i.imgur.com/PZLMws6.jpeg'; 
         const qty = item.quantity || 1;
-        
-        // Handle Size Display (Show O/S for caps, or the selected size)
         const displaySize = item.size ? item.size : "Standard";
 
         return `
@@ -195,14 +179,11 @@ function renderCartItems(items, isApiCart) {
                 </div>
                 <div class="flex items-center justify-between mt-4">
                     <div class="flex items-center border border-gray-200 rounded overflow-hidden">
-                        <button onclick="${isApiCart ? `changeCartQuantity('${id}', -1)` : `changeLocalQuantity('${id}', -1)`}" 
-                                class="px-3 py-1 hover:bg-gray-100 transition-colors font-bold text-gray-600">-</button>
+                        <button onclick="${isApiCart ? `changeCartQuantity('${id}', -1)` : `changeLocalQuantity('${id}', -1)`}" class="px-3 py-1 hover:bg-gray-100 transition-colors font-bold text-gray-600">-</button>
                         <span class="px-3 text-xs font-black w-8 text-center">${qty}</span>
-                        <button onclick="${isApiCart ? `changeCartQuantity('${id}', 1)` : `changeLocalQuantity('${id}', 1)`}" 
-                                class="px-3 py-1 hover:bg-gray-100 transition-colors font-bold text-gray-600">+</button>
+                        <button onclick="${isApiCart ? `changeCartQuantity('${id}', 1)` : `changeLocalQuantity('${id}', 1)`}" class="px-3 py-1 hover:bg-gray-100 transition-colors font-bold text-gray-600">+</button>
                     </div>
-                    <button onclick="${isApiCart ? `removeItemFromCart('${id}')` : `handleLocalItemRemoval('${id}')`}" 
-                            class="text-[10px] text-gray-400 hover:text-ash-red font-bold transition-colors tracking-widest">
+                    <button onclick="${isApiCart ? `removeItemFromCart('${id}')` : `handleLocalItemRemoval('${id}')`}" class="text-[10px] text-gray-400 hover:text-ash-red font-bold transition-colors tracking-widest">
                         <i class="fas fa-trash-alt mr-1"></i> REMOVE
                     </button>
                 </div>
@@ -249,7 +230,7 @@ async function changeCartQuantity(cartItemId, delta) {
             body: JSON.stringify({ quantity: newQuantity }) 
         });
         if (response.ok) await fetchAndRenderCart();
-    } catch (e) { console.error("Network error updating quantity:", e); }
+    } catch (e) { console.error(e); }
 }
 
 function changeLocalQuantity(itemId, delta) {
@@ -268,10 +249,7 @@ async function clearCart() {
     if (!confirm("Are you sure you want to empty your bag?")) return;
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     if (token) {
-        try {
-            const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { method: 'DELETE' });
-            if (!response.ok) return displayMessage("Failed to clear server cart.");
-        } catch (error) { return console.error("Clear cart error:", error); }
+        try { await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { method: 'DELETE' }); } catch (e) {}
     }
     localStorage.setItem(LOCAL_CART_KEY, '[]');
     updateCartBadge();
@@ -280,34 +258,29 @@ async function clearCart() {
 }
 
 /**
- * ⭐ CRITICAL FIX: Explicitly saves items and totals for the checkout page.
+ * ⭐ UPDATED SUMMARY: Tax row included, Shipping/Tax forced to 0.00
  */
 function updateCartSummary(data) {
     const items = data.items || JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-    
-    // Recalculate subtotal locally to ensure accuracy
     const subtotal = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-    const shipping = subtotal > 0 ? (data.shipping || 0) : 0; // Only add shipping if items exist
-    const total = subtotal + shipping;
+    
+    // Explicitly set to 0.00
+    const shipping = 0.00;
+    const tax = 0.00;
+    const total = subtotal + shipping + tax;
 
-    // Update UI Elements
-    const subtotalEl = document.getElementById('subtotal');
-    const shippingEl = document.getElementById('shipping-cost');
-    const totalEl = document.getElementById('estimated-total');
+    // Update UI
+    document.getElementById('subtotal').textContent = `₦${subtotal.toLocaleString()}`;
+    document.getElementById('shipping-cost').textContent = `₦${shipping.toFixed(2)}`;
+    document.getElementById('tax-cost').textContent = `₦${tax.toFixed(2)}`;
+    document.getElementById('estimated-total').textContent = `₦${total.toLocaleString()}`;
 
-    if (subtotalEl) subtotalEl.textContent = `₦${subtotal.toLocaleString()}`;
-    if (shippingEl) shippingEl.textContent = shipping === 0 ? "Calculated at checkout" : `₦${shipping.toLocaleString()}`;
-    if (totalEl) totalEl.textContent = `₦${total.toLocaleString()}`;
-
-    // ⭐ STORAGE SYNC FOR CHECKOUT.HTML
+    // Storage Sync
     localStorage.setItem('outflickzOrderSubtotal', subtotal.toString());
+    localStorage.setItem('outflickzOrderShipping', "0");
+    localStorage.setItem('outflickzOrderTax', "0");
     localStorage.setItem('outflickzOrderTotal', total.toString());
     localStorage.setItem('outflickzOrderItems', JSON.stringify(items));
-}
-
-function calculateLocalTotals(cart) {
-    const subtotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-    return { subtotal, shipping: 0 };
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -377,12 +350,23 @@ document.addEventListener('DOMContentLoaded', () => {
             
             <div class="lg:col-span-1 mt-10 lg:mt-0">
                 <div class="bg-white p-6 rounded-xl shadow-md border border-gray-100 sticky top-24">
-                    <h2 class="text-base font-bold mb-6 border-b pb-4 uppercase tracking-wider">Summary</h2>
+                    <h2 class="text-base font-bold mb-6 border-b pb-4 uppercase tracking-wider">Order Summary</h2>
                     <div class="space-y-4 text-sm">
-                        <div class="flex justify-between text-gray-500"><span>Subtotal</span><span id="subtotal" class="text-gray-900 font-semibold">₦0.00</span></div>
-                        <div class="flex justify-between text-gray-500"><span>Shipping</span><span id="shipping-cost" class="text-gray-900 font-semibold">₦0.00</span></div>
+                        <div class="flex justify-between text-gray-500">
+                            <span>Subtotal</span>
+                            <span id="subtotal" class="text-gray-900 font-semibold">₦0.00</span>
+                        </div>
+                        <div class="flex justify-between text-gray-500">
+                            <span>Shipping</span>
+                            <span id="shipping-cost" class="text-gray-900 font-semibold">₦0.00</span>
+                        </div>
+                        <div class="flex justify-between text-gray-500">
+                            <span>Estimated Tax</span>
+                            <span id="tax-cost" class="text-gray-900 font-semibold">₦0.00</span>
+                        </div>
                         <div class="flex justify-between border-t pt-4 text-lg font-black text-ash-dark">
-                            <span>TOTAL</span><span id="estimated-total" class="text-ash-red">₦0.00</span>
+                            <span>TOTAL</span>
+                            <span id="estimated-total" class="text-ash-red">₦0.00</span>
                         </div>
                     </div>
                     <button id="checkout-btn" class="mt-8 w-full bg-gray-400 text-white font-bold py-4 rounded-lg uppercase tracking-widest text-xs opacity-50 cursor-not-allowed transition-all">

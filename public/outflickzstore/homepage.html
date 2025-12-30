@@ -527,74 +527,73 @@ function addToCart(collectionId, quantity) {
 
 /**
  * Handles adding an item to the cart. 
- * Integrated with Schema-specific ProductTypes and API Sync.
+ * Updated to support both Modal and Grid Card contexts.
  */
 async function simulateAddToCart(productDetails) {
-    // --- 1. Gather all item details from DOM ---
-    const card = document.querySelector(`.collection-card[data-collection-id="${productDetails.productId}"]`);
-    if (!card) {
-        console.error("Collection card not found for ID:", productDetails.productId);
-        return;
-    }
+    // 1. CONTEXT IDENTIFICATION
+    // Try to find the modal first, otherwise fall back to the grid card
+    const modal = document.getElementById('quick-view-modal');
+    const isModalOpen = modal && !modal.classList.contains('hidden');
     
-    const selectedSizeInput = card.querySelector(`input[name="size-${productDetails.productId}"]:checked`);
-    const selectedColorInput = card.querySelector(`input[name="color-${productDetails.productId}"]:checked`);
-    
-    // --- 2. Validation ---
-    const sizeOptions = card.querySelectorAll(`input[name="size-${productDetails.productId}"]`);
-    if (sizeOptions.length > 0 && !selectedSizeInput) {
-        displayCartAlert("Please select a size before adding to cart.", "error");
-        const sizeContainer = card.querySelector('.flex.gap-1.text-gray-700.flex-wrap');
-        sizeContainer?.classList.add('ring-1', 'ring-red-500', 'p-1', 'rounded');
-        setTimeout(() => sizeContainer?.classList.remove('ring-1', 'ring-red-500', 'p-1'), 2000);
+    // Define our data source (the modal or the specific card on the page)
+    const sourceContainer = isModalOpen 
+        ? modal 
+        : document.querySelector(`.collection-card[data-collection-id="${productDetails.productId}"]`);
+
+    if (!sourceContainer) {
+        console.error("Source container not found for ID:", productDetails.productId);
         return;
     }
 
+    // 2. GATHER SELECTIONS (Size & Color)
+    // Check for radio buttons within the active container
+    const selectedSizeInput = sourceContainer.querySelector(`input[name="size-${productDetails.productId}"]:checked`);
+    const selectedColorInput = sourceContainer.querySelector(`input[name="color-${productDetails.productId}"]:checked`);
+    
+    // 3. VALIDATION
+    // Determine if it's a Cap (Caps usually don't need size selection)
+    const isCap = productDetails.productType === 'CapCollection' || productDetails.productType === 'caps';
+
+    if (!isCap && !selectedSizeInput) {
+        displayCartAlert("Please select a size first.", "error");
+        // Visual feedback: Highlight size section
+        const sizeArea = sourceContainer.querySelector('.size-selection-area') || sourceContainer;
+        sizeArea.classList.add('ring-2', 'ring-red-500', 'rounded-md');
+        setTimeout(() => sizeArea.classList.remove('ring-2', 'ring-red-500'), 2000);
+        return;
+    }
+
+    // 4. NORMALIZE DATA
     const color = (selectedColorInput && selectedColorInput.value !== 'undefined') ? selectedColorInput.value : 'N/A';
-    const size = (selectedSizeInput && selectedSizeInput.value !== 'undefined') ? selectedSizeInput.value : 'N/A';
+    const size = isCap ? 'O/S' : (selectedSizeInput ? selectedSizeInput.value : 'N/A');
     
-    let variationIndex = 1; 
+    // Sync Image with Selected Color if a map exists
     let selectedImageUrl = productDetails.imageUrl;
-
-    // Color/Image Mapping Logic
-    if (selectedColorInput) {
-        const colorMapContainer = card.querySelector(`#color-map-${productDetails.productId}`);
-        if (colorMapContainer) {
-            try {
-                const colorMap = JSON.parse(colorMapContainer.getAttribute('data-color-map'));
-                const newImageUrls = colorMap[color];
-                if (newImageUrls && newImageUrls.frontImageUrl) {
-                    selectedImageUrl = newImageUrls.frontImageUrl; 
-                    const colorMapKeys = Object.keys(colorMap);
-                    const inferredIndex = colorMapKeys.indexOf(color);
-                    if (inferredIndex !== -1) variationIndex = Math.min(inferredIndex + 1, 4);
-                }
-            } catch (e) { console.error("Color map parsing error", e); }
-        }
+    const colorMapElement = sourceContainer.querySelector(`[data-color-map]`);
+    if (colorMapElement && color !== 'N/A') {
+        try {
+            const colorMap = JSON.parse(colorMapElement.getAttribute('data-color-map'));
+            if (colorMap[color]?.frontImageUrl) {
+                selectedImageUrl = colorMap[color].frontImageUrl;
+            }
+        } catch (e) { console.error("Color map error", e); }
     }
 
-    const variation = (color !== 'N/A' && size !== 'N/A')
-        ? `${color} / ${size}`
-        : (color !== 'N/A' ? color : (size !== 'N/A' ? size : 'Default Variant'));
-    
-    const quantityInput = card.querySelector(`#quantity-input-${productDetails.productId}`);
+    const quantityInput = sourceContainer.querySelector(`input[id*="qty-${productDetails.productId}"]`) || 
+                          sourceContainer.querySelector(`#quantity-input-${productDetails.productId}`);
     const quantity = parseInt(quantityInput?.value) || 1;
 
-    // --- ⭐ UPDATED FIX: Aligning with Backend Schema Enums ---
-   // --- Normalized Fix for Backend Enums ---
-const validTypes = ['WearsCollection', 'CapCollection', 'NewArrivals', 'PreOrderCollection'];
-let finalProductType = productDetails.productType;
-
-// Ensure "Caps" or "Cap" from the UI becomes "CapCollection"
-if (finalProductType === 'Wears') {
-    finalProductType = 'WearsCollection';
-} else if (finalProductType === 'Caps' || finalProductType === 'Cap') {
-    finalProductType = 'CapCollection'; // This ensures the backend gets the right string
-} else if (finalProductType === 'New Arrivals' || finalProductType === 'New Arrival') {
-    finalProductType = 'NewArrivals';
-} else if (finalProductType === 'Pre Order' || finalProductType === 'Pre-Order') {
-    finalProductType = 'PreOrderCollection';
-}
+    // 5. NORMALIZE PRODUCT TYPE (Backend Alignment)
+    let finalProductType = productDetails.productType;
+    const typeMapping = {
+        'Wears': 'WearsCollection',
+        'Caps': 'CapCollection',
+        'New Arrivals': 'NewArrivals',
+        'Pre-Order': 'PreOrderCollection'
+    };
+    if (typeMapping[finalProductType]) {
+        finalProductType = typeMapping[finalProductType];
+    }
 
     const itemData = {
         productId: productDetails.productId,
@@ -605,58 +604,55 @@ if (finalProductType === 'Wears') {
         size: size,
         color: color,
         imageUrl: selectedImageUrl,
-        variationIndex: variationIndex,
-        variation: variation
-    };
-    
-    // --- 3. Local Cart Helper ---
-    const handleLocalCartOnly = (details) => {
-        let localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-        const existingItemIndex = localCart.findIndex(item => 
-            (item.productId === details.productId || item._id === details.productId) && 
-            item.size === details.size &&
-            item.color === details.color
-        );
-
-        if (existingItemIndex > -1) {
-            localCart[existingItemIndex].quantity += details.quantity;
-        } else {
-            localCart.push(details);
-        }
-
-        localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
-        if (typeof updateCartBadge === "function") updateCartBadge();
-        displayCartAlert(`"${details.name}" added to cart!`, 'info');
+        variation: `${color} / ${size}`
     };
 
-    // --- 4. Logic Switch: Guest vs Logged In ---
+    // 6. EXECUTION (API vs Local)
     const isLoggedIn = !!localStorage.getItem('userAccessToken'); 
 
     if (!isLoggedIn) {
         handleLocalCartOnly(itemData);
-        return;
-    }
+    } else {
+        try {
+            const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(itemData)
+            });
 
-    // --- 5. API Execution (Only for Logged-in Users) ---
-    try {
-        const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(itemData)
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            if (data.items) localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(data.items));
-            if (typeof updateCartBadge === "function") updateCartBadge();
-            displayCartAlert('Item added to your cart!', 'success');
-        } else {
+            if (response.ok) {
+                const data = await response.json();
+                // Update local storage to match server state
+                if (data.items) localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(data.items));
+                if (typeof updateCartBadge === "function") updateCartBadge();
+                displayCartAlert('Added to your bag!', 'success');
+            } else {
+                handleLocalCartOnly(itemData);
+            }
+        } catch (error) {
             handleLocalCartOnly(itemData);
         }
-    } catch (error) {
-        console.error('[CART] Network Error:', error);
-        handleLocalCartOnly(itemData);
     }
+}
+
+// Helper to manage guest cart
+function handleLocalCartOnly(details) {
+    let localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
+    const existingIndex = localCart.findIndex(item => 
+        item.productId === details.productId && 
+        item.size === details.size && 
+        item.color === details.color
+    );
+
+    if (existingIndex > -1) {
+        localCart[existingIndex].quantity += details.quantity;
+    } else {
+        localCart.push(details);
+    }
+
+    localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
+    if (typeof updateCartBadge === "function") updateCartBadge();
+    displayCartAlert(`"${details.name}" added to bag!`, 'info');
 }
 
 /**
@@ -1306,6 +1302,7 @@ function handleModalAddToCart(productId, productType) {
             name: productName,
             price: price,
             imageUrl: imageUrl,
+            color: color,
             size: isCap ? "O/S" : selectedSize,
             quantity: quantity,
             productType: productType
