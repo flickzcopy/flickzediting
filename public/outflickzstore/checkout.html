@@ -484,7 +484,6 @@ function enforceAuthGate() {
     const API_BASE_URL = 'https://outflickzs.netlify.app';
     const CART_STORAGE_KEY = 'outflickzCartCount';
     const LOCAL_CART_KEY = 'outflickzLocalCart';
-    const BUY_NOW_KEY = 'buyNowItem'; 
     const AUTH_TOKEN_KEY = 'userAccessToken';
     const REFRESH_ENDPOINT = `${API_BASE_URL}/api/auth/refresh`;
     const DEFAULT_ADMIN_EMAIL = "outflickzlimited@gmail.com"; 
@@ -989,8 +988,6 @@ function handlePaystackSuccessRedirect(mongoId, orderRef) { // 👈 ADD mongoId 
     localStorage.removeItem('outflickzOrderShipping');
     localStorage.removeItem('outflickzOrderTax');
     
-    // Clear Buy Now flag from sessionStorage
-    sessionStorage.removeItem(BUY_NOW_KEY); 
 
     updateCartBadge();
     
@@ -1179,7 +1176,6 @@ async function verifyPayment(reference, mongoId) {
             // Cleanup on success
             localStorage.removeItem(LOCAL_CART_KEY);
             localStorage.setItem(CART_STORAGE_KEY, '0');
-            sessionStorage.removeItem(BUY_NOW_KEY);
             
             // Redirect using the MongoDB ID as the primary key for the confirmation page
             window.location.href = `orderconfirmation.html?id=${mongoId}&ref=${reference}&method=paystack`;
@@ -1362,32 +1358,85 @@ function toggleBankTransferDetails() {
 }
 
 /**
- * Checks if the current checkout is a Buy Now flow and if the user is 
- * not logged in, redirects them to useraccount.html to force login/registration. (Unchanged)
- * @returns {boolean} True if a redirect occurred, false otherwise.
- */
-function handleBuyNowImmediateLogout() {
-    const isBuyNow = sessionStorage.getItem(BUY_NOW_KEY) !== null;
-    
-    // Check if it's a Buy Now flow AND the user is NOT logged in.
-    if (isBuyNow && !isUserLoggedIn()) {
-        console.warn("Buy Now flow initiated but user is not logged in. Redirecting to account page.");
-        
-        // Save the current URL so the user can be redirected back after logging in/registering
-        sessionStorage.setItem('outflickzRedirectAfterAuth', window.location.href); 
-        
-        // This is the source of your *previous* redirect, now called conditionally.
-        window.location.href = 'useraccount.html'; 
-        return true; // Indicate that a redirect happened
-    }
-    
-    // Crucial: Clear the redirect flag if they successfully landed here while logged in.
-    if (isBuyNow && isUserLoggedIn()) {
-        sessionStorage.removeItem('outflickzRedirectAfterAuth');
-    }
-    
-    return false; // Indicate no redirect happened
+ * ⭐ NEW: Processes the Bank Transfer order.
+ * Handles receipt upload and order creation.
+ */
+async function processBankTransferOrder(totalAmount, shippingAddress) {
+    const payBtn = document.getElementById('checkout-next-btn');
+    const receiptInput = document.getElementById('bank-receipt-upload');
+    
+    // 1. Validation
+    if (!receiptInput || !receiptInput.files[0]) {
+        displayMessage('Please upload your payment receipt/screenshot.');
+        payBtn.disabled = false;
+        payBtn.innerHTML = 'Confirm & Pay Now';
+        return;
+    }
+
+    try {
+        payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Uploading Receipt...';
+
+        // 2. Prepare FormData for Image Upload
+        const formData = new FormData();
+        formData.append('receipt', receiptInput.files[0]);
+
+        // 3. Upload Receipt to your Netlify/API endpoint
+        const uploadResponse = await secureUserFetch(`${API_BASE_URL}/api/orders/upload-receipt`, {
+            method: 'POST',
+            body: formData // Note: Content-Type header is omitted so browser sets boundary
+        });
+
+        if (!uploadResponse.ok) throw new Error("Failed to upload receipt.");
+        const { receiptUrl } = await uploadResponse.json();
+
+        payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Creating Order...';
+
+        // 4. Prepare Order Items (Ensuring correct naming convention)
+        let itemsToOrder = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || "[]");
+        itemsToOrder = itemsToOrder.map(item => ({
+            ...item,
+            productType: item.productType === 'Wears' ? 'WearsCollection' : 
+                         (item.productType === 'Caps' ? 'CapCollection' : item.productType)
+        }));
+
+        // 5. Place the Order via API
+        const orderPayload = {
+            shippingAddress,
+            totalAmount,
+            subtotal: localStorage.getItem('outflickzOrderSubtotal') || '0',
+            shippingFee: localStorage.getItem('outflickzOrderShipping') || '0',
+            paymentMethod: 'Bank Transfer',
+            receiptUrl: receiptUrl, // The URL from the upload step
+            orderItems: itemsToOrder
+        };
+
+        const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/banktransfer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(orderPayload)
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            // 6. Use your existing finalization logic
+            await finalizeOrderOnServer({
+                orderId: data.orderId,
+                paymentMethod: 'Bank Transfer',
+                receiptUrl: receiptUrl
+            }, 'banktransfer');
+        } else {
+            throw new Error(data.message || "Order placement failed.");
+        }
+
+    } catch (error) {
+        console.error("Bank Transfer Error:", error);
+        displayMessage(`Error: ${error.message}`);
+        payBtn.disabled = false;
+        payBtn.innerHTML = 'Confirm & Pay Now';
+    }
 }
+
 // --- Main Initialization (Optimized for Netlify/Production) ---
 document.addEventListener('DOMContentLoaded', () => {
     
@@ -1402,7 +1451,6 @@ document.addEventListener('DOMContentLoaded', () => {
     updateCartBadge();
     fetchInitialCartData(); // Fetches items and handles "Empty Cart" redirect
     updateCheckoutView();   // Ensures Step 1 (Shipping Form) is visible first
-    // Call this function when the DOM loads
     autoFillUserData(); 
     
     // 2. NAVIGATION & BUTTON LOGIC

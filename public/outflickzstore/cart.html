@@ -127,12 +127,12 @@ async function fetchAndRenderCart() {
         } else { renderLocalCart(); }
     } catch (error) { renderLocalCart(); }
 }
+
 function renderCartItems(items, isApiCart) {
     const cartList = document.getElementById('cart-items-list');
     const currency = '₦';
 
     cartList.innerHTML = items.map(item => {
-        // Use an allowed domain (Imgur) for the fallback to avoid CSP errors
         const id = item.productId || item._id;
         const name = item.name || (item.product && item.product.name) || 'Premium Product';
         const price = item.price || (item.product && item.product.price) || 0;
@@ -167,11 +167,9 @@ function renderCartItems(items, isApiCart) {
 }
 
 // --- SINGLE ITEM REMOVAL ---
-
 async function removeItemFromCart(itemId) {
     if (!confirm("Remove this item from your bag?")) return;
     try {
-        // Calling your Netlify API endpoint for single item deletion
         const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/${itemId}`, { 
             method: 'DELETE' 
         });
@@ -184,7 +182,6 @@ async function removeItemFromCart(itemId) {
 
 function handleLocalItemRemoval(itemId) {
     let cart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-    // Filter out the item with the matching ID
     cart = cart.filter(item => (item._id || item.productId) !== itemId);
     localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(cart));
     
@@ -194,7 +191,6 @@ function handleLocalItemRemoval(itemId) {
 }
 
 // --- QUANTITY UPDATES ---
-
 async function changeCartQuantity(productId, delta) {
     try {
         const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/quantity`, {
@@ -232,12 +228,28 @@ async function clearCart() {
     displayMessage("Bag cleared successfully.");
 }
 
+/**
+ * ⭐ CRITICAL FIX: This function now saves the totals to localStorage
+ * so that checkout.html can read them.
+ */
 function updateCartSummary(data) {
     const subtotal = data.subtotal || 0;
     const shipping = data.shipping || 0;
+    const total = subtotal + shipping;
+
+    // Update UI
     document.getElementById('subtotal').textContent = `₦${subtotal.toLocaleString()}`;
     document.getElementById('shipping-cost').textContent = `₦${shipping.toLocaleString()}`;
-    document.getElementById('estimated-total').textContent = `₦${(subtotal + shipping).toLocaleString()}`;
+    document.getElementById('estimated-total').textContent = `₦${total.toLocaleString()}`;
+
+    // Save for Checkout Page
+    localStorage.setItem('outflickzOrderSubtotal', subtotal.toString());
+    localStorage.setItem('outflickzOrderShipping', shipping.toString());
+    localStorage.setItem('outflickzOrderTotal', total.toString());
+    
+    // Also store items explicitly for the order payload
+    const localCart = localStorage.getItem(LOCAL_CART_KEY);
+    localStorage.setItem('outflickzOrderItems', localCart);
 }
 
 function calculateLocalTotals(cart) {
@@ -263,21 +275,31 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
     </div>
     
-    <header class="bg-color-white sticky top-0 z-50 shadow-sm border-b border-gray-100">
+    <header class="bg-color-white sticky top-0 z-50 shadow-md border-b border-gray-100">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
-            <a href="homepage.html"><img src="https://i.imgur.com/PZLMws6.jpeg" alt="Logo" class="h-10 sm:h-12"></a> 
-            <nav class="hidden md:flex space-x-6 text-sm font-medium">
-                <a href="homepage.html" class="hover:text-ash-red transition-colors">Homepage</a>
-                <a href="cart.html" class="text-ash-red border-b-2 border-ash-red pb-1">Cart</a>
-                <a href="wearscollection.html" class="hover:text-ash-red transition-colors">Wears</a>
+            <a href="homepage.html" class="flex items-center" aria-label="Outflickz Home">
+                <img src="https://i.imgur.com/PZLMws6.jpeg" alt="Outflickz Logo" class="w-auto h-10 sm:h-12 lg:h-10">
+            </a>
+            <nav class="hidden md:flex flex-grow justify-center space-x-6 lg:space-x-10 text-sm">
+                <a href="homepage.html" class="font-medium text-color-black hover:text-gray-600 transition">Homepage</a>
+                <a href="checkout.html" class="font-bold text-ash-red transition flex items-center border-b-2 border-ash-red">Checkout</a>
+                 <a href="wearscollection.html" class="font-medium text-color-black hover:text-gray-600 transition">Wears Collection</a>
+                <a href="newarrivals.html" class="font-medium text-color-black hover:text-gray-600 transition">New Arrivals</a>
+                <a href="capcollection.html" class="font-medium text-color-black hover:text-gray-600 transition">Cap Collections</a>
+                <a href="preorder.html" class="font-medium text-color-black hover:text-gray-600 transition">Pre Order</a>
             </nav>
-            <div class="flex items-center space-x-5">
-                <button onclick="window.location.href='useraccount.html'" class="hover:text-ash-red"><i class="fas fa-user"></i></button>
-                <a href="cart.html" class="relative hover:text-ash-red">
-                    <i class="fas fa-shopping-bag"></i>
-                    <span id="cart-badge" class="absolute -top-2 -right-2 bg-ash-red text-white text-[10px] px-1.5 py-0.5 rounded-full hidden">0</span>
+
+            <div class="flex items-center space-x-2 sm:space-x-4">
+                <button id="profile-icon" class="p-1 sm:p-2 text-gray-700 hover:text-ash-dark transition rounded-full hidden md:block" onclick="redirectToProfileOrLogin()">
+                    <i class="fas fa-user w-4 h-4 sm:w-5 sm:h-5"></i>
+                </button>
+                <a href="cart.html" class="relative p-1 sm:p-2 text-gray-700 hover:text-ash-dark transition rounded-full">
+                    <i class="fas fa-shopping-bag w-4 h-4 sm:w-5 sm:h-5"></i>
+                    <span id="cart-badge" class="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-ash-red rounded-full hidden">0</span>
                 </a>
-                <button class="md:hidden" onclick="toggleMenu()"><i class="fas fa-bars"></i></button>
+                <button class="md:hidden p-1 sm:p-2 text-gray-700 hover:text-ash-dark transition rounded-full" onclick="toggleMenu()">
+                    <i class="fas fa-bars w-5 h-5 sm:w-6 sm:h-6"></i>
+                </button>
             </div>
         </div>
     </header>
