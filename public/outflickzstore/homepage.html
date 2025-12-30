@@ -1253,89 +1253,83 @@ function closeQuickView() {
         }, 300);
     }
 }
-
 function handleModalAddToCart(productId, productType) {
     const modal = document.getElementById('quick-view-modal');
     if (!modal) return;
 
-    // 🔍 Diagnostic Logs
-    console.log("--- Add to Bag Sync Check ---");
-    console.log("ID:", productId);
-    console.log("Type Context:", productType);
-
-    // 1. IMPROVED TYPE DETECTION
-    // Caps and Pre-orders usually don't need manual size selection if they are "One Size"
-    const isCap = productType === 'CapCollection' || productType === 'caps';
+    // 1. IDENTIFY TYPE
+    // Check if it's a cap or a standard wear
+    const isCap = productType.toLowerCase().includes('cap');
     
-    // 2. SMART SIZE RETRIEVAL
+    // 2. RETRIEVE SIZE (Using your existing global state logic)
+    // Your createSizeList updates window.selectedSizes[productId] on change.
+    // We check that first, then fallback to a direct DOM check just in case.
     let selectedSize = window.selectedSizes ? window.selectedSizes[productId] : null;
 
-    // ⭐ CRITICAL FIX: Since your createSizeList uses Radio Inputs, 
-    // we must check the DOM if the global state is empty.
-    if (!isCap && !selectedSize) {
-        // Look for the radio button group generated in createSizeList
+    if (!selectedSize) {
         const checkedRadio = modal.querySelector(`input[name="size-${productId}"]:checked`);
         if (checkedRadio) {
             selectedSize = checkedRadio.value;
-            // Update global state so it's synced for future logic
+            // Sync back to your global state
             if (!window.selectedSizes) window.selectedSizes = {};
             window.selectedSizes[productId] = selectedSize;
-            console.log("✅ Size recovered from Radio Input:", selectedSize);
         }
     }
 
-    // 3. VALIDATION
+    // 3. RETRIEVE COLOR
+    const checkedColor = modal.querySelector(`input[name="color-${productId}"]:checked`);
+    const selectedColor = checkedColor ? checkedColor.value : "Original";
+
+    // 4. VALIDATION
     if (!isCap && !selectedSize) {
-        console.error("Validation Failed: No size selected for ID " + productId);
         alert("Please select a size first.");
         return;
     }
 
-    // 4. DATA EXTRACTION
-    // Handle both modal and main page quantity ID patterns
-    const quantityInput = document.getElementById(`modal-qty-${productId}`) || document.getElementById(`quantity-input-${productId}`);
-    const quantity = quantityInput ? parseInt(quantityInput.value) : 1;
-    
+    // 5. DATA EXTRACTION
+    const qtyInput = document.getElementById(`modal-qty-${productId}`);
+    const quantity = qtyInput ? parseInt(qtyInput.value) : 1;
     const productName = modal.querySelector('h2').innerText;
     
-    // Improved price parsing (handling the formatting from createCollectionCard)
-    const priceElement = modal.querySelector('p.text-2xl') || modal.querySelector('p.font-bold');
-    const priceText = priceElement ? priceElement.innerText.replace('₦', '').replace(/,/g, '') : "0";
-    const price = parseFloat(priceText);
+    // Clean price (removes ₦ and commas)
+    const priceText = modal.querySelector('p.text-2xl')?.innerText || "0";
+    const price = parseFloat(priceText.replace(/[^\d.]/g, ''));
     
-    const mainImage = document.getElementById('modal-main-image');
-    const imageUrl = mainImage ? mainImage.src : "";
+    const imageUrl = document.getElementById('modal-main-image')?.src || "";
 
-    // 5. EXECUTE CART ADDITION
+    // 6. BUILD FINAL PAYLOAD
+    const finalPayload = {
+        productId: productId,
+        name: productName,
+        price: price,
+        imageUrl: imageUrl,
+        size: isCap ? "One Size" : selectedSize,
+        color: selectedColor,
+        quantity: quantity,
+        productType: productType // This ensures "CAPS" or "WEARS" displays correctly
+    };
+
+    console.log("🚀 Submitting to Cart:", finalPayload);
+
+    // 7. SEND TO CART FUNCTION
     if (typeof simulateAddToCart === 'function') {
-        const payload = {
-            productId: productId,
-            name: productName,
-            price: price,
-            imageUrl: imageUrl,
-            size: isCap ? "O/S" : selectedSize,
-            quantity: quantity,
-            productType: productType
-        };
+        simulateAddToCart(finalPayload);
 
-        console.log("🚀 Payload sent to Cart:", payload);
-        simulateAddToCart(payload);
-
-        // 6. UI FEEDBACK
-        // Look for the specific button within the modal
-        const modalBtn = modal.querySelector('button[onclick*="handleModalAddToCart"]');
-        if (modalBtn) {
-            modalBtn.innerHTML = '<i class="fas fa-check"></i> Added to Bag';
-            modalBtn.classList.remove('bg-black');
-            modalBtn.style.backgroundColor = '#16a34a'; // Netlify-safe Green
-            modalBtn.disabled = true;
+        // UI Success Feedback
+        const addBtn = modal.querySelector('button[onclick*="handleModalAddToCart"]');
+        if (addBtn) {
+            addBtn.innerHTML = '<i class="fas fa-check"></i> Added to Bag';
+            addBtn.classList.replace('bg-black', 'bg-green-600');
+            addBtn.disabled = true;
 
             setTimeout(() => {
-                if (typeof closeQuickView === 'function') closeQuickView();
+                closeQuickView();
+                // Optional: Reset button for next open
+                addBtn.innerHTML = '<i class="fas fa-shopping-bag text-sm"></i> Add to Bag';
+                addBtn.classList.replace('bg-green-600', 'bg-black');
+                addBtn.disabled = false;
             }, 1000);
         }
-    } else {
-        console.error("simulateAddToCart is not defined in the global scope.");
     }
 }
 

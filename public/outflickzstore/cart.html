@@ -33,64 +33,10 @@ const CART_STORAGE_KEY = 'outflickzCartCount';
 const LOCAL_CART_KEY = 'outflickzLocalCart';
 const AUTH_TOKEN_KEY = 'userAccessToken';
 
-// --- QUANTITY AND STOCK VALIDATION UTILITIES ---
-
-function changeQuantity(collectionId, delta) {
-    const input = document.getElementById(`quantity-input-${collectionId}`) || 
-                  document.getElementById(`modal-qty-${collectionId}`);
-    
-    if (!input) return;
-
-    let currentValue = parseInt(input.value) || 1;
-    let newValue = currentValue + delta;
-    const maxStock = parseInt(input.max) || 99;
-
-    if (newValue < 1) newValue = 1;
-    if (newValue > maxStock) {
-        newValue = maxStock;
-        displayMessage(`<i class="fas fa-exclamation-triangle mr-2"></i> Only ${maxStock} items available in this size.`);
-    }
-
-    input.value = newValue;
-}
-
-function updateMaxQuantity(collectionId, selectedSize) {
-    const selectedSizeInput = document.querySelector(`input[name="size-${collectionId}"][value="${selectedSize}"]:checked`);
-    if (!selectedSizeInput) return; 
-    
-    const maxFromStock = parseInt(selectedSizeInput.getAttribute('data-stock'));
-    const newMaxStock = isNaN(maxFromStock) || maxFromStock < 1 ? 1 : maxFromStock;
-    
-    const quantityInput = document.getElementById(`quantity-input-${collectionId}`) || 
-                         document.getElementById(`modal-qty-${collectionId}`);
-    
-    if (quantityInput) {
-        quantityInput.max = newMaxStock;
-        if (parseInt(quantityInput.value) > newMaxStock) {
-            quantityInput.value = newMaxStock;
-        }
-    }
-}
-
-// --- CORE CART LOGIC ---
+// --- CORE UTILITIES ---
 
 function toggleMenu() {
     document.getElementById('mobile-menu').classList.toggle('hidden');
-}
-
-async function redirectToProfileOrLogin() {
-    const token = localStorage.getItem('userAccessToken');
-    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
-            method: 'GET',
-            headers: headers,
-            credentials: 'include'
-        });
-        window.location.href = (response.status === 200) ? 'userprofile.html' : 'useraccount.html';
-    } catch (error) {
-        window.location.href = 'useraccount.html';
-    }
 }
 
 function displayMessage(message) {
@@ -135,6 +81,8 @@ function updateCartBadge() {
         }
     }
 }
+
+// --- CART RENDERING & LOGIC ---
 
 async function fetchAndRenderCart() {
     const cartList = document.getElementById('cart-items-list');
@@ -187,33 +135,44 @@ function renderCartItems(items, isApiCart) {
     const currency = '₦';
 
     cartList.innerHTML = items.map(item => {
+        // Handle differences between API data and LocalStorage data
         const id = item.productId || item._id || (item.product && item.product._id);
         const name = item.name || (item.product && item.product.name) || 'Premium Product';
         const price = item.price || (item.product && item.product.price) || 0;
         const img = item.imageUrl || (item.product && item.product.imageUrl) || 'https://i.imgur.com/PZLMws6.jpeg'; 
         const qty = item.quantity || 1;
-        const stock = item.product?.stock || 10; 
+        
+        // ⭐ EXTRACT COLOR & TYPE (CATEGORY)
+        const color = item.color || (item.product && item.product.color) || 'N/A';
+        const type = item.category || (item.product && item.product.category) || 'Apparel';
+        const size = item.size || 'Standard';
 
         return `
         <div class="flex py-6 border-b border-gray-100 last:border-0">
             <div class="w-20 h-20 sm:w-28 sm:h-28 flex-shrink-0 rounded-lg overflow-hidden border bg-gray-50">
-                <img src="${img}" class="w-full h-full object-cover">
+                <img src="${img}" class="w-full h-full object-cover" onerror="this.src='https://i.imgur.com/PZLMws6.jpeg'">
             </div>
             <div class="ml-4 flex-1 flex flex-col justify-between">
                 <div class="flex justify-between items-start">
                     <div>
-                        <h3 class="text-sm sm:text-base font-bold text-gray-900">${name}</h3>
-                        <p class="text-[10px] text-gray-400 uppercase mt-1">Size: <span class="text-gray-900">${item.size || 'Standard'}</span></p>
+                        <p class="text-[9px] font-bold text-ash-red uppercase tracking-widest mb-1">${type}</p>
+                        <h3 class="text-sm sm:text-base font-bold text-gray-900 leading-tight">${name}</h3>
+                        <div class="flex flex-wrap gap-x-3 mt-2">
+                            <p class="text-[10px] text-gray-400 uppercase font-bold">Size: <span class="text-gray-900">${size}</span></p>
+                            <p class="text-[10px] text-gray-400 uppercase font-bold">Color: <span class="text-gray-900">${color}</span></p>
+                        </div>
                     </div>
                     <p class="text-sm font-bold text-gray-900">${currency}${(price * qty).toLocaleString()}</p>
                 </div>
                 <div class="flex items-center justify-between mt-4">
-                    <div class="flex items-center border border-gray-200 rounded overflow-hidden">
-                        <button onclick="${isApiCart ? `changeCartQuantity('${id}', -1)` : `changeLocalQuantity('${id}', -1)`}" class="px-3 py-1 font-bold">-</button>
-                        <span class="px-3 text-xs font-black w-8 text-center">${qty}</span>
-                        <button onclick="${isApiCart ? `changeCartQuantity('${id}', 1)` : `changeLocalQuantity('${id}', 1)`}" class="px-3 py-1 font-bold">+</button>
+                    <div class="flex items-center border border-gray-200 rounded-md overflow-hidden bg-white">
+                        <button onclick="${isApiCart ? `changeCartQuantity('${id}', -1)` : `changeLocalQuantity('${id}', -1)`}" class="px-3 py-1 font-bold text-gray-600 hover:bg-gray-50">-</button>
+                        <span class="px-2 text-xs font-black w-8 text-center text-gray-900">${qty}</span>
+                        <button onclick="${isApiCart ? `changeCartQuantity('${id}', 1)` : `changeLocalQuantity('${id}', 1)`}" class="px-3 py-1 font-bold text-gray-600 hover:bg-gray-50">+</button>
                     </div>
-                    <button onclick="${isApiCart ? `removeItemFromCart('${id}')` : `handleLocalItemRemoval('${id}')`}" class="text-[10px] text-gray-400 font-bold tracking-widest hover:text-ash-red">REMOVE</button>
+                    <button onclick="${isApiCart ? `removeItemFromCart('${id}')` : `handleLocalItemRemoval('${id}')`}" class="text-[10px] text-gray-400 font-bold tracking-widest hover:text-ash-red transition-colors">
+                        <i class="fas fa-trash-alt mr-1"></i> REMOVE
+                    </button>
                 </div>
             </div>
         </div>`;
@@ -251,7 +210,7 @@ function changeLocalQuantity(itemId, delta) {
 }
 
 async function removeItemFromCart(itemId) {
-    if (!confirm("Remove item?")) return;
+    if (!confirm("Remove item from bag?")) return;
     const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart/${itemId}`, { method: 'DELETE' });
     if (response.ok) fetchAndRenderCart();
 }
@@ -268,7 +227,6 @@ function updateCartSummary(data) {
     const items = data.items || JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
     const subtotal = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
     
-    // ⭐ ORDER SUMMARY CALCULATIONS
     const shipping = 0.00;
     const tax = 0.00;
     const total = subtotal + shipping + tax;
@@ -283,7 +241,7 @@ function updateCartSummary(data) {
 }
 
 async function clearCart() {
-    if (!confirm("Empty bag?")) return;
+    if (!confirm("Empty your bag?")) return;
     localStorage.setItem(LOCAL_CART_KEY, '[]');
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     if (token) await secureUserFetch(`${API_BASE_URL}/api/users/cart`, { method: 'DELETE' });
@@ -316,7 +274,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 <a href="capcollection.html" class="font-medium hover:text-gray-600">Caps</a>
             </nav>
             <div class="flex items-center space-x-4">
-                <button onclick="redirectToProfileOrLogin()"><i class="fas fa-user text-gray-700"></i></button>
                 <a href="cart.html" class="relative">
                     <i class="fas fa-shopping-bag text-gray-700"></i>
                     <span id="cart-badge" class="absolute -top-2 -right-2 px-1.5 py-0.5 text-[10px] font-bold text-white bg-ash-red rounded-full hidden">0</span>
@@ -347,7 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             <div class="lg:col-span-1 mt-10 lg:mt-0">
                 <div class="bg-white p-6 rounded-xl shadow-md border border-gray-100 sticky top-24">
-                    <h2 class="text-base font-bold mb-6 border-b pb-4 uppercase tracking-wider">Order Summary</h2>
+                    <h2 class="text-base font-bold mb-6 border-b pb-4 uppercase tracking-wider text-gray-900">Order Summary</h2>
                     <div class="space-y-4 text-sm">
                         <div class="flex justify-between text-gray-500">
                             <span>Subtotal</span>
