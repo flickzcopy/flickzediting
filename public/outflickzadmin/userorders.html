@@ -341,7 +341,7 @@
                 const now = new Date();
                 const orderDate = new Date(order.createdAt);
                 const diffInMinutes = (now - orderDate) / (1000 * 60);
-                if (diffInMinutes >= 15) return false; // Filter out abandoned Paystack checkouts
+                if (diffInMinutes >= 15) return false; 
             }
             return true; 
         });
@@ -365,9 +365,12 @@
             const isPaid = order.paymentStatus === 'Paid' || (Number(order.amountPaidKobo) > 0);
             const statusClass = order.status.includes('Failure') ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-800';
 
-            const displayName = order.customerName || order.userName || order.shippingAddress?.firstName || 'Guest';
-            const displayEmail = order.email || 'No Email';
-            const guestBadge = (!order.userId || order.isGuest) ? 
+            // ⭐ UPDATED GUEST LOGIC FOR TABLE
+            const guestName = order.shippingAddress ? `${order.shippingAddress.firstName} ${order.shippingAddress.lastName || ''}`.trim() : 'Guest';
+            const displayName = order.userName || order.customerName || guestName;
+            const displayEmail = order.guestEmail || order.email || (order.shippingAddress ? order.shippingAddress.email : 'No Email');
+            
+            const guestBadge = (order.isGuest || !order.userId) ? 
                 `<span class="ml-2 px-1.5 py-0.5 text-[9px] bg-gray-200 text-gray-600 rounded">GUEST</span>` : '';
 
             tr.innerHTML = `
@@ -404,13 +407,12 @@
         });
     }
 
-    // ⭐ FIX: Missing handleViewDetails function added here
     async function handleViewDetails(orderId) {
         try {
             const response = await authorizedFetch(`/api/admin/orders/${orderId}`);
             if (response && response.ok) {
-                const order = await response.json();
-                renderOrderDetail(order);
+                const data = await response.json();
+                renderOrderDetail(data.order); 
             } else {
                 showToast("Order not found.", "bg-red-500");
             }
@@ -423,27 +425,37 @@
         currentDetailOrderId = order._id;
         showContent('orderdetails');
 
-        const displayName = order.customerName || order.userName || order.shippingAddress?.firstName || 'Guest';
-        const displayEmail = order.email || 'N/A';
+        // ⭐ UPDATED GUEST LOGIC FOR DETAILS
+        const guestName = order.shippingAddress ? `${order.shippingAddress.firstName} ${order.shippingAddress.lastName || ''}`.trim() : 'Guest';
+        const displayName = order.customerName || order.userName || guestName;
+        const displayEmail = order.guestEmail || order.email || (order.shippingAddress ? order.shippingAddress.email : 'N/A');
         
-        document.getElementById('detail-order-id').textContent = (order.orderReference || order._id).substring(0, 8);
         const nameContainer = document.getElementById('detail-customer-name');
-        nameContainer.textContent = displayName;
-        
-        if (!order.userId || order.isGuest) {
-            nameContainer.innerHTML += ` <span class="text-xs font-normal text-gray-400 border border-gray-300 px-1 rounded ml-2">GUEST</span>`;
+        if (nameContainer) {
+            nameContainer.textContent = displayName;
+            if (!order.userId || order.isGuest) {
+                nameContainer.innerHTML += ` <span class="text-xs font-normal text-gray-400 border border-gray-300 px-1 rounded ml-2">GUEST</span>`;
+            }
         }
 
-        document.getElementById('detail-customer-email').textContent = displayEmail;
-        document.getElementById('detail-date').textContent = formatDate(order.createdAt);
-        document.getElementById('detail-payment-method').textContent = order.paymentMethod;
-        document.getElementById('detail-total').textContent = formatNaira(order.totalAmount);
-        
-        document.getElementById('detail-subtotal').textContent = formatNaira(order.subtotal || order.itemsPrice || 0);
-        document.getElementById('detail-shipping').textContent = formatNaira(order.shippingPrice || order.shippingFee || 0);
-        document.getElementById('detail-tax').textContent = formatNaira(order.taxPrice || 0);
+        const fields = {
+            'detail-order-id': (order.orderReference || order._id).substring(0, 8),
+            'detail-customer-email': displayEmail,
+            'detail-date': formatDate(order.createdAt),
+            'detail-payment-method': order.paymentMethod || 'N/A',
+            'detail-total': formatNaira(order.totalAmount),
+            'detail-subtotal': formatNaira(order.subtotal || order.itemsPrice || 0),
+            'detail-shipping': formatNaira(order.shippingPrice || order.shippingFee || 0),
+            'detail-tax': formatNaira(order.taxPrice || 0)
+        };
 
-        detailItemsBody.innerHTML = (order.orderItems || order.items || []).map(item => `
+        Object.keys(fields).forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = fields[id];
+        });
+
+        const items = order.orderItems || order.items || [];
+        detailItemsBody.innerHTML = items.map(item => `
             <tr class="border-b">
                 <td class="px-4 py-3 text-sm text-gray-800 font-medium">${item.name}</td>
                 <td class="px-4 py-3 text-sm text-gray-800">${item.variantName || item.size || 'Default'}</td>
@@ -454,19 +466,22 @@
         `).join('') || '<tr><td colspan="5" class="p-4 text-center text-gray-400">No items found</td></tr>';
 
         const receiptContainer = document.getElementById('receipt-container');
-        const isPaid = order.paymentStatus === 'Paid' || (Number(order.amountPaidKobo) > 0);
-        
-        if (isPaid) {
-            receiptContainer.innerHTML = `<div class="p-6 bg-emerald-50 text-emerald-700 border-2 border-dashed border-emerald-200 rounded-lg text-center font-bold">Verified Payment via ${order.paymentMethod}</div>`;
-        } else if (order.paymentReceiptUrl) {
-            receiptContainer.innerHTML = `<img src="${order.paymentReceiptUrl}" class="rounded-lg shadow-sm border max-h-96 mx-auto cursor-zoom-in" onclick="window.open(this.src)"/>`;
-        } else {
-            receiptContainer.innerHTML = `<p class="text-gray-400 p-8 text-center italic border rounded-lg">No proof of payment provided.</p>`;
+        if (receiptContainer) {
+            const isPaid = order.paymentStatus === 'Paid' || (Number(order.amountPaidKobo) > 0);
+            if (isPaid) {
+                receiptContainer.innerHTML = `<div class="p-6 bg-emerald-50 text-emerald-700 border-2 border-dashed border-emerald-200 rounded-lg text-center font-bold">Verified Payment via ${order.paymentMethod}</div>`;
+            } else if (order.paymentReceiptUrl) {
+                receiptContainer.innerHTML = `<img src="${order.paymentReceiptUrl}" class="rounded-lg shadow-sm border max-h-96 mx-auto cursor-zoom-in" onclick="window.open(this.src)"/>`;
+            } else {
+                receiptContainer.innerHTML = `<p class="text-gray-400 p-8 text-center italic border rounded-lg">No proof of payment provided.</p>`;
+            }
         }
 
         const confirmBtn = document.getElementById('detail-confirm-btn');
-        const isConfirmable = ['Pending', 'Processing', 'Inventory Failure (Manual Review)'].includes(order.status);
-        confirmBtn.classList.toggle('hidden', !isConfirmable);
+        if (confirmBtn) {
+            const isConfirmable = ['Pending', 'Processing', 'Inventory Failure (Manual Review)'].includes(order.status);
+            confirmBtn.classList.toggle('hidden', !isConfirmable);
+        }
     }
 
     async function confirmOrderFromDetails() {

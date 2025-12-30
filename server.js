@@ -3106,33 +3106,39 @@ app.get('/api/admin/orders/pending', verifyToken, async (req, res) => {
         const pendingOrders = await Order.find({ 
             status: { $in: ['Pending', 'Processing', 'Inventory Failure (Manual Review)'] } 
         })
-        // 📢 ADDED: amountPaidKobo and paymentTxnId to the selection
-        .select('_id userId totalAmount createdAt status paymentMethod paymentStatus paymentReceiptUrl orderReference amountPaidKobo paymentTxnId')
         .sort({ createdAt: 1 })
         .lean();
 
         const populatedOrders = await Promise.all(
             pendingOrders.map(async (order) => {
-                const user = await User.findById(order.userId)
-                    .select('profile.firstName profile.lastName email') 
-                    .lean();
+                let userName = 'Guest';
+                let email = 'N/A';
 
-                const userName = (user?.profile?.firstName && user?.profile?.lastName) 
-                    ? `${user.profile.firstName} ${user.profile.lastName}` 
-                    : user?.email || 'N/A';
+                if (order.userId) {
+                    // Path A: Registered Member
+                    const user = await User.findById(order.userId)
+                        .select('profile.firstName profile.lastName email') 
+                        .lean();
+                    if (user) {
+                        userName = `${user.profile?.firstName || ''} ${user.profile?.lastName || ''}`.trim() || user.email;
+                        email = user.email;
+                    }
+                } else {
+                    // Path B: Guest User (Pull from Order/Shipping fields)
+                    const s = order.shippingAddress;
+                    userName = s ? `${s.firstName || ''} ${s.lastName || ''}`.trim() : (order.customerName || 'Guest');
+                    email = order.guestEmail || s?.email || order.email || 'Guest Email';
+                }
 
-                // 📢 LOGIC ADDITION: 
-                // Since your DB has amountPaidKobo but status is "Pending",
-                // we tell the frontend this is a "Paid" order if the kobo matches.
                 const isPaystackPaid = order.paymentMethod === 'Paystack' && 
                                      order.amountPaidKobo >= (order.totalAmount * 100);
                 
                 return {
                     ...order,
                     userName,
-                    email: user?.email || 'Unknown User',
-                    // This ensures the frontend 'paymentStatus' check works correctly
-                    paymentStatus: isPaystackPaid ? 'Paid' : (order.paymentStatus || 'Awaiting')
+                    email,
+                    paymentStatus: isPaystackPaid ? 'Paid' : (order.paymentStatus || 'Awaiting'),
+                    isGuest: !order.userId
                 };
             })
         );
@@ -3223,8 +3229,9 @@ app.get('/api/admin/orders/confirmed', verifyToken, async (req, res) => {
         res.status(500).json({ message: 'Failed to retrieve confirmed orders.' });
     }
 });
+
 // =========================================================
-// 8b. GET /api/admin/orders/:orderId - Fetch Single Detailed Order (Admin Protected)
+// 8b. GET /api/admin/orders/:orderId - Fetch Single Detailed Order
 // =========================================================
 app.get('/api/admin/orders/:orderId', verifyToken, async (req, res) => {
     try {
@@ -3232,13 +3239,10 @@ app.get('/api/admin/orders/:orderId', verifyToken, async (req, res) => {
 
         // 1. Fetch the single order
         let order = null;
-        
-        // Try finding by MongoDB _id
         if (orderId.match(/^[0-9a-fA-F]{24}$/)) {
-             order = await Order.findById(orderId).lean();
+            order = await Order.findById(orderId).lean();
         }
 
-        // Fallback to orderReference
         if (!order) {
             order = await Order.findOne({ orderReference: orderId }).lean();
         }
@@ -3246,56 +3250,56 @@ app.get('/api/admin/orders/:orderId', verifyToken, async (req, res) => {
         if (!order) {
             return res.status(404).json({ message: 'Order not found.' });
         }
-        
-        // 2. Augment order items with product details (name, imageUrl, etc.)
-        const detailedOrders = await augmentOrdersWithProductDetails([order]);
-        let detailedOrder = detailedOrders[0];
 
-        // 🚨 FIX: Generate Signed URL for the Payment Receipt
+        // 2. Augment order items with product details
+        const augmentedResults = await augmentOrdersWithProductDetails([order]);
+        let detailedOrder = augmentedResults[0];
+
+        // 3. Generate Signed URL for Proof of Payment if it exists
         if (detailedOrder.paymentReceiptUrl) {
             detailedOrder.paymentReceiptUrl = await generateSignedUrl(detailedOrder.paymentReceiptUrl);
         }
 
-        // 3. Get User Details (Handle Registered Members vs. Guests)
-        const user = await User.findById(detailedOrder.userId)
-            .select('profile.firstName profile.lastName email') 
-            .lean();
+        // 4. Determine Customer Identity (Guest vs Member)
+        let customerName = 'Guest Customer';
+        let customerEmail = 'N/A';
+        let whatsapp = 'N/A';
 
-        let finalUserName;
-        let finalEmail;
-
-        if (user) {
+        if (detailedOrder.userId) {
             // Path A: Registered Member
-            const firstName = user?.profile?.firstName || '';
-            const lastName = user?.profile?.lastName || '';
-            finalUserName = `${firstName} ${lastName}`.trim() || user.email;
-            finalEmail = user.email;
-        } else {
-            // Path B: Guest User Fallback
-            // Pull from the order document directly (captured during guest checkout)
-            finalUserName = detailedOrder.customerName || detailedOrder.shippingAddress?.name || 'Guest Customer';
-            finalEmail = detailedOrder.email || 'N/A';
-        }
+            const user = await User.findById(detailedOrder.userId)
+                .select('profile.firstName profile.lastName email profile.whatsapp')
+                .lean();
+            
+            if (user) {
+                customerName = `${user.profile?.firstName || ''} ${user.profile?.lastName || ''}`.trim() || user.email;
+                customerEmail = user.email;
+                whatsapp = user.profile?.whatsapp || 'N/A';
+            }
+        } 
         
-        // 4. Combine all details
+        // Path B: Guest User Logic (Use Guest fields if Member lookup failed or if flagged as Guest)
+        if (!detailedOrder.userId || detailedOrder.isGuest) {
+            const s = detailedOrder.shippingAddress;
+            // Use the specific guest fields from your database schema
+            customerName = s ? `${s.firstName || ''} ${s.lastName || ''}`.trim() : (detailedOrder.customerName || 'Guest');
+            customerEmail = detailedOrder.guestEmail || s?.email || detailedOrder.email || 'N/A';
+            whatsapp = s?.whatsapp || 'N/A';
+        }
+
+        // 5. Build Final Response Object
         const finalDetailedOrder = {
             ...detailedOrder,
-            customerName: finalUserName, 
-            email: finalEmail,
-            isGuest: !user, // Useful for frontend badges
-            totalQuantity: detailedOrder.items.reduce((sum, item) => sum + (item.quantity || 0), 0)
+            customerName: customerName,
+            email: customerEmail,
+            whatsappNumber: whatsapp,
+            isGuest: !detailedOrder.userId || detailedOrder.isGuest
         };
 
-        // 🚀 Return wrapped in 'order' key as expected by frontend
-        return res.status(200).json({ 
-            order: finalDetailedOrder 
-        });
+        return res.status(200).json({ order: finalDetailedOrder });
 
     } catch (error) {
-        console.error(`Error fetching order details for ${req.params.orderId}:`, error);
-        if (error.name === 'CastError' || error.kind === 'ObjectId') {
-             return res.status(400).json({ message: 'Invalid Order ID format.' });
-        }
+        console.error('Admin single order fetch error:', error);
         return res.status(500).json({ message: 'Server error: Failed to retrieve order details.' });
     }
 });
