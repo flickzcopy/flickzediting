@@ -26,10 +26,15 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
 <style>
-    /* Load Inter (main font) and Playfair Display (for "OUTFLICKZ") */
+    /* 1. FONTS & ROOT */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
 
-    /* Custom style for the large, stylized 'OUTFLICKZ' text */
+    body {
+        font-family: 'Inter', sans-serif;
+        -webkit-font-smoothing: antialiased;
+    }
+
+    /* 2. TYPOGRAPHY */
     .roulette-text {
         font-family: 'Playfair Display', serif;
         font-weight: 900;
@@ -40,12 +45,7 @@
         color: #FFFFFF;
     }
 
-    /* Using Inter as the main font */
-    body {
-        font-family: 'Inter', sans-serif;
-    }
-    
-    /* --- SLIDER STYLES --- */
+    /* 3. HERO BACKGROUND SLIDER */
     .hero-bg-slider-container {
         position: absolute;
         inset: 0;
@@ -62,104 +62,117 @@
         background-repeat: no-repeat;
         opacity: 0;
         transition: opacity 1.5s ease-in-out;
-    }
-    /* Mobile Default: Cell 1 takes full width, Cell 2 is hidden */
-    .slider-cell-1 {
         width: 100%;
         left: 0;
         z-index: 10;
     }
     .slider-cell-2 {
-        display: none; /* Hide cell 2 completely on mobile */
+        display: none; /* Mobile Default */
     }
-    /* Tablet/Desktop: Cell 2 is displayed next to Cell 1 (50% width each) */
     @media (min-width: 768px) {
-        .slider-cell {
-            width: 50%; /* Each cell takes half the width */
-        }
+        .slider-cell { width: 50%; }
         .slider-cell-2 {
-            display: block; /* Show cell 2 */
+            display: block;
             left: 50%;
-            z-index: 10;
         }
     }
-    .slider-cell.active {
-        opacity: 1;
-    }
-    .image-overlay {
-        background-color: rgba(0, 0, 0, 0.5);
-    }
-    /* --- END SLIDER STYLES --- */
+    .slider-cell.active { opacity: 1; }
+    .image-overlay { background-color: rgba(0, 0, 0, 0.5); }
 
-    /* --- MODAL STYLES --- */
-    .modal {
-        transition: opacity 0.3s ease-in-out;
-    }
-
-    /* --- CARD STYLES --- */
+    /* 4. PRODUCT CARDS & SELECTIONS */
     .card-image-box {
         aspect-ratio: 1/1.1;
         overflow: hidden;
     }
-    .card-image-box img {
-        object-fit: cover !important;
-    }
+    .card-image-box img { object-fit: cover !important; }
 
-    /* ✅ NEW CRITICAL FIX: Styles for the size selection, manually applied by JavaScript */
     .size-label-styled.is-checked {
-        border-color: #3b3b3b !important; /* ash-dark equivalent */
-        background-color: #3b3b3b !important; /* ash-dark equivalent */
+        border-color: #3b3b3b !important;
+        background-color: #3b3b3b !important;
         color: white !important; 
     }
-
     .color-label input:checked + span {
-        border-width: 2px; /* Thicker border for selected state */
-        border-color: #a80000; /* ash-red */
+        border-width: 2px;
+        border-color: #a80000;
     }
 
-    /* --- NEW MOBILE SLIDER STYLE FOR COLLECTIONS AND ADS --- */
-    /* Only apply flex/scroll to the grid container on screens smaller than md (768px) */
+    /* 5. NEW YEAR SEASONAL ANIMATIONS */
+    /* Category Image Rotation */
+    .rotating-image {
+        transition: opacity 0.8s ease-in-out, transform 0.8s ease-in-out;
+        backface-visibility: hidden;
+        will-change: opacity, transform;
+    }
+
+    /* Seasonal Banner Slideshow */
+    .banner-text {
+        transition: opacity 1s ease-in-out, transform 1s ease-in-out;
+        width: 100%;
+        pointer-events: none;
+        left: 0;
+        right: 0;
+        margin: auto;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        will-change: opacity, transform;
+    }
+
+    /* Start states for specific slides */
+    #slide-1 { transform: translateY(0); }
+    #slide-2 { 
+        opacity: 0; 
+        transform: translateY(15px); /* Slightly deeper start for better slide effect */
+    }
+
+    /* 6. MOBILE HORIZONTAL SLIDERS */
     @media (max-width: 767px) {
-        #wears-collections-grid, #new-arrivals-grid, #caps-collections-grid, #advertisements-grid, #preorder-collections-grid {
+        #wears-collections-grid, #new-arrivals-grid, 
+        #caps-collections-grid, #advertisements-grid, 
+        #preorder-collections-grid {
             display: flex;
-            overflow-x: scroll;
+            overflow-x: auto; /* Use auto for better native behavior */
             scroll-snap-type: x mandatory;
-            padding-bottom: 1rem; /* Space for shadow/scroll bar */
+            padding-bottom: 1.5rem;
+            -webkit-overflow-scrolling: touch; /* Smooth iOS scroll */
+            scrollbar-width: none; /* Hide scrollbar Firefox */
         }
-        /* Wears Collection (Default size) - LARGER */
-        #wears-collections-grid .collection-card, #preorder-collections-grid .collection-card {
-            flex-shrink: 0; /* Cards won't shrink */
-            width: 50vw; /* Standard size */
-            max-width: 300px; /* Optional max width */
+        
+        /* Hide scrollbar for Chrome/Safari */
+        #wears-collections-grid::-webkit-scrollbar { display: none; }
+
+        .collection-card {
+            flex: 0 0 auto;
             scroll-snap-align: start;
             margin-right: 1rem;
         }
-        /* New Arrivals & Caps (Reduced size) - SMALLER */
-        #new-arrivals-grid .collection-card, #caps-collections-grid .collection-card {
-            flex-shrink: 0; 
-            width: 45vw; /* Reduced size for visual difference */
-            max-width: 250px;
-            scroll-snap-align: start;
-            margin-right: 1rem;
+
+        /* Large Cards */
+        #wears-collections-grid .collection-card, 
+        #preorder-collections-grid .collection-card {
+            width: 70vw; 
+            max-width: 300px;
         }
-        /* Advertisements */
+
+        /* Smaller Cards */
+        #new-arrivals-grid .collection-card, 
+        #caps-collections-grid .collection-card {
+            width: 45vw;
+            max-width: 220px;
+        }
+
+        /* Ad Banners */
         #advertisements-grid .ad-image-box {
-            flex-shrink: 0;
-            width: 90vw; /* Increased width for better fill */
+            flex: 0 0 90vw;
             max-width: 450px;
             scroll-snap-align: center;
             margin-right: 1rem;
         }
-        /* Ensure the last card snaps correctly */
-        #wears-collections-grid > div:last-child, 
-        #new-arrivals-grid > div:last-child,
-        #caps-collections-grid > div:last-child,
-        #advertisements-grid > div:last-child,
-        #preorder-collections-grid > div:last-child {
-            margin-right: 0;
-        }
     }
-    /* --- END NEW MOBILE SLIDER STYLE --- */
+
+    /* 7. MODALS & UI */
+    .modal { transition: opacity 0.3s ease-in-out; }
 </style>
 
 <script>
@@ -1726,32 +1739,59 @@ async function fetchAndRenderPreorderCollections() {
         container.innerHTML = '<p class="col-span-full text-center text-red-600 py-10 w-full font-semibold">Error: Could not connect to API server (502/Down).</p>';
     }
 }
-
 document.addEventListener('DOMContentLoaded', function() {
+    // 1. IMAGE ROTATION
     const rotatingImages = document.querySelectorAll('.rotating-image');
-
-    setInterval(() => {
+    if (rotatingImages.length > 0) {
         rotatingImages.forEach(img => {
-            const currentSrc = img.src;
-            const altSrc = img.getAttribute('data-alt-src');
-
-            // This checks: Does the attribute exist? Is it not empty? 
-            if (altSrc && altSrc.trim() !== "" && !altSrc.includes("YOUR_SECOND")) {
-                
-                // Start Fade Out
-                img.style.opacity = '0';
-                
-                setTimeout(() => {
-                    // Swap the images while invisible
-                    img.src = altSrc;
-                    img.setAttribute('data-alt-src', currentSrc);
-                    
-                    // Fade Back In
-                    img.style.opacity = '1';
-                }, 500); // 500ms matches the transition duration in your HTML
-            }
+            img.style.transition = 'opacity 0.8s ease-in-out, transform 0.8s ease-in-out';
         });
-    }, 4000); // Swaps every 4 seconds
+
+        setInterval(() => {
+            rotatingImages.forEach(img => {
+                const currentSrc = img.src;
+                const altSrc = img.getAttribute('data-alt-src');
+                if (altSrc && altSrc.trim() !== "" && !altSrc.includes("YOUR_SECOND")) {
+                    img.style.opacity = '0';
+                    img.style.transform = 'scale(0.95)';
+                    setTimeout(() => {
+                        img.src = altSrc;
+                        img.setAttribute('data-alt-src', currentSrc);
+                        img.style.opacity = '1';
+                        img.style.transform = 'scale(1)';
+                    }, 800);
+                }
+            });
+        }, 5000);
+    }
+
+    // 2. TEXT BANNER SLIDESHOW (Corrected to toggle classes)
+    const slide1 = document.getElementById('slide-1');
+    const slide2 = document.getElementById('slide-2');
+    let showingFirst = true;
+
+    if (slide1 && slide2) {
+        setInterval(() => {
+            if (showingFirst) {
+                // Slide 1 Out
+                slide1.classList.replace('opacity-100', 'opacity-0');
+                slide1.classList.replace('translate-y-0', '-translate-y-4');
+                
+                // Slide 2 In
+                slide2.classList.replace('opacity-0', 'opacity-100');
+                slide2.classList.replace('translate-y-4', 'translate-y-0');
+            } else {
+                // Slide 2 Out
+                slide2.classList.replace('opacity-100', 'opacity-0');
+                slide2.classList.replace('translate-y-0', 'translate-y-4'); // resets to bottom
+                
+                // Slide 1 In
+                slide1.classList.replace('opacity-0', 'opacity-100');
+                slide1.classList.replace('-translate-y-4', 'translate-y-0');
+            }
+            showingFirst = !showingFirst;
+        }, 4000);
+    }
 });
 
 // --- Updated Consolidated Initialization Logic ---
@@ -1864,53 +1904,69 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         </div>
     </main>
-<section class="bg-white py-10"> <div class="max-w-7xl mx-auto px-4">
+
+<section class="relative bg-[#0a0f1a] py-16 overflow-hidden">
+    <div class="absolute inset-0 opacity-20 pointer-events-none">
+        <div class="absolute top-10 left-10 w-32 h-32 bg-yellow-500 rounded-full blur-[100px]"></div>
+        <div class="absolute bottom-10 right-10 w-40 h-40 bg-blue-500 rounded-full blur-[120px]"></div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 relative z-10">
+        <div class="text-center mb-12">
+            <h2 class="text-white text-2xl md:text-3xl font-black tracking-tighter uppercase">Season 2026</h2>
+            <div class="h-1 w-20 bg-yellow-600 mx-auto mt-2"></div>
+        </div>
+
         <div class="flex flex-wrap items-center justify-center gap-6 md:gap-12">
             
             <a href="wearscollection.html" class="flex flex-col items-center space-y-4 group category-item">
-                <div class="w-28 h-28 md:w-44 md:h-44 rounded-full border-4 border-gray-100 p-1.5 transition-all duration-300 group-hover:scale-105 group-hover:border-[#1a2b49] shadow-md overflow-hidden">
+                <div class="w-32 h-32 md:w-48 md:h-48 rounded-full border-2 border-yellow-600/30 p-2 transition-all duration-500 group-hover:scale-105 group-hover:border-yellow-500 shadow-[0_0_20px_rgba(202,138,4,0.1)] group-hover:shadow-[0_0_30px_rgba(202,138,4,0.3)] overflow-hidden bg-gray-900">
                     <img src="https://i.imgur.com/pkHSBXd.jpeg" 
                          data-alt-src="https://i.imgur.com/KsNquIe.jpeg" 
                          alt="Wears" class="w-full h-full rounded-full object-cover transition-opacity duration-500 rotating-image">
                 </div>
-                <span class="text-xs md:text-sm font-extrabold uppercase tracking-widest text-gray-800">Wears</span>
+                <span class="text-[10px] md:text-xs font-black uppercase tracking-[0.3em] text-gray-300 group-hover:text-yellow-500 transition-colors">Wears</span>
             </a>
 
             <a href="newarrivals.html" class="flex flex-col items-center space-y-4 group category-item">
-                <div class="w-28 h-28 md:w-44 md:h-44 rounded-full border-4 border-gray-100 p-1.5 transition-all duration-300 group-hover:scale-105 group-hover:border-[#1a2b49] shadow-md overflow-hidden">
+                <div class="w-32 h-32 md:w-48 md:h-48 rounded-full border-2 border-yellow-600/30 p-2 transition-all duration-500 group-hover:scale-105 group-hover:border-yellow-500 shadow-[0_0_20px_rgba(202,138,4,0.1)] group-hover:shadow-[0_0_30px_rgba(202,138,4,0.3)] overflow-hidden bg-gray-900">
                     <img src="https://i.imgur.com/kBWnXqe.jpeg" 
                          data-alt-src="https://i.imgur.com/g8vdHCf.jpeg" 
                          alt="New Arrivals" class="w-full h-full rounded-full object-cover transition-opacity duration-500 rotating-image">
                 </div>
-                <span class="text-xs md:text-sm font-extrabold uppercase tracking-widest text-gray-800">New Arrivals</span>
+                <span class="text-[10px] md:text-xs font-black uppercase tracking-[0.3em] text-gray-300 group-hover:text-yellow-500 transition-colors">New Arrivals</span>
             </a>
 
             <a href="capcollection.html" class="flex flex-col items-center space-y-4 group category-item">
-                <div class="w-28 h-28 md:w-44 md:h-44 rounded-full border-4 border-gray-100 p-1.5 transition-all duration-300 group-hover:scale-105 group-hover:border-[#1a2b49] shadow-md overflow-hidden">
+                <div class="w-32 h-32 md:w-48 md:h-48 rounded-full border-2 border-yellow-600/30 p-2 transition-all duration-500 group-hover:scale-105 group-hover:border-yellow-500 shadow-[0_0_20px_rgba(202,138,4,0.1)] group-hover:shadow-[0_0_30px_rgba(202,138,4,0.3)] overflow-hidden bg-gray-900">
                     <img src="https://i.imgur.com/pkHSBXd.jpeg" 
                          data-alt-src="https://i.imgur.com/KsNquIe.jpeg" 
                          alt="Caps" class="w-full h-full rounded-full object-cover transition-opacity duration-500 rotating-image">
                 </div>
-                <span class="text-xs md:text-sm font-extrabold uppercase tracking-widest text-gray-800">Caps</span>
+                <span class="text-[10px] md:text-xs font-black uppercase tracking-[0.3em] text-gray-300 group-hover:text-yellow-500 transition-colors">Caps</span>
             </a>
 
             <a href="preorder.html" class="flex flex-col items-center space-y-4 group category-item">
-                <div class="w-28 h-28 md:w-44 md:h-44 rounded-full border-4 border-gray-100 p-1.5 transition-all duration-300 group-hover:scale-105 group-hover:border-[#1a2b49] shadow-md overflow-hidden">
+                <div class="w-32 h-32 md:w-48 md:h-48 rounded-full border-2 border-yellow-600/30 p-2 transition-all duration-500 group-hover:scale-105 group-hover:border-yellow-500 shadow-[0_0_20px_rgba(202,138,4,0.1)] group-hover:shadow-[0_0_30px_rgba(202,138,4,0.3)] overflow-hidden bg-gray-900">
                     <img src="https://i.imgur.com/pkHSBXd.jpeg" 
-                         data-alt-src="YOUR_SECOND_PREORDER_IMAGE_URL" 
+                         data-alt-src="https://i.imgur.com/KsNquIe.jpeg" 
                          alt="Preorder" class="w-full h-full rounded-full object-cover transition-opacity duration-500 rotating-image">
                 </div>
-                <span class="text-xs md:text-sm font-extrabold uppercase tracking-widest text-gray-800">Preorder</span>
+                <span class="text-[10px] md:text-xs font-black uppercase tracking-[0.3em] text-gray-300 group-hover:text-yellow-500 transition-colors">Preorder</span>
             </a>
 
         </div>
     </div>
 
-    <div class="w-full bg-[#1a2b49] py-5 mt-10">
-        <p class="text-center text-white text-[11px] sm:text-xs font-bold tracking-[0.25em] uppercase px-6">
-            The Official Online Store for Outflickz in Nigeria
-        </p>
-    </div>
+    <div class="w-full bg-gradient-to-r from-[#1a2b49] via-[#2a457a] to-[#1a2b49] py-6 mt-16 border-t border-yellow-600/20 relative h-16 flex items-center justify-center overflow-hidden">
+    <p class="banner-text absolute text-center text-white text-[10px] sm:text-xs font-black tracking-[0.4em] uppercase px-6 transition-all duration-1000 opacity-100 translate-y-0" id="slide-1">
+        ✨ The Official Online Store for Outflickz in Nigeria ✨
+    </p>
+    
+    <p class="banner-text absolute text-center text-white text-[10px] sm:text-xs font-black tracking-[0.4em] uppercase px-6 transition-all duration-1000 opacity-0 translate-y-4" id="slide-2">
+        ✨ Happy New Year: The Official 2026 Collection for Outflickz ✨
+    </p>
+</div>
 </section>
 
     <section id="wears-collections-section" class="py-12 sm:py-16 bg-color-white text-color-black border-t border-racing-grey white-section">
