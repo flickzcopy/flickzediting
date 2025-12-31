@@ -684,7 +684,6 @@ function createColorList(collectionId, variants) {
     return mapHtml + buttonsHtml;
 }
 
-
 function createCollectionCard(collection, size = 'default') {
     const currencySymbol = '₦';
     const PLACEHOLDER_URL = 'https://s3.us-west-1.idrivee2.com/outflickz/public/placeholder-image-v1.jpg';
@@ -724,42 +723,50 @@ function createCollectionCard(collection, size = 'default') {
 
     const colorListHtml = createColorList(collection._id, collection.variants || collection.variations); 
 
-    // --- Stock & Quantity ---
-    let maxStock = collection.availableStock > 0 ? collection.availableStock : 0;
-    let initialMaxStock = 1;
-    const firstSizeEntry = Object.entries(collection.sizeStockMap || {}).find(([size, stock]) => stock > 0);
-    if (firstSizeEntry) initialMaxStock = firstSizeEntry[1];
-    else if (maxStock > 0) initialMaxStock = maxStock;
-
-    const isOutOfStock = maxStock === 0 || collection.availableStock === 0;
-
-    // ⭐ CRITICAL FIX: Sanitization using Hex Escaping (\x27)
-    // This prevents "Cream Tees" or "Men's" from breaking the onclick attribute.
-    const cardDescription = collection.tag || (isPreorder ? 'Secure your exclusive item' : 'Limited edition.');
+    // --- 🎯 STOCK CALCULATION FIX ---
+    // Use the standardizeStockData helper to ensure we find stock inside variations if availableStock is missing
+    const stockInfo = standardizeStockData(collection);
+    let actualStock = 0;
     
-    const safeName = collection.name.replace(/'/g, "\\x27").replace(/"/g, '&quot;');
-    const safeFullDescription = (collection.description || cardDescription)
-        .replace(/'/g, "\\x27")
-        .replace(/"/g, '&quot;');
-    const safeProductType = (collection.collectionName || collection.productType || "Product")
-        .replace(/'/g, "\\x27");
+    if (collection.availableStock !== undefined && collection.availableStock !== null) {
+        actualStock = Number(collection.availableStock);
+    } else {
+        actualStock = Number(stockInfo.totalAvailable) || 0;
+    }
 
+    const isOutOfStock = actualStock === 0;
+
+    let initialMaxStock = 1;
+    const firstSizeEntry = Object.entries(collection.sizeStockMap || {}).find(([sz, stk]) => stk > 0);
+    if (firstSizeEntry) initialMaxStock = firstSizeEntry[1];
+    else if (actualStock > 0) initialMaxStock = actualStock;
+
+    // --- 🎯 BADGE PRIORITY FIX ---
     let stockBadge = '';
     let cartButtonText = 'ADD TO CART'; 
     let cartButtonClasses = 'bg-black text-white hover:bg-gray-800 shadow-md';
 
-    if (isPreorder) {
-        stockBadge = `<span class="absolute top-2 left-2 bg-ash-dark text-white text-[0.6rem] sm:text-xs font-bold px-2 py-0.5 rounded shadow-lg z-40">PRE-ORDER</span>`;
-    } else if (isOutOfStock) {
+    // Priority 1: Out of Stock (Must show red badge even if it's a pre-order)
+    if (isOutOfStock) {
         stockBadge = `<span class="absolute top-2 left-2 bg-ash-red text-white text-[0.6rem] sm:text-xs font-bold px-2 py-0.5 rounded shadow-lg z-40">Out of Stock</span>`;
         cartButtonText = 'OUT OF STOCK';
         cartButtonClasses = 'bg-gray-400 text-white cursor-not-allowed';
+    } 
+    // Priority 2: Pre-Order (Only shows if there is stock or it's a pre-order item)
+    else if (isPreorder) {
+        stockBadge = `<span class="absolute top-2 left-2 bg-ash-dark text-white text-[0.6rem] sm:text-xs font-bold px-2 py-0.5 rounded shadow-lg z-40">PRE-ORDER</span>`;
     }
 
-    const isButtonDisabled = isOutOfStock && !isPreorder;
+    const isButtonDisabled = isOutOfStock;
+
+    // --- Sanitization ---
+    const cardDescription = collection.tag || (isPreorder ? 'Secure your exclusive item' : 'Limited edition.');
+    const safeName = collection.name.replace(/'/g, "\\x27").replace(/"/g, '&quot;');
+    const safeFullDescription = (collection.description || cardDescription).replace(/'/g, "\\x27").replace(/"/g, '&quot;');
+    const safeProductType = (collection.collectionName || collection.productType || "Product").replace(/'/g, "\\x27");
 
     // --- Quantity UI ---
-    const quantityControlHtml = isOutOfStock && !isPreorder
+    const quantityControlHtml = isOutOfStock
         ? `<div class="flex-shrink-0 ${controlHeight} border border-gray-300 rounded-sm flex items-center justify-center text-xs text-gray-500 w-20 mt-1">N/A</div>`
         : `<div class="flex items-center border border-gray-300 rounded-sm flex-shrink-0 mt-1">
                 <button onclick="changeQuantity('${collection._id}', -1)" class="${quantityInputTextSize} text-gray-700 hover:bg-gray-100 ${quantityButtonSize}">&minus;</button>
@@ -767,7 +774,6 @@ function createCollectionCard(collection, size = 'default') {
                 <button onclick="changeQuantity('${collection._id}', 1)" class="${quantityInputTextSize} text-gray-700 hover:bg-gray-100 ${quantityButtonSize}">&plus;</button>
             </div>`;
 
-    // ⭐ PREPARE MODAL JSON
     const modalPayload = {
         _id: collection._id,
         name: safeName,
@@ -777,10 +783,8 @@ function createCollectionCard(collection, size = 'default') {
         backImageUrl: backImageUrl,
         sizeStockMap: collection.sizeStockMap || {},
         variants: collection.variants || [],
-        collectionType: collection.collectionType || size // ⭐ Passing the category/type
+        collectionType: collection.collectionType || size
     };
-    
-    // Convert to JSON and escape double quotes for HTML
     const modalJson = JSON.stringify(modalPayload).replace(/"/g, '&quot;'); 
 
     return `
@@ -793,13 +797,13 @@ function createCollectionCard(collection, size = 'default') {
                     <img class="w-full h-full object-cover absolute transition-opacity duration-300 active" id="front-image-${collection._id}" src="${frontImageUrl}" alt="${collection.name}">
                     <img class="w-full h-full object-cover absolute transition-opacity duration-300" id="back-image-${collection._id}" src="${backImageUrl}" style="opacity: 0;">
                 </div>
-               <div class="absolute inset-0 bg-black bg-opacity-10 opacity-0 hover:opacity-100 transition flex items-end justify-center p-3">
-    <button id="toggle-btn-${collection._id}" 
-            onclick="event.stopPropagation(); toggleImage('${collection._id}')" 
-            class="bg-white text-ash-dark text-[0.6rem] sm:text-xs font-semibold py-1 px-3 rounded-full shadow-md">
-        <i class="fas fa-sync-alt"></i> Back View
-    </button>
-</div>
+                <div class="absolute inset-0 bg-black bg-opacity-10 opacity-0 hover:opacity-100 transition flex items-end justify-center p-3">
+                    <button id="toggle-btn-${collection._id}" 
+                            onclick="event.stopPropagation(); toggleImage('${collection._id}')" 
+                            class="bg-white text-ash-dark text-[0.6rem] sm:text-xs font-semibold py-1 px-3 rounded-full shadow-md">
+                        <i class="fas fa-sync-alt"></i> Back View
+                    </button>
+                </div>
             </div>
 
             <div class="${cardPadding} flex flex-col flex-grow">
@@ -819,28 +823,25 @@ function createCollectionCard(collection, size = 'default') {
                 </div>
                 
                 <div class="mt-4">
-                   <button
-    ${isButtonDisabled ? 'disabled' : ''}
-    onclick="simulateAddToCart({
-        productId: '${collection._id}',
-        name: '${safeName}',
-        price: ${itemPrice},
-        imageUrl: '${frontImageUrl}',
-        // Force the type to 'caps' if isCaps is true so validation skips size
-        productType: '${isCaps ? 'caps' : safeProductType}',
-        // Pre-set the size for caps so the cart receives O/S immediately
-        size: '${isCaps ? 'O/S' : ''}' 
-    })"
-    class="w-full ${controlHeight} ${controlTextSize} ${cartButtonClasses} rounded-sm transition font-bold uppercase tracking-widest flex items-center justify-center gap-2">
-    <i class="fas fa-shopping-bag"></i>
-    ${cartButtonText}
-</button>
+                    <button
+                        ${isButtonDisabled ? 'disabled' : ''}
+                        onclick="simulateAddToCart({
+                            productId: '${collection._id}',
+                            name: '${safeName}',
+                            price: ${itemPrice},
+                            imageUrl: '${frontImageUrl}',
+                            productType: '${isCaps ? 'caps' : safeProductType}',
+                            size: '${isCaps ? 'O/S' : ''}' 
+                        })"
+                        class="w-full ${controlHeight} ${controlTextSize} ${cartButtonClasses} rounded-sm transition font-bold uppercase tracking-widest flex items-center justify-center gap-2">
+                        <i class="fas fa-shopping-bag"></i>
+                        ${cartButtonText}
+                    </button>
                 </div>
             </div>
         </div>
     `;
 }
-
 
 function createSizeList(collectionId, sizeStockMap, isReduced = false) {
     if (!sizeStockMap) {
