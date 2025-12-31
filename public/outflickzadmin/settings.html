@@ -113,9 +113,9 @@
                         <input type="number" id="max-users" value="1000" class="w-full sm:w-24 border border-gray-300 rounded-md p-1 text-center text-sm focus:border-emerald-500 focus:ring-emerald-500">
                     </div>
                 </div>
-                <button class="mt-6 w-full md:w-auto py-2 px-6 bg-emerald-600 text-white font-medium rounded-lg shadow-md hover:bg-emerald-700 transition duration-200">
-                    Save Global Settings
-                </button>
+              <button id="save-settings-btn" class="mt-6 w-full md:w-auto py-2 px-6 bg-emerald-600 text-white font-medium rounded-lg shadow-md hover:bg-emerald-700 transition duration-200">
+    Save Global Settings
+</button>
             </div>
             
             <div class="bg-white p-6 rounded-xl shadow-lg mb-8 border-t-4 border-emerald-500 w-full">
@@ -202,9 +202,6 @@
 
     // --- UTILITY FUNCTIONS ---
 
-    /**
-     * Displays success/error messages in the password section
-     */
     function showPasswordStatusMessage(message, isSuccess) {
         if (!passwordStatusMessage) return;
         passwordStatusMessage.textContent = message;
@@ -218,7 +215,6 @@
     }
 
     async function logoutAdmin() {
-        console.log("Initiating Admin Logout...");
         try {
             await fetch(`${API_BASE_URL}/api/admin/logout`, { 
                 method: 'POST',
@@ -227,45 +223,86 @@
                 }
             });
         } catch (error) {
-            console.warn("Server-side logout unreachable, cleaning up locally.");
+            console.warn("Server-side logout unreachable.");
         } finally {
             localStorage.removeItem('adminToken');
             window.location.href = './admin-login.html';
         }
     }
 
-    // --- API DATA FETCHING ---
+    // --- PLATFORM SETTINGS LOGIC ---
+
+    async function loadCurrentSettings() {
+        const token = localStorage.getItem('adminToken');
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const settings = await response.json();
+                document.getElementById('maintenance-mode').checked = settings.maintenanceMode;
+                document.getElementById('max-users').value = settings.maxUsers;
+            }
+        } catch (error) {
+            console.error("Failed to fetch current settings:", error);
+        }
+    }
+
+    async function saveGlobalSettings() {
+        const maintenanceMode = document.getElementById('maintenance-mode').checked;
+        const maxUsers = document.getElementById('max-users').value;
+        const token = localStorage.getItem('adminToken');
+        const btn = document.getElementById('save-settings-btn');
+
+        const originalText = btn.textContent;
+        btn.textContent = 'Saving...';
+        btn.disabled = true;
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/admin/settings`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}` 
+                },
+                body: JSON.stringify({ 
+                    maintenanceMode, 
+                    maxUsers: parseInt(maxUsers) 
+                })
+            });
+
+            if (response.ok) {
+                alert('Settings saved successfully! ✅');
+            } else {
+                const err = await response.json();
+                alert(`Error: ${err.message || 'Failed to save'}`);
+            }
+        } catch (error) {
+            console.error("Save error:", error);
+            alert('Network error. Please try again.');
+        } finally {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+    }
+
+    // --- API DATA FETCHING (CHARTS) ---
 
     async function fetchVisitorData(period) {
         const token = localStorage.getItem('adminToken');
         if (!token) {
-            showPasswordStatusMessage('Session expired. Please log in again.', false);
             setTimeout(logoutAdmin, 2000);
             return { labels: [], data: [] };
         }
         
-        const endpoint = `${API_BASE_URL}/api/analytics/visitors/${period}`; 
-
         try {
-            const response = await fetch(endpoint, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
+            const response = await fetch(`${API_BASE_URL}/api/analytics/visitors/${period}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
             });
 
-            if (!response.ok) {
-                if (response.status === 401 || response.status === 403) {
-                     showPasswordStatusMessage('Session expired.', false);
-                     setTimeout(logoutAdmin, 2000);
-                }
-                return { labels: [], data: [] }; 
-            }
-
+            if (!response.ok) return { labels: [], data: [] };
             return await response.json(); 
         } catch (error) {
-            console.error('Network error fetching visitor data:', error);
             return { labels: [], data: [] };
         }
     }
@@ -273,35 +310,13 @@
     // --- CHART LOGIC ---
 
     async function renderVisitorChart(period) {
-        // Prevent crash if Chart.js CDN is slow to load
-        if (typeof Chart === 'undefined') {
-            console.error("Chart.js is not loaded. Check your internet or script tag.");
-            return;
-        }
-
+        if (typeof Chart === 'undefined') return;
         const ctx = chartCanvas.getContext('2d');
 
-        if (visitorChart) {
-            visitorChart.destroy();
-            visitorChart = null;
-        }
-
-        // Loading State
-        ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
-        ctx.font = '16px Inter, sans-serif';
-        ctx.fillStyle = '#6b7280';
-        ctx.textAlign = 'center';
-        ctx.fillText('Loading data...', chartCanvas.width / 2, chartCanvas.height / 2);
+        if (visitorChart) visitorChart.destroy();
 
         const dataSet = await fetchVisitorData(period); 
         
-        if (!dataSet || !dataSet.data || dataSet.data.length === 0) {
-            ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
-            ctx.fillStyle = '#ef4444';
-            ctx.fillText('No data available.', chartCanvas.width / 2, chartCanvas.height / 2);
-            return;
-        }
-
         visitorChart = new Chart(ctx, {
             type: 'line',
             data: {
@@ -318,21 +333,15 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: true, position: 'top' }
-                },
-                scales: {
-                    y: { beginAtZero: true }
-                }
+                scales: { y: { beginAtZero: true } }
             }
         });
     }
 
     function setActiveButton(activeElement) {
-        const buttons = [dailyBtn, monthlyBtn, yearlyBtn];
-        buttons.forEach(btn => {
-            btn.classList.remove('bg-emerald-600', 'text-white', 'hover:bg-emerald-700');
-            btn.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+        [dailyBtn, monthlyBtn, yearlyBtn].forEach(btn => {
+            btn.classList.remove('bg-emerald-600', 'text-white');
+            btn.classList.add('bg-gray-200', 'text-gray-700');
         });
         activeElement.classList.replace('bg-gray-200', 'bg-emerald-600');
         activeElement.classList.replace('text-gray-700', 'text-white');
@@ -343,8 +352,6 @@
     async function submitChangeAdminPassword(event) {
         event.preventDefault();
         const button = document.getElementById('submit-password-btn');
-        const originalText = button.textContent;
-
         const currentPassword = document.getElementById('current-password').value;
         const newPassword = document.getElementById('new-password').value;
         const confirmPassword = document.getElementById('confirm-new-password').value;
@@ -368,15 +375,14 @@
                 body: JSON.stringify({ currentPassword, newPassword })
             });
 
-            if (!response.ok) throw new Error('Update failed');
-
+            if (!response.ok) throw new Error();
             showPasswordStatusMessage('Password updated! Logging out...', true);
-            setTimeout(logoutAdmin, 3000); 
+            setTimeout(logoutAdmin, 2500); 
 
         } catch (error) {
             showPasswordStatusMessage('Error updating password.', false);
             button.disabled = false;
-            button.textContent = originalText;
+            button.textContent = 'Change Password';
         }
     }
 
@@ -388,10 +394,12 @@
             return;
         }
         
-        // Small timeout to ensure Chart.js global is ready
-        setTimeout(() => {
-            renderVisitorChart('daily');
-        }, 100);
+        // Initial Loads
+        loadCurrentSettings();
+        setTimeout(() => renderVisitorChart('daily'), 100);
+
+        // Global Settings Listener
+        document.getElementById('save-settings-btn').addEventListener('click', saveGlobalSettings);
 
         // Chart Listeners
         dailyBtn.addEventListener('click', () => { renderVisitorChart('daily'); setActiveButton(dailyBtn); });
@@ -404,29 +412,12 @@
             sidebar.classList.toggle('-translate-x-full');
         });
 
-        // Close sidebar on mobile when clicking content
-        mainContent.addEventListener('click', () => {
-             if (!sidebar.classList.contains('-translate-x-full') && window.innerWidth < 1024) {
-                 sidebar.classList.add('-translate-x-full');
-             }
-        });
-
         // Password visibility toggles
         document.querySelectorAll('.view-password-toggle').forEach(button => {
             button.addEventListener('click', () => {
                 const target = document.getElementById(button.getAttribute('data-target'));
-                const showIcon = button.querySelector('.toggle-icon-show');
-                const hideIcon = button.querySelector('.toggle-icon-hide');
-
-                if (target.type === 'password') {
-                    target.type = 'text';
-                    showIcon.classList.add('hidden');
-                    hideIcon.classList.remove('hidden');
-                } else {
-                    target.type = 'password';
-                    showIcon.classList.remove('hidden');
-                    hideIcon.classList.add('hidden');
-                }
+                target.type = target.type === 'password' ? 'text' : 'password';
+                button.querySelectorAll('svg').forEach(svg => svg.classList.toggle('hidden'));
             });
         });
 
