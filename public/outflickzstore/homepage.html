@@ -1292,14 +1292,20 @@ function handleModalAddToCart(productId, productType) {
     const qtyInput = document.getElementById(`modal-qty-${productId}`);
     const quantity = qtyInput ? parseInt(qtyInput.value) : 1;
     const productName = modal.querySelector('h2').innerText;
+    
+    // Robust Price Extraction (Removes currency symbols and commas)
     const priceText = modal.querySelector('p.text-2xl')?.innerText || "0";
-    const price = parseFloat(priceText.replace(/,/g, '').replace(/[^\d.]/g, ''));
+    const priceValue = parseFloat(priceText.replace(/,/g, '').replace(/[^\d.]/g, ''));
+    
     const imageUrl = document.getElementById('modal-main-image')?.src || "";
 
+    // 5. BUILD FINAL PAYLOAD (Standardized for your existing cart logic)
+    // Changing keys to match what your homepage.html logic expects
     const finalPayload = {
-        productId: productId,
+        _id: productId,             // Use _id instead of productId
         name: productName,
-        price: price,
+        productPrice: priceValue,    // Use productPrice instead of price
+        price: priceValue,           // Keep price as fallback
         imageUrl: imageUrl,
         size: isCap ? "One Size" : selectedSize,
         color: selectedColor,
@@ -1307,23 +1313,35 @@ function handleModalAddToCart(productId, productType) {
         productType: productType
     };
 
-    // 7. SEND TO CART (Stringify the object first)
-    if (typeof simulateAddToCart === 'function' || typeof addToCart === 'function') {
+    console.log("🚀 Submitting Standardized Payload:", finalPayload);
+
+    // 6. SEND TO CART
+    if (typeof addToCart === 'function' || typeof simulateAddToCart === 'function') {
         const cartFn = typeof addToCart === 'function' ? addToCart : simulateAddToCart;
         
-        // ⭐ THE CRITICAL FIX: Convert the object to a JSON string
+        // Convert to JSON string because your cart logic uses JSON.parse()
         const jsonStringPayload = JSON.stringify(finalPayload);
         
         cartFn(jsonStringPayload);
 
-        // UI Success Feedback
+        // 7. UI SUCCESS FEEDBACK
         const addBtn = modal.querySelector('button[onclick*="handleModalAddToCart"]');
         if (addBtn) {
+            const originalContent = addBtn.innerHTML;
             addBtn.innerHTML = '<i class="fas fa-check"></i> Added to Bag';
             addBtn.classList.replace('bg-black', 'bg-green-600');
             addBtn.disabled = true;
-            setTimeout(() => closeQuickView(), 1000);
+
+            setTimeout(() => {
+                closeQuickView();
+                // Reset button state for the next time a modal opens
+                addBtn.innerHTML = originalContent;
+                addBtn.classList.replace('bg-green-600', 'bg-black');
+                addBtn.disabled = false;
+            }, 1000);
         }
+    } else {
+        console.error("Cart function not found in homepage.html");
     }
 }
 
