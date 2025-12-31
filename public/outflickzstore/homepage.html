@@ -1740,11 +1740,12 @@ async function fetchAndRenderPreorderCollections() {
     }
 }
 document.addEventListener('DOMContentLoaded', function() {
-    // 1. IMAGE ROTATION
+    // 1. IMAGE ROTATION (6 Second Cycle)
     const rotatingImages = document.querySelectorAll('.rotating-image');
     if (rotatingImages.length > 0) {
         rotatingImages.forEach(img => {
-            img.style.transition = 'opacity 0.8s ease-in-out, transform 0.8s ease-in-out';
+            // Increased to 1s for a slower, smoother fade-out/in
+            img.style.transition = 'opacity 1s ease-in-out, transform 1s ease-in-out';
         });
 
         setInterval(() => {
@@ -1754,23 +1755,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (altSrc && altSrc.trim() !== "" && !altSrc.includes("YOUR_SECOND")) {
                     img.style.opacity = '0';
                     img.style.transform = 'scale(0.95)';
+                    
                     setTimeout(() => {
                         img.src = altSrc;
                         img.setAttribute('data-alt-src', currentSrc);
                         img.style.opacity = '1';
                         img.style.transform = 'scale(1)';
-                    }, 800);
+                    }, 1000); // Wait 1s for full fade out before swapping
                 }
             });
-        }, 5000);
+        }, 6000); // Updated to 6 seconds
     }
 
-    // 2. TEXT BANNER SLIDESHOW (Corrected to toggle classes)
+    // 2. TEXT BANNER SLIDESHOW (6 Second Cycle)
     const slide1 = document.getElementById('slide-1');
     const slide2 = document.getElementById('slide-2');
     let showingFirst = true;
 
     if (slide1 && slide2) {
+        // Ensure the CSS transition matches the smooth feel
+        [slide1, slide2].forEach(s => s.style.transition = 'opacity 1.2s ease-in-out, transform 1.2s ease-in-out');
+
         setInterval(() => {
             if (showingFirst) {
                 // Slide 1 Out
@@ -1783,14 +1788,14 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 // Slide 2 Out
                 slide2.classList.replace('opacity-100', 'opacity-0');
-                slide2.classList.replace('translate-y-0', 'translate-y-4'); // resets to bottom
+                slide2.classList.replace('translate-y-0', 'translate-y-4');
                 
                 // Slide 1 In
                 slide1.classList.replace('opacity-0', 'opacity-100');
                 slide1.classList.replace('-translate-y-4', 'translate-y-0');
             }
             showingFirst = !showingFirst;
-        }, 4000);
+        }, 6000); // Updated to 6 seconds
     }
 });
 
@@ -1905,68 +1910,59 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
     </main>
 
-<section class="relative bg-[#0a0f1a] py-16 overflow-hidden">
-    <div class="absolute inset-0 opacity-20 pointer-events-none">
-        <div class="absolute top-10 left-10 w-32 h-32 bg-yellow-500 rounded-full blur-[100px]"></div>
-        <div class="absolute bottom-10 right-10 w-40 h-40 bg-blue-500 rounded-full blur-[120px]"></div>
+<section class="relative bg-white py-6 md:py-12 overflow-hidden border-b border-gray-100">
+    <div class="absolute inset-0 pointer-events-none select-none opacity-[0.15] overflow-hidden">
+        <div class="absolute top-5 left-[10%] text-2xl animate-pulse">✨</div>
+        <div class="absolute top-20 right-[15%] text-2xl animate-bounce">🎆</div>
+        <div class="absolute bottom-10 left-[20%] text-2xl animate-pulse">🥂</div>
+        <div class="absolute top-1/2 left-5 text-xl">🎉</div>
+        <div class="absolute bottom-5 right-[10%] text-2xl animate-bounce">🎊</div>
+        <div class="absolute top-10 right-1/4 text-xl">🌟</div>
     </div>
 
     <div class="max-w-7xl mx-auto px-4 relative z-10">
-        <div class="text-center mb-12">
-            <h2 class="text-white text-2xl md:text-3xl font-black tracking-tighter uppercase">Season 2026</h2>
-            <div class="h-1 w-20 bg-yellow-600 mx-auto mt-2"></div>
-        </div>
-
-        <div class="flex flex-wrap items-center justify-center gap-6 md:gap-12">
+        <div class="flex flex-nowrap md:flex-wrap items-center justify-start md:justify-center gap-8 md:gap-16 overflow-x-auto pb-6 md:pb-0 no-scrollbar">
             
-            <a href="wearscollection.html" class="flex flex-col items-center space-y-4 group category-item">
-                <div class="w-32 h-32 md:w-48 md:h-48 rounded-full border-2 border-yellow-600/30 p-2 transition-all duration-500 group-hover:scale-105 group-hover:border-yellow-500 shadow-[0_0_20px_rgba(202,138,4,0.1)] group-hover:shadow-[0_0_30px_rgba(202,138,4,0.3)] overflow-hidden bg-gray-900">
-                    <img src="https://i.imgur.com/pkHSBXd.jpeg" 
-                         data-alt-src="https://i.imgur.com/KsNquIe.jpeg" 
-                         alt="Wears" class="w-full h-full rounded-full object-cover transition-opacity duration-500 rotating-image">
+            <a href="wearscollection.html" class="flex flex-col items-center space-y-3 md:space-y-4 group flex-shrink-0">
+                <div class="w-24 h-24 md:w-48 md:h-48 rounded-full border-2 border-gray-200 p-1.5 transition-all duration-500 group-hover:scale-105 group-hover:border-[#1a2b49] shadow-md overflow-hidden bg-white">
+                    <img src="https://i.imgur.com/pkHSBXd.jpeg" data-alt-src="https://i.imgur.com/KsNquIe.jpeg" alt="Wears" class="w-full h-full rounded-full object-cover rotating-image">
                 </div>
-                <span class="text-[10px] md:text-xs font-black uppercase tracking-[0.3em] text-gray-300 group-hover:text-yellow-500 transition-colors">Wears</span>
+                <span class="text-[9px] md:text-xs font-black uppercase tracking-[0.2em] md:tracking-[0.3em] text-[#1a2b49] group-hover:text-yellow-600 transition-colors">Wears</span>
             </a>
 
-            <a href="newarrivals.html" class="flex flex-col items-center space-y-4 group category-item">
-                <div class="w-32 h-32 md:w-48 md:h-48 rounded-full border-2 border-yellow-600/30 p-2 transition-all duration-500 group-hover:scale-105 group-hover:border-yellow-500 shadow-[0_0_20px_rgba(202,138,4,0.1)] group-hover:shadow-[0_0_30px_rgba(202,138,4,0.3)] overflow-hidden bg-gray-900">
-                    <img src="https://i.imgur.com/kBWnXqe.jpeg" 
-                         data-alt-src="https://i.imgur.com/g8vdHCf.jpeg" 
-                         alt="New Arrivals" class="w-full h-full rounded-full object-cover transition-opacity duration-500 rotating-image">
+            <a href="newarrivals.html" class="flex flex-col items-center space-y-3 md:space-y-4 group flex-shrink-0">
+                <div class="w-24 h-24 md:w-48 md:h-48 rounded-full border-2 border-gray-200 p-1.5 transition-all duration-500 group-hover:scale-105 group-hover:border-[#1a2b49] shadow-md overflow-hidden bg-white">
+                    <img src="https://i.imgur.com/kBWnXqe.jpeg" data-alt-src="https://i.imgur.com/g8vdHCf.jpeg" alt="New Arrivals" class="w-full h-full rounded-full object-cover rotating-image">
                 </div>
-                <span class="text-[10px] md:text-xs font-black uppercase tracking-[0.3em] text-gray-300 group-hover:text-yellow-500 transition-colors">New Arrivals</span>
+                <span class="text-[9px] md:text-xs font-black uppercase tracking-[0.2em] md:tracking-[0.3em] text-[#1a2b49] group-hover:text-yellow-600 transition-colors">New Arrivals</span>
             </a>
 
-            <a href="capcollection.html" class="flex flex-col items-center space-y-4 group category-item">
-                <div class="w-32 h-32 md:w-48 md:h-48 rounded-full border-2 border-yellow-600/30 p-2 transition-all duration-500 group-hover:scale-105 group-hover:border-yellow-500 shadow-[0_0_20px_rgba(202,138,4,0.1)] group-hover:shadow-[0_0_30px_rgba(202,138,4,0.3)] overflow-hidden bg-gray-900">
-                    <img src="https://i.imgur.com/pkHSBXd.jpeg" 
-                         data-alt-src="https://i.imgur.com/KsNquIe.jpeg" 
-                         alt="Caps" class="w-full h-full rounded-full object-cover transition-opacity duration-500 rotating-image">
+            <a href="capcollection.html" class="flex flex-col items-center space-y-3 md:space-y-4 group flex-shrink-0">
+                <div class="w-24 h-24 md:w-48 md:h-48 rounded-full border-2 border-gray-200 p-1.5 transition-all duration-500 group-hover:scale-105 group-hover:border-[#1a2b49] shadow-md overflow-hidden bg-white">
+                    <img src="https://i.imgur.com/pkHSBXd.jpeg" data-alt-src="https://i.imgur.com/KsNquIe.jpeg" alt="Caps" class="w-full h-full rounded-full object-cover rotating-image">
                 </div>
-                <span class="text-[10px] md:text-xs font-black uppercase tracking-[0.3em] text-gray-300 group-hover:text-yellow-500 transition-colors">Caps</span>
+                <span class="text-[9px] md:text-xs font-black uppercase tracking-[0.2em] md:tracking-[0.3em] text-[#1a2b49] group-hover:text-yellow-600 transition-colors">Caps</span>
             </a>
 
-            <a href="preorder.html" class="flex flex-col items-center space-y-4 group category-item">
-                <div class="w-32 h-32 md:w-48 md:h-48 rounded-full border-2 border-yellow-600/30 p-2 transition-all duration-500 group-hover:scale-105 group-hover:border-yellow-500 shadow-[0_0_20px_rgba(202,138,4,0.1)] group-hover:shadow-[0_0_30px_rgba(202,138,4,0.3)] overflow-hidden bg-gray-900">
-                    <img src="https://i.imgur.com/pkHSBXd.jpeg" 
-                         data-alt-src="https://i.imgur.com/KsNquIe.jpeg" 
-                         alt="Preorder" class="w-full h-full rounded-full object-cover transition-opacity duration-500 rotating-image">
+            <a href="preorder.html" class="flex flex-col items-center space-y-3 md:space-y-4 group flex-shrink-0">
+                <div class="w-24 h-24 md:w-48 md:h-48 rounded-full border-2 border-gray-200 p-1.5 transition-all duration-500 group-hover:scale-105 group-hover:border-[#1a2b49] shadow-md overflow-hidden bg-white">
+                    <img src="https://i.imgur.com/pkHSBXd.jpeg" data-alt-src="https://i.imgur.com/KsNquIe.jpeg" alt="Preorder" class="w-full h-full rounded-full object-cover rotating-image">
                 </div>
-                <span class="text-[10px] md:text-xs font-black uppercase tracking-[0.3em] text-gray-300 group-hover:text-yellow-500 transition-colors">Preorder</span>
+                <span class="text-[9px] md:text-xs font-black uppercase tracking-[0.2em] md:tracking-[0.3em] text-[#1a2b49] group-hover:text-yellow-600 transition-colors">Preorder</span>
             </a>
 
         </div>
     </div>
 
-    <div class="w-full bg-gradient-to-r from-[#1a2b49] via-[#2a457a] to-[#1a2b49] py-6 mt-16 border-t border-yellow-600/20 relative h-16 flex items-center justify-center overflow-hidden">
-    <p class="banner-text absolute text-center text-white text-[10px] sm:text-xs font-black tracking-[0.4em] uppercase px-6 transition-all duration-1000 opacity-100 translate-y-0" id="slide-1">
-        ✨ The Official Online Store for Outflickz in Nigeria ✨
-    </p>
-    
-    <p class="banner-text absolute text-center text-white text-[10px] sm:text-xs font-black tracking-[0.4em] uppercase px-6 transition-all duration-1000 opacity-0 translate-y-4" id="slide-2">
-        ✨ Happy New Year: The Official 2026 Collection for Outflickz ✨
-    </p>
-</div>
+    <div class="w-full bg-[#1a2b49] py-5 mt-4 border-t border-yellow-600/20 relative h-14 flex items-center justify-center overflow-hidden">
+        <p class="banner-text absolute text-center text-white text-[8px] sm:text-[10px] md:text-xs font-black tracking-[0.2em] md:tracking-[0.4em] uppercase px-4 transition-all duration-1000 opacity-100 translate-y-0" id="slide-1">
+            ✨ The Official Online Store for Outflickz in Nigeria ✨
+        </p>
+        
+        <p class="banner-text absolute text-center text-white text-[8px] sm:text-[10px] md:text-xs font-black tracking-[0.2em] md:tracking-[0.4em] uppercase px-4 transition-all duration-1000 opacity-0 translate-y-4" id="slide-2">
+            ✨ Happy New Year: The Official 2026 Collection ✨
+        </p>
+    </div>
 </section>
 
     <section id="wears-collections-section" class="py-12 sm:py-16 bg-color-white text-color-black border-t border-racing-grey white-section">
