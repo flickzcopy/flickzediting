@@ -524,18 +524,15 @@ function addToCart(collectionId, quantity) {
 
     console.log(`Added ${quantity} of item ${collectionId}. New cart total: ${newCount}`);
 }
-
 /**
  * Handles adding an item to the cart. 
- * Updated to support both Modal and Grid Card contexts.
+ * Updated to correctly handle Cap sizes (O/S) and skip radio validation.
  */
 async function simulateAddToCart(productDetails) {
     // 1. CONTEXT IDENTIFICATION
-    // Try to find the modal first, otherwise fall back to the grid card
     const modal = document.getElementById('quick-view-modal');
     const isModalOpen = modal && !modal.classList.contains('hidden');
     
-    // Define our data source (the modal or the specific card on the page)
     const sourceContainer = isModalOpen 
         ? modal 
         : document.querySelector(`.collection-card[data-collection-id="${productDetails.productId}"]`);
@@ -545,27 +542,39 @@ async function simulateAddToCart(productDetails) {
         return;
     }
 
-    // 2. GATHER SELECTIONS (Size & Color)
-    // Check for radio buttons within the active container
+    // 2. IDENTIFY CAP / ONE-SIZE ITEMS
+    // Check type mapping or if a size was already passed (like 'O/S' from the card)
+    const isCap = productDetails.productType === 'CapCollection' || 
+                  productDetails.productType === 'caps' || 
+                  productDetails.size === 'O/S' ||
+                  productDetails.size === 'One Size';
+
+    // 3. GATHER SELECTIONS (Size & Color)
     const selectedSizeInput = sourceContainer.querySelector(`input[name="size-${productDetails.productId}"]:checked`);
     const selectedColorInput = sourceContainer.querySelector(`input[name="color-${productDetails.productId}"]:checked`);
     
-    // 3. VALIDATION
-    // Determine if it's a Cap (Caps usually don't need size selection)
-    const isCap = productDetails.productType === 'CapCollection' || productDetails.productType === 'caps';
-
+    // 4. VALIDATION
+    // Logic: If it's NOT a cap AND no size is checked, THEN show the error.
     if (!isCap && !selectedSizeInput) {
         displayCartAlert("Please select a size first.", "error");
-        // Visual feedback: Highlight size section
         const sizeArea = sourceContainer.querySelector('.size-selection-area') || sourceContainer;
         sizeArea.classList.add('ring-2', 'ring-red-500', 'rounded-md');
         setTimeout(() => sizeArea.classList.remove('ring-2', 'ring-red-500'), 2000);
         return;
     }
 
-    // 4. NORMALIZE DATA
+    // 5. NORMALIZE DATA
     const color = (selectedColorInput && selectedColorInput.value !== 'undefined') ? selectedColorInput.value : 'N/A';
-    const size = isCap ? 'O/S' : (selectedSizeInput ? selectedSizeInput.value : 'N/A');
+    
+    // Size logic: Use 'O/S' for caps, otherwise use the radio value, otherwise fallback to details
+    let size = 'N/A';
+    if (isCap) {
+        size = 'O/S';
+    } else if (selectedSizeInput) {
+        size = selectedSizeInput.value;
+    } else if (productDetails.size) {
+        size = productDetails.size;
+    }
     
     // Sync Image with Selected Color if a map exists
     let selectedImageUrl = productDetails.imageUrl;
@@ -583,7 +592,7 @@ async function simulateAddToCart(productDetails) {
                           sourceContainer.querySelector(`#quantity-input-${productDetails.productId}`);
     const quantity = parseInt(quantityInput?.value) || 1;
 
-    // 5. NORMALIZE PRODUCT TYPE (Backend Alignment)
+    // 6. NORMALIZE PRODUCT TYPE (Backend Alignment)
     let finalProductType = productDetails.productType;
     const typeMapping = {
         'Wears': 'WearsCollection',
@@ -607,7 +616,7 @@ async function simulateAddToCart(productDetails) {
         variation: `${color} / ${size}`
     };
 
-    // 6. EXECUTION (API vs Local)
+    // 7. EXECUTION (API vs Local)
     const isLoggedIn = !!localStorage.getItem('userAccessToken'); 
 
     if (!isLoggedIn) {
@@ -622,7 +631,6 @@ async function simulateAddToCart(productDetails) {
 
             if (response.ok) {
                 const data = await response.json();
-                // Update local storage to match server state
                 if (data.items) localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(data.items));
                 if (typeof updateCartBadge === "function") updateCartBadge();
                 displayCartAlert('Added to your bag!', 'success');
@@ -1032,19 +1040,22 @@ function createCollectionCard(collection, size = 'default') {
                 </div>
                 
                 <div class="mt-4">
-                    <button
-                        ${isButtonDisabled ? 'disabled' : ''}
-                        onclick="simulateAddToCart({
-                            productId: '${collection._id}',
-                            name: '${safeName}',
-                            price: ${itemPrice},
-                            imageUrl: '${frontImageUrl}',
-                            productType: '${safeProductType}'
-                        })"
-                        class="w-full ${controlHeight} ${controlTextSize} ${cartButtonClasses} rounded-sm transition font-bold uppercase tracking-widest flex items-center justify-center gap-2">
-                        <i class="fas fa-shopping-bag"></i>
-                        ${cartButtonText}
-                    </button>
+                   <button
+    ${isButtonDisabled ? 'disabled' : ''}
+    onclick="simulateAddToCart({
+        productId: '${collection._id}',
+        name: '${safeName}',
+        price: ${itemPrice},
+        imageUrl: '${frontImageUrl}',
+        // Force the type to 'caps' if isCaps is true so validation skips size
+        productType: '${isCaps ? 'caps' : safeProductType}',
+        // Pre-set the size for caps so the cart receives O/S immediately
+        size: '${isCaps ? 'O/S' : ''}' 
+    })"
+    class="w-full ${controlHeight} ${controlTextSize} ${cartButtonClasses} rounded-sm transition font-bold uppercase tracking-widest flex items-center justify-center gap-2">
+    <i class="fas fa-shopping-bag"></i>
+    ${cartButtonText}
+</button>
                 </div>
             </div>
         </div>
