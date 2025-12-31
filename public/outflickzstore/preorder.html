@@ -140,50 +140,7 @@
     </div>
 </section>
 
-   <div id="image-modal-overlay" class="fixed inset-0 bg-black bg-opacity-90 z-[1000] hidden flex items-center justify-center p-4 transition-opacity duration-300" onclick="closeImageModal()">
-    
-    <div id="modal-content" class="relative max-w-5xl max-h-full" onclick="event.stopPropagation()">
-        
-        <img 
-            id="modal-image-display" 
-            src="" 
-            alt="Product Image" 
-            class="max-h-[90vh] max-w-[90vw] object-contain transition-opacity duration-200"
-            onerror="this.onerror=null;this.src='https://s3.us-west-1.idrivee2.com/outflickz/public/placeholder-image-v1.jpg';"
-        >
-
-        <button 
-            id="modal-prev-btn"
-            onclick="switchModalImage(-1)" 
-            class="absolute left-4 top-1/2 -translate-y-1/2 text-white bg-gray-800 bg-opacity-50 hover:bg-opacity-75 rounded-full w-10 h-10 flex items-center justify-center transition disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label="Previous Image"
-        >
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
-        </button>
-
-        <button 
-            id="modal-next-btn"
-            onclick="switchModalImage(1)" 
-            class="absolute right-4 top-1/2 -translate-y-1/2 text-white bg-gray-800 bg-opacity-50 hover:bg-opacity-75 rounded-full w-10 h-10 flex items-center justify-center transition disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label="Next Image"
-        >
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-        </button>
-        
-        <div id="modal-image-counter" class="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white bg-gray-800 bg-opacity-50 px-3 py-1 rounded-full text-sm font-semibold z-10">
-            1 / 2
-        </div>
-
-        <button 
-            onclick="closeImageModal()" 
-            class="absolute top-4 right-4 text-white bg-gray-800 bg-opacity-50 hover:bg-opacity-75 rounded-full w-8 h-8 flex items-center justify-center transition z-10" 
-            aria-label="Close image viewer"
-        >
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-        </button>
-    </div>
-</div>
-
+  
       <footer class="bg-black text-gray-300 py-6 sm:py-14 border-t border-gray-800 mt-12">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-8">
@@ -276,6 +233,7 @@
     menu.classList.toggle('hidden');
 }   
 
+
 // Function to be called when the user clicks the Profile button
 async function redirectToProfileOrLogin() {
     const token = localStorage.getItem('userAccessToken');
@@ -319,29 +277,6 @@ async function redirectToProfileOrLogin() {
     }
 }
 
-// 2. **CRITICAL SECURITY GATE**: Enforces redirect immediately on page load
-//    if the user is not authenticated.
-function enforceAuthGate() {
-    fetch(`${API_BASE_URL}/api/auth/status`, { 
-        method: 'GET',
-        credentials: 'include' // <-- CRITICAL FIX: Ensures the secure cookie is sent.
-    })
-    .then(response => {
-        if (response.status !== 200) {
-            // If not authenticated, redirect to login page (use replace to disable back button)
-            console.warn(`Auth gate failed (Status ${response.status}). Redirecting.`);
-            window.location.replace('useraccount.html');
-        } else {
-             console.log("Auth gate passed (Status 200). User session confirmed.");
-        }
-    })
-    .catch(error => {
-        // Treat network failure as unauthenticated/unverified
-        console.error('Initial Auth Check Failed (Network Error):', error);
-        window.location.replace('useraccount.html');
-    });
-}
-
 /**
  * CONCEPTUAL: This function should be called ONLY after a successful login API response 
  * from your server (in useraccount.html). It sets the login flag and redirects 
@@ -359,7 +294,7 @@ function onSuccessfulLogin() {
 
 
 // REMOVED: const USER_AUTH_TOKEN = localStorage.getItem('outflickzToken');
-const API_BASE_URL = 'https://outflickzz.netlify.app';
+const API_BASE_URL = 'https://outflickzs.netlify.app';
 const CART_STORAGE_KEY = 'outflickzCartCount';
 const LOCAL_CART_KEY = 'outflickzLocalCart';
 const AUTH_TOKEN_KEY = 'userAccessToken';
@@ -439,71 +374,6 @@ async function secureUserFetch(url, options = {}) {
     return response;
 }
 
-/**
- * Handles the logic for a "Buy Now" action.
- * Optimized to ensure data integrity and prevent 400 Bad Request errors.
- */
-function simulateBuyNow(itemDetails) {
-    const card = document.querySelector(`.collection-card[data-collection-id="${itemDetails.productId}"]`);
-    if (!card) return;
-
-    const quantityInput = card.querySelector(`#quantity-input-${itemDetails.productId}`);
-    const selectedQuantity = parseInt(quantityInput?.value) || 1; 
-
-    const selectedSizeInput = card.querySelector(`input[name="size-${itemDetails.productId}"]:checked`);
-    const selectedColorInput = card.querySelector(`input[name="color-${itemDetails.productId}"]:checked`);
-    
-    const sizeOptions = card.querySelectorAll(`input[name="size-${itemDetails.productId}"]`);
-    if (sizeOptions.length > 0 && !selectedSizeInput) {
-        alert("Please select a size before clicking Buy Now.");
-        return;
-    }
-
-    const selectedSize = selectedSizeInput ? selectedSizeInput.value : '';
-    const selectedColor = selectedColorInput ? selectedColorInput.value : '';
-
-    let variationIndex = 1; 
-    let selectedImageUrl = itemDetails.imageUrl;
-    
-    // 3. Logic for Variation Index and Image Updates
-    if (selectedColor) { 
-        const colorMapContainer = card.querySelector(`#color-map-${itemDetails.productId}`);
-        if (colorMapContainer) {
-            try {
-                const colorMap = JSON.parse(colorMapContainer.getAttribute('data-color-map'));
-                const colorKeys = Object.keys(colorMap);
-                const inferredIndex = colorKeys.indexOf(selectedColor);
-                if (inferredIndex !== -1) {
-                    variationIndex = inferredIndex + 1; 
-                    const newImageUrls = colorMap[selectedColor];
-                    if (newImageUrls?.frontImageUrl) selectedImageUrl = newImageUrls.frontImageUrl;
-                }
-            } catch (e) { console.error("Color map error", e); }
-        }
-    }
-
-    const itemToCheckout = {
-        productId: itemDetails.productId, 
-        name: itemDetails.name,
-        productType: itemDetails.productType || 'Wears', 
-        price: parseFloat(itemDetails.price),
-        imageUrl: selectedImageUrl, 
-        quantity: selectedQuantity,
-        size: selectedSize, 
-        color: selectedColor, 
-        variationIndex: variationIndex,
-        variation: (selectedColor && selectedSize) 
-            ? `${selectedColor} / ${selectedSize}`
-            : (selectedColor || selectedSize || 'Default')
-    };
-
-    console.log("Storing Buy Now payload:", itemToCheckout);
-    sessionStorage.setItem('buyNowItem', JSON.stringify([itemToCheckout])); 
-    
-    window.location.href = 'checkout.html';
-}
-
-
 function getCartCount() {
     try {
         const localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
@@ -581,209 +451,159 @@ function addToCart(collectionId, quantity) {
 
         }, 3000); // Display time
         
-        // --- END FIX ---
     }
 
     console.log(`Added ${quantity} of item ${collectionId}. New cart total: ${newCount}`);
 }
-/**
- * Handles adding an item to the cart. 
- * Tries API (permanent cart via Access Token/secure cookie) first.
- * If API fails with 401/403 or network error, falls back to local storage.
- * NOTE: This function now relies on the globally available secureUserFetch() 
- * to handle Authorization headers and automatic token refresh.
- */
-async function simulateAddToCart(productDetails) {
-    // --- 1. Gather all item details from DOM and input ---
-    const card = document.querySelector(`.collection-card[data-collection-id="${productDetails.productId}"]`);
-    if (!card) return;
-    
-    // The createSizeList function now uses radio buttons again, so this selector is correct.
-    const selectedSizeInput = card.querySelector(`input[name="size-${productDetails.productId}"]:checked`);
-    const selectedColorInput = card.querySelector(`input[name="color-${productDetails.productId}"]:checked`);
-    
-    // 🎯 CRITICAL FIX: Robust value checking to prevent "undefined" string from payload
-    const rawColorValue = selectedColorInput ? selectedColorInput.value : null;
-    const color = (rawColorValue && rawColorValue !== 'undefined' && rawColorValue.length > 0) 
-        ? rawColorValue 
-        : 'N/A';
-        
-    const rawSizeValue = selectedSizeInput ? selectedSizeInput.value : null;
-    const size = (rawSizeValue && rawSizeValue !== 'undefined' && rawSizeValue.length > 0) 
-        ? rawSizeValue 
-        : 'N/A';
-    
-    // 🚀 CRITICAL FIX 1: Initialize variationIndex. Default to 1 (server compatibility).
-    let variationIndex = 1; 
-    
-    // ⭐️ CRITICAL FIX: Determine the selected image URL based on the chosen color
-    let selectedImageUrl = productDetails.imageUrl; // Default to the initial URL passed
 
-    if (selectedColorInput) {
-        // Use the validated color variable here, but the value will be the same
-        const colorHex = color; 
-        const colorMapContainer = card.querySelector(`#color-map-${productDetails.productId}`);
-        
-        if (colorMapContainer) {
-            const colorMap = JSON.parse(colorMapContainer.getAttribute('data-color-map'));
-            // Use the validated color here
-            const newImageUrls = colorMap[colorHex];
-            
-            if (newImageUrls && newImageUrls.frontImageUrl) {
-                // Use the front view of the selected color variant
-                selectedImageUrl = newImageUrls.frontImageUrl; 
-                
-                // 🚀 CRITICAL FIX 2: Attempt to determine the index based on color selection.
-                const colorMapKeys = Object.keys(colorMap);
-                // Convert 0-based client index to 1-based server index
-                const inferredIndex = colorMapKeys.indexOf(colorHex);
-                
-                if (inferredIndex !== -1) {
-                    variationIndex = inferredIndex + 1; // Use 1-based index for server
-                }
-            }
-        }
+// Helper to manage guest cart
+function handleLocalCartOnly(details) {
+    let localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
+    const existingIndex = localCart.findIndex(item => 
+        item.productId === details.productId && 
+        item.size === details.size && 
+        item.color === details.color
+    );
+
+    if (existingIndex > -1) {
+        localCart[existingIndex].quantity += details.quantity;
+    } else {
+        localCart.push(details);
     }
 
-    // 🌟 FIX FOR ReferenceError: variation is not defined (Line 539) 🌟
-    // Construct a descriptive variation name using the selected size and color.
-    const variation = (color !== 'N/A' && size !== 'N/A')
-        ? `${color} / ${size}`
-        : (color !== 'N/A' ? color : (size !== 'N/A' ? size : 'Default Variant'));
+    localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
+    if (typeof updateCartBadge === "function") updateCartBadge();
+    displayCartAlert(`"${details.name}" added to bag!`, 'info');
+}
+
+
+/**
+ * Handles adding an item to the cart. 
+ * Correctly handles Cap sizes (O/S) and maps variationIndex to 1-based for Database.
+ */
+async function simulateAddToCart(productDetails) {
+    // 1. CONTEXT IDENTIFICATION
+    const modal = document.getElementById('quick-view-modal');
+    const isModalOpen = modal && !modal.classList.contains('hidden');
     
-    // Unified item data structure for both API (minimal fields) and Local Cart (all fields)
-    const requiredDetails = {
-        productId: productDetails.productId,
-        name: productDetails.name, 
-        size: size,
-        color: color, // The color can be 'N/A' but is now validated
-        price: productDetails.price,
-        productType: productDetails.productType || productDetails.name,       
-        imageUrl: selectedImageUrl, 
-        quantity: productDetails.quantity || 1,
-        variationIndex: variationIndex, // Now 1-based
-        variation: variation // Now defined
-    };
+    const sourceContainer = isModalOpen 
+        ? modal 
+        : document.querySelector(`.collection-card[data-collection-id="${productDetails.productId}"]`);
+
+    if (!sourceContainer) {
+        console.error("Source container not found for ID:", productDetails.productId);
+        return;
+    }
+
+    // 2. IDENTIFY CAP / ONE-SIZE ITEMS
+    const isCap = productDetails.productType?.toLowerCase().includes('cap') || 
+                  productDetails.size === 'O/S' ||
+                  productDetails.size === 'One Size';
+
+    // 3. GATHER SELECTIONS
+    const selectedSizeInput = sourceContainer.querySelector(`input[name="size-${productDetails.productId}"]:checked`);
+    const selectedColorInput = sourceContainer.querySelector(`input[name="color-${productDetails.productId}"]:checked`);
     
-    // Construct minimal data for API call 
-    const itemDataForAPI = {
-        productId: requiredDetails.productId,
-        name: requiredDetails.name, 
-        productType: requiredDetails.productType, // Now guaranteed to be a valid enum string
-        price: requiredDetails.price, 
-        quantity: requiredDetails.quantity,
-        size: requiredDetails.size,
-        color: requiredDetails.color,
-        imageUrl: requiredDetails.imageUrl,
-        variationIndex: requiredDetails.variationIndex,
-        variation: requiredDetails.variation // Now defined
-    };
+    // 4. VALIDATION
+    if (!isCap && !selectedSizeInput && !productDetails.size) {
+        displayCartAlert("Please select a size first.", "error");
+        const sizeArea = sourceContainer.querySelector('.size-selection-area') || sourceContainer;
+        sizeArea.classList.add('ring-2', 'ring-red-500', 'rounded-md');
+        setTimeout(() => sizeArea.classList.remove('ring-2', 'ring-red-500'), 2000);
+        return;
+    }
+
+    // 5. NORMALIZE DATA (Aligning with MongoDB Schema min: 1)
+    const color = (selectedColorInput && selectedColorInput.value !== 'undefined') ? selectedColorInput.value : 'N/A';
     
-    // --- 2. Local Cart Fallback Helper Function (Updated for variationIndex) ---
-    const handleLocalCartFallback = (details) => {
-        // NOTE: Assume LOCAL_CART_KEY is defined globally
-        let localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-        
-        // 🚀 CRITICAL FIX 5: Include variationIndex in the findIndex check for local cart
-        const existingItemIndex = localCart.findIndex(item => 
-            item.productId === details.productId && 
-            item.size === details.size &&
-            item.color === details.color &&
-            item.variationIndex === details.variationIndex // Check the new required field
-        );
+    let size = 'N/A';
+    let variationIndex = 1; // ⭐ Default to 1 (Satisfies Database min: 1)
 
-        if (existingItemIndex > -1) {
-            localCart[existingItemIndex].quantity += details.quantity;
-        } else {
-            localCart.push(details);
-        }
+    if (isCap) {
+        size = 'O/S';
+        variationIndex = 1; 
+    } else if (selectedSizeInput) {
+        size = selectedSizeInput.value;
+        // Map Frontend 0-index to Backend 1-index (0->1, 1->2, etc.)
+        const rawIndex = parseInt(selectedSizeInput.getAttribute('data-index'));
+        variationIndex = (!isNaN(rawIndex)) ? (rawIndex + 1) : 1;
+    } else if (productDetails.size) {
+        size = productDetails.size;
+        // Pass through variationIndex if provided, otherwise default to 1
+        variationIndex = productDetails.variationIndex || 1;
+    }
 
-        localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
-        
-        // We now rely on updateCartBadge() 
-        // to call the corrected getCartCount() which sums the total quantity.
-        
-        updateCartBadge();
-        
-        // Display info alert for local cart (Blue background)
-        displayCartAlert(`"${details.name}" added to your bag! (Sign in to save permanently)`, 'info');
-    };
+    // Final Schema Safety Check
+    if (variationIndex < 1 || variationIndex > 4) variationIndex = 1;
 
-    console.log('[CART] Attempting to add item to API cart:', requiredDetails.name);
-
-    // --- 3. Attempt Authenticated API Call using Secure Wrapper ---
-    try {
-        // Use secureUserFetch instead of raw fetch. 
-        // It handles the Authorization header and automatic refresh flow.
-        const response = await secureUserFetch('/api/users/cart', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(itemDataForAPI),
-            credentials: 'include' 
-        });
-
-        // Safely parse JSON or default to an error object
-        let data;
+    // Sync Image with Selected Color
+    let selectedImageUrl = productDetails.imageUrl;
+    const colorMapElement = sourceContainer.querySelector(`[data-color-map]`);
+    if (colorMapElement && color !== 'N/A') {
         try {
-            data = await response.json();
-        } catch (e) {
-            console.warn(`Could not parse JSON response for status ${response.status}. Assuming non-JSON body.`);
-            data = { 
-                message: `Server Error (${response.status}) received. Item added to local cart.`,
-                status: response.status 
-            };
-        }
+            const colorMap = JSON.parse(colorMapElement.getAttribute('data-color-map'));
+            if (colorMap[color]?.frontImageUrl) {
+                selectedImageUrl = colorMap[color].frontImageUrl;
+            }
+        } catch (e) { console.error("Color map error", e); }
+    }
 
-        if (response.ok) {
-            // 3a. Success: Item added to permanent cart
-            
-            // Ensure the server response has items
-            if (data.items && Array.isArray(data.items)) {
-                
-                // 1. Store the full permanent cart array in LOCAL_CART_KEY
-                localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(data.items));
-                
-                // 2. Update the visual badge immediately (reads from the synced LOCAL_CART_KEY)
-                updateCartBadge();
-                
+    const qtyInput = sourceContainer.querySelector(`input[id*="qty-${productDetails.productId}"]`) || 
+                     sourceContainer.querySelector(`#quantity-input-${productDetails.productId}`);
+    const quantity = parseInt(qtyInput?.value) || 1;
+
+    // 6. NORMALIZE PRODUCT TYPE (Backend Alignment)
+    let finalProductType = productDetails.productType;
+    const typeMapping = {
+        'Wears': 'WearsCollection',
+        'Caps': 'CapCollection',
+        'New Arrivals': 'NewArrivals',
+        'Pre-Order': 'PreOrderCollection'
+    };
+    if (typeMapping[finalProductType]) {
+        finalProductType = typeMapping[finalProductType];
+    }
+
+    const itemData = {
+        productId: productDetails.productId,
+        name: productDetails.name || 'Outflickz Premium', 
+        productType: finalProductType, 
+        price: productDetails.price, 
+        quantity: quantity,
+        size: size,
+        color: color,
+        imageUrl: selectedImageUrl,
+        variation: `${color} / ${size}`,
+        variationIndex: variationIndex 
+    };
+
+    console.log("🚀 Cart Submission:", itemData);
+
+    // 7. EXECUTION (API vs Local Storage)
+    const isLoggedIn = !!localStorage.getItem('userAccessToken'); 
+
+    if (!isLoggedIn) {
+        handleLocalCartOnly(itemData);
+    } else {
+        try {
+            const response = await secureUserFetch(`${API_BASE_URL}/api/users/cart`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(itemData)
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.items) localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(data.items));
+                if (typeof updateCartBadge === "function") updateCartBadge();
+                displayCartAlert('Added to your bag!', 'success');
             } else {
-                // If API is OK but returns unexpected data, still alert the user
-                console.error("API success but data.items missing. Relying on current local state.");
-                updateCartBadge(); // Ensure the badge is updated with existing count
+                handleLocalCartOnly(itemData);
             }
-            
-            // Display success alert (Green background) - Using helper function
-            displayCartAlert('Item added to your permanent shopping bag!', 'success');
-
-        } else if (response.status === 401 || response.status === 403) {
-            // 3b. Unauthorized (This 401/403 should mean the Refresh Token also failed after the AT failed) -> FALLBACK TO LOCAL CART
-            console.log("401/403 received (Unauthenticated after refresh attempt). Falling back to local cart.");
-            handleLocalCartFallback(requiredDetails);
-
-        } else {
-            // 3c. Other API Errors (e.g., 400 Bad Request, 409 Conflict/Stock, 503 Service Unavailable)
-            
-            // If it's a 5xx error, we should probably treat it like a temporary outage and use the local cart.
-            if (response.status >= 500) {
-                console.log(`Server Error ${response.status} received. Falling back to local cart.`);
-                handleLocalCartFallback(requiredDetails);
-            }
-
-            // Use the flashing alert for generic error (Red background) - Using helper function
-            displayCartAlert(data.message || `Failed to add item (Status ${response.status}).`, 'error');
+        } catch (error) {
+            console.error("Cart API failed, falling back to local storage", error);
+            handleLocalCartOnly(itemData);
         }
-        
-    } catch (error) {
-        // --- 4. Network or Fetch Error -> FALLBACK TO LOCAL CART ---
-        console.error('Error in addToCart API (Network or Fetch Error):', error);
-        
-        // Use the fallback function
-        handleLocalCartFallback(requiredDetails);
-
-        // Display error alert (Red background) - Using helper function
-        displayCartAlert('Could not reach server. Item added to local cart.', 'error');
     }
 }
 
@@ -828,7 +648,6 @@ function displayCartAlert(message, type) {
     }, 3000);
 }
 
-// Initialize the cart badge on page load
 // NOTE: Assuming updateCartBadge() is defined elsewhere
 document.addEventListener('DOMContentLoaded', updateCartBadge);
 // --- END CART MANAGEMENT JS ---
@@ -873,8 +692,6 @@ function changeQuantity(collectionId, delta) {
     input.value = newValue;
 }
 
-// --- NEW CRITICAL FUNCTION FOR STOCK LIMITS (To be placed near changeQuantity) ---
-
 /**
  * Updates the quantity input's 'max' attribute when a size is selected.
  * @param {string} collectionId - The ID of the product card.
@@ -916,30 +733,51 @@ function updateMaxQuantity(collectionId, selectedSize) {
     }
 }
 
-// --- NEW FUNCTION TO HANDLE IMAGE SWITCHING (Uses Color Hex/Code as Identifier) ---
 function changeVariantImage(collectionId, colorHex) {
-    const card = document.querySelector(`.collection-card[data-collection-id="${collectionId}"]`);
-    if (!card) return;
+    // 1. Try to find the image inside the Quick View Modal first
+    const modal = document.getElementById('quick-view-modal');
+    const isModalContext = modal && modal.contains(event?.target);
 
-    const colorMapContainer = card.querySelector(`#color-map-${collectionId}`);
+    let container;
+    let frontImg, backImg;
+
+    if (isModalContext) {
+        container = modal;
+        // In the modal, we use a generic ID for the main display image
+        frontImg = modal.querySelector('#modal-main-image');
+        // If you have a secondary image in modal, you can target it here
+    } else {
+        // 2. Fallback to the Collection Card grid
+        container = document.querySelector(`.collection-card[data-collection-id="${collectionId}"]`);
+        if (container) {
+            frontImg = container.querySelector(`#front-image-${collectionId}`);
+            backImg = container.querySelector(`#back-image-${collectionId}`);
+        }
+    }
+
+    if (!container) return;
+
+    // 3. Extract the Image Map
+    const colorMapContainer = container.querySelector(`#color-map-${collectionId}`);
     if (!colorMapContainer) return;
     
-    // Parse the stored map from the data attribute. This map now stores an object {frontImageUrl, backImageUrl}
-    const colorMap = JSON.parse(colorMapContainer.getAttribute('data-color-map'));
-    const newImageUrls = colorMap[colorHex];
+    try {
+        const colorMap = JSON.parse(colorMapContainer.getAttribute('data-color-map'));
+        const newImageUrls = colorMap[colorHex];
 
-    if (newImageUrls) {
-        const frontImageElement = card.querySelector(`#front-image-${collectionId}`);
-        const backImageElement = card.querySelector(`#back-image-${collectionId}`);
-
-        // Update Front Image
-        if (frontImageElement) {
-            frontImageElement.src = newImageUrls.frontImageUrl;
+        if (newImageUrls) {
+            // Apply updates with a slight fade for a premium feel
+            if (frontImg) {
+                frontImg.style.opacity = '0.4'; // Quick dip in opacity
+                frontImg.src = newImageUrls.frontImageUrl;
+                setTimeout(() => frontImg.style.opacity = '1', 100);
+            }
+            if (backImg && newImageUrls.backImageUrl) {
+                backImg.src = newImageUrls.backImageUrl;
+            }
         }
-            // Update Back Image
-        if (backImageElement) {
-            backImageElement.src = newImageUrls.backImageUrl;
-        }
+    } catch (e) {
+        console.error("Image swap failed:", e);
     }
 }
 
@@ -968,40 +806,39 @@ function toggleImage(collectionId) {
 
 // --- UTILITY FOR COLOR LIST (Stock-Aware) ---
 function createColorList(collectionId, variants) {
-    // 1. Initial Safety Check
-    // 'variants' now only includes colors with total stock > 0 (filtered by backend)
     if (!variants || variants.length === 0) return '';
     
-    // NOTE: The previous 'pre-order' filter is removed because the backend should 
-    // already ensure that every variant passed here is intended to be displayed.
     const coloredVariants = variants; 
 
-    // If there are no colored variants, return empty.
-    if (coloredVariants.length === 0) return ''; 
-
-    // 2. Create a map for the image switching logic
+    // 1. Create the color map for image switching
     const colorMap = coloredVariants.reduce((acc, v) => {
-        // We only map the necessary image URLs
         acc[v.color] = { frontImageUrl: v.frontImageUrl, backImageUrl: v.backImageUrl };
         return acc;
     }, {});
 
-    // 3. Store the map in the DOM
+    // 2. Store the map in the DOM
     const mapHtml = `<div id="color-map-${collectionId}" data-color-map='${JSON.stringify(colorMap)}' class="hidden"></div>`;
 
-    // 4. Generate the color swatch buttons
+    // 3. Generate Swatches
     const buttonsHtml = coloredVariants.map((variant, index) => {
         const colorHex = variant.color; 
         const style = `background-color: ${colorHex};`;
         const safeColor = String(colorHex).toUpperCase(); 
         
-        const extraClass = (safeColor === '#FFFFFF' || safeColor === '#FFF') ? 'border-gray-400' : 'border-gray-200';
+        // Logic for white/light color borders
+        const isWhite = (safeColor === '#FFFFFF' || safeColor === '#FFF' || safeColor === 'WHITE');
+        const extraClass = isWhite ? 'border-gray-200' : 'border-transparent';
         
+        // Initialization logging
+        if (index === 0) {
+            console.log(`[COLOR] Initialized ${collectionId} with ${colorHex}`);
+        }
+
         return `
-            <label for="color-${collectionId}-${colorHex}" class="color-label cursor-pointer p-[1px] rounded-full border border-transparent hover:border-ash-red transition-all has-[:checked]:border-ash-red">
+            <label for="color-modal-${collectionId}-${index}" class="color-label cursor-pointer p-[1.5px] rounded-full border border-transparent hover:border-gray-400 transition-all has-[:checked]:border-black shadow-sm">
                 <input 
                     type="radio" 
-                    id="color-${collectionId}-${colorHex}" 
+                    id="color-modal-${collectionId}-${index}" 
                     name="color-${collectionId}" 
                     value="${colorHex}" 
                     class="hidden" 
@@ -1016,343 +853,193 @@ function createColorList(collectionId, variants) {
     return mapHtml + buttonsHtml;
 }
 
+
 function createCollectionCard(collection, size = 'default') {
     const currencySymbol = '₦';
     const PLACEHOLDER_URL = 'https://s3.us-west-1.idrivee2.com/outflickz/public/placeholder-image-v1.jpg';
     const defaultFrontImage = PLACEHOLDER_URL;
     const defaultBackImage = PLACEHOLDER_URL;
-   
 
     // --- Conditional Sizing Classes ---
     const reducedSizes = ['reduced', 'caps', 'wears', 'newarrivals', 'preorder'];
     const isReduced = reducedSizes.includes(size);
     const isCaps = size === 'caps'; 
-    const isWears = size === 'wears'; 
     const isPreorder = size === 'preorder'; 
-    const isnewrrivals = size === 'newarrivals';
 
-    // Card Padding
     const cardPadding = isReduced ? 'p-1 sm:p-2' : 'p-2 sm:p-3';
     const nameFontSize = isReduced ? 'text-xs sm:text-sm' : 'text-sm sm:text-base';
     const descriptionFontSize = isReduced ? 'text-[0.6rem] sm:text-xs' : 'text-xs sm:text-sm';
     const priceFontSize = isReduced ? 'text-sm font-bold sm:text-sm' : 'text-base font-semibold';
-    
-    // CONTROL SIZING
-    const controlHeight = isReduced ? 'h-6' : 'h-7'; 
-    const controlTextSize = isReduced ? 'text-[0.6rem] sm:text-xs' : 'text-xs'; 
-    
-    // QUANTITY CONTROL WIDTH
+    const controlHeight = isReduced ? 'h-9' : 'h-10';
+    const controlTextSize = isReduced ? 'text-[0.7rem] sm:text-xs' : 'text-xs'; 
     const quantityInputWidth = isReduced ? 'w-5 sm:w-7' : 'w-7 sm:w-9';
     const quantityButtonSize = isReduced ? 'w-7 h-7' : 'w-8 h-8'; 
     const quantityInputTextSize = isReduced ? 'text-[0.6rem] sm:text-xs' : 'text-xs sm:text-sm';
     
-   // --- CRITICAL IMAGE FIX START ---
- 
-console.log(`--- DEBUG: Product ID: ${collection._id} ---`);
-console.log('Available Stock:', collection.availableStock);
+    // --- Image Logic ---
+    const frontImageUrl = collection.variants?.[0]?.frontImageUrl || collection.frontImageUrl || defaultFrontImage;
+    const backImageUrl = collection.variants?.[0]?.backImageUrl || collection.backImageUrl || defaultBackImage;
 
-// Initialize image source variables
-let variantFrontUrl = undefined;
-let variantBackUrl = undefined;
+    const itemPrice = collection.price || 0;
+    const formattedPrice = itemPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// 1. Check if there are IN-STOCK variants (collection.variants)
-if (Array.isArray(collection.variants) && collection.variants.length > 0) {
-    // If in-stock, use the signed URLs from the first variant
-    const imageSourceVariant = collection.variants[0];
-    variantFrontUrl = imageSourceVariant.frontImageUrl;
-    variantBackUrl = imageSourceVariant.backImageUrl;
-    console.log('Source: Found IN-STOCK Variant (from variants).');
-} 
-// 2. IMPORTANT: If no IN-STOCK variants (OOS), we rely on the backend's explicit 'collection.frontImageUrl' 
-//    field, which is now guaranteed to hold the signed image URL of the first variation.
-else {
-    // We intentionally skip the check for collection.variations[0] 
-    // because that object likely contains the unsigned (raw) URL.
-    
-    // Instead, we let the logic fall through directly to the collection.frontImageUrl field.
-    console.log('Source: Falling through to Collection Default Image (Signed by Backend).');
-}
-
-// The backend's new fallback field (should hold a signed URL for OOS products)
-const collectionFrontUrl = collection.frontImageUrl;
-const collectionBackUrl = collection.backImageUrl; // Assuming backImageUrl is also available on collection object
-
-console.log('1. Variant Front URL (In Stock):', variantFrontUrl);
-console.log('2. Collection Front URL (Backend Fallback):', collectionFrontUrl);
-console.log('3. Default Placeholder URL (Final Fallback):', defaultFrontImage);
-
-
-// Final URL assignment using Nullish Coalescing (||)
-// The key is the priority: 
-// 1. In-stock Variant URL (variantFrontUrl)
-// 2. Backend-signed Collection Fallback URL (collectionFrontUrl)
-// 3. Final Placeholder URL (defaultFrontImage)
-const frontImageUrl = variantFrontUrl || collectionFrontUrl || defaultFrontImage;
-const backImageUrl = variantBackUrl || collectionBackUrl || defaultBackImage;
-
-console.log('FINAL frontImageUrl:', frontImageUrl);
-console.log('FINAL backImageUrl:', backImageUrl);
-// --- CRITICAL IMAGE FIX END ---
-
-    const itemPrice = collection.price;
-    const formattedPrice = itemPrice ? itemPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
-
-
-    // --- CRITICAL FRONTEND FIX START (Size List) ---
-    // NOTE: createSizeList is assumed to be available
+    // --- Size & Color Helpers ---
     const innerSizeOptions = createSizeList(collection._id, collection.sizeStockMap, isReduced);
-
     const sizeListHtml = (innerSizeOptions && !isCaps)
-        ? `
-            <div class="flex flex-col items-start w-full flex-1">
+        ? `<div class="flex flex-col items-start w-full flex-1">
                 <span class="text-xs font-medium text-gray-700">Size:</span>
-                <div class="flex gap-1 text-gray-700 flex-wrap mt-1">
-                    ${innerSizeOptions}
-                </div>
-            </div>
-        `
-        : ''; 
-    // --- CRITICAL FRONTEND FIX END (Size List) ---
+                <div class="flex gap-1 text-gray-700 flex-wrap mt-1">${innerSizeOptions}</div>
+            </div>` : ''; 
 
-    // NOTE: createColorList is assumed to be available
     const colorListHtml = createColorList(collection._id, collection.variants || collection.variations); 
 
-    // 🛑 START FIX FOR INITIAL MAX QUANTITY 
-    let initialMaxStock = 999; 
-    let maxStock = collection.availableStock > 0 ? collection.availableStock : 0; // Keeping maxStock for out of stock checks
-
-    // Find the stock of the first available size in the map
+    // --- Stock & Quantity ---
+    let maxStock = collection.availableStock > 0 ? collection.availableStock : 0;
+    let initialMaxStock = 1;
     const firstSizeEntry = Object.entries(collection.sizeStockMap || {}).find(([size, stock]) => stock > 0);
+    if (firstSizeEntry) initialMaxStock = firstSizeEntry[1];
+    else if (maxStock > 0) initialMaxStock = maxStock;
 
-    if (firstSizeEntry) {
-        initialMaxStock = firstSizeEntry[1]; // Set initial max to stock of the first available size
-    } else if (maxStock > 0) {
-        initialMaxStock = maxStock; // Fallback to aggregate stock if no size map is found but aggregate stock is > 0
-    } else {
-        initialMaxStock = 1; // Default minimum to 1 if fully out of stock (will be disabled by isOutOfStock check)
-    }
-    // 🛑 END FIX FOR INITIAL MAX QUANTITY
-
-    // *** Check Stock Status ***
     const isOutOfStock = maxStock === 0 || collection.availableStock === 0;
 
-    const description = collection.tag || (isPreorder ? 'Secure your exclusive item before it sells out' : 'Exclusive limited edition item.');
-
-    // --- Pre-Order specific badge and text ---
-    const preorderAvailableDate = collection.availableDate
-        ? new Date(collection.availableDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-        : 'TBA';
+    // ⭐ CRITICAL FIX: Sanitization using Hex Escaping (\x27)
+    // This prevents "Cream Tees" or "Men's" from breaking the onclick attribute.
+    const cardDescription = collection.tag || (isPreorder ? 'Secure your exclusive item' : 'Limited edition.');
+    
+    const safeName = collection.name.replace(/'/g, "\\x27").replace(/"/g, '&quot;');
+    const safeFullDescription = (collection.description || cardDescription)
+        .replace(/'/g, "\\x27")
+        .replace(/"/g, '&quot;');
+    const safeProductType = (collection.collectionName || collection.productType || "Product")
+        .replace(/'/g, "\\x27");
 
     let stockBadge = '';
     let cartButtonText = 'ADD TO CART'; 
-    let buyNowButtonText = 'BUY NOW';
-    let cartButtonClasses = 'bg-ash-dark text-white hover:bg-ash-red';
-    let buyNowButtonClasses = 'bg-ash-red text-white hover:bg-red-700';
+    let cartButtonClasses = 'bg-black text-white hover:bg-gray-800 shadow-md';
 
     if (isPreorder) {
         stockBadge = `<span class="absolute top-2 left-2 bg-ash-dark text-white text-[0.6rem] sm:text-xs font-bold px-2 py-0.5 rounded shadow-lg z-40">PRE-ORDER</span>`;
-        cartButtonText = 'ADD TO CART';
-        buyNowButtonText = 'PRE-ORDER';
-        buyNowButtonClasses = 'bg-ash-red text-white hover:bg-red-700';
-        cartButtonClasses = 'bg-gray-700 text-white hover:bg-gray-800';
     } else if (isOutOfStock) {
-        stockBadge = '<span class="absolute top-2 left-2 bg-ash-red text-white text-[0.6rem] sm:text-xs font-bold px-2 py-0.5 rounded shadow-lg z-40">Out of Stock</span>';
-        cartButtonText = 'N/A';
-        buyNowButtonText = 'N/A';
-        cartButtonClasses = 'bg-gray-500 text-white cursor-not-allowed opacity-75';
-        buyNowButtonClasses = 'bg-gray-500 text-white cursor-not-allowed opacity-75';
+        stockBadge = `<span class="absolute top-2 left-2 bg-ash-red text-white text-[0.6rem] sm:text-xs font-bold px-2 py-0.5 rounded shadow-lg z-40">Out of Stock</span>`;
+        cartButtonText = 'OUT OF STOCK';
+        cartButtonClasses = 'bg-gray-400 text-white cursor-not-allowed';
     }
 
-    // *** Define Buttons/Labels based on Stock Status ***
     const isButtonDisabled = isOutOfStock && !isPreorder;
-    const safeProductTypeInHtml = collection.collectionName || collection.productType;
 
-    // Get current quantity value for the button click
-    const quantityGetter = `document.getElementById('quantity-input-${collection._id}').value`;
-
-    // Function to safely escape single quotes for JavaScript string parameters
-    const safeName = collection.name.replace(/'/g, "\\'");
-
-    // Button to add to cart
-    const cartButtonHtml = `
-        <button
-            ${isButtonDisabled ? 'disabled' : ''}
-            onclick="simulateAddToCart({
-                productId: '${collection._id}',
-                name: '${safeName}',
-                price: ${itemPrice},
-                imageUrl: '${frontImageUrl}',
-                quantity: parseInt(${quantityGetter}),
-                collectionName: '${safeProductTypeInHtml}'
-            })"
-            class="${controlTextSize} ${cartButtonClasses} ${controlHeight} rounded-sm transition font-semibold uppercase tracking-widest flex items-center justify-center w-full md:flex-1">
-            ${cartButtonText}
-        </button>
-    `;
-
-    const buyNowButtonHtml = `
-        <button 
-            ${isButtonDisabled ? 'disabled' : ''} 
-            onclick="simulateBuyNow({
-                productId: '${collection._id}',
-                name: '${safeName}',
-                productType: '${safeProductTypeInHtml}', 
-                price: ${itemPrice},
-                quantity: parseInt(${quantityGetter}),
-                imageUrl: '${frontImageUrl}'
-            })"
-            class="${controlTextSize} ${buyNowButtonClasses} ${controlHeight} rounded-sm transition font-semibold uppercase tracking-widest flex items-center justify-center w-full md:flex-1">
-            ${buyNowButtonText}
-        </button>
-    `;
-
-    // Quantity control 
+    // --- Quantity UI ---
     const quantityControlHtml = isOutOfStock && !isPreorder
-        ? `<div class="flex-shrink-0 ${controlHeight} border border-gray-300 rounded-sm flex items-center justify-center text-xs text-gray-500 w-20 mt-1 md:mt-0">N/A</div>`
-        : `
-            <div class="flex items-center border border-gray-300 rounded-sm flex-shrink-0 mt-1 md:mt-0">
-                <button onclick="changeQuantity('${collection._id}', -1)" aria-label="Decrease quantity" class="${quantityInputTextSize} text-gray-700 hover:bg-gray-100 transition flex items-center justify-center ${quantityButtonSize} rounded-l-sm font-semibold flex-shrink-0">
-                    &minus;
-                </button>
-                <input 
-                    type="number" 
-                    id="quantity-input-${collection._id}" 
-                    value="1" 
-                    min="1" 
-                    max="${initialMaxStock}" 
-                    aria-label="Quantity" 
-                    class="${quantityInputWidth} ${controlHeight} text-center ${quantityInputTextSize} border-x border-gray-300 text-color-black bg-white p-0 focus:border-ash-red focus:ring-1 focus:ring-ash-red" 
-                />
-                <button onclick="changeQuantity('${collection._id}', 1)" aria-label="Increase quantity" class="${quantityInputTextSize} text-gray-700 hover:bg-gray-100 transition flex items-center justify-center ${quantityButtonSize} rounded-r-sm font-semibold flex-shrink-0">
-                    &plus;
-                </button>
-            </div>
-        `;
-        
-    // ** MODIFIED ONCLICK HANDLER (The Fix) **
-    
-    // 1. Prepare data object
-    const modalData = {
-        imageUrls: [frontImageUrl, backImageUrl],
-        // Use the cleaned name to ensure valid JSON string is generated
-        altText: collection.name.replace(/"/g, '') // Remove double quotes from name for safety in JSON
+        ? `<div class="flex-shrink-0 ${controlHeight} border border-gray-300 rounded-sm flex items-center justify-center text-xs text-gray-500 w-20 mt-1">N/A</div>`
+        : `<div class="flex items-center border border-gray-300 rounded-sm flex-shrink-0 mt-1">
+                <button onclick="changeQuantity('${collection._id}', -1)" class="${quantityInputTextSize} text-gray-700 hover:bg-gray-100 ${quantityButtonSize}">&minus;</button>
+                <input type="number" id="quantity-input-${collection._id}" value="1" min="1" max="${initialMaxStock}" class="${quantityInputWidth} ${controlHeight} text-center ${quantityInputTextSize} border-x border-gray-300" />
+                <button onclick="changeQuantity('${collection._id}', 1)" class="${quantityInputTextSize} text-gray-700 hover:bg-gray-100 ${quantityButtonSize}">&plus;</button>
+            </div>`;
+
+    // ⭐ PREPARE MODAL JSON
+    const modalPayload = {
+        _id: collection._id,
+        name: safeName,
+        price: itemPrice,
+        description: safeFullDescription,
+        frontImageUrl: frontImageUrl,
+        backImageUrl: backImageUrl,
+        sizeStockMap: collection.sizeStockMap || {},
+        variants: collection.variants || [],
+        collectionType: collection.collectionType || size // ⭐ Passing the category/type
     };
     
-    // 2. Stringify the object (uses double quotes: "...")
-    const jsonString = JSON.stringify(modalData);
-
-    // 3. HTML-encode the double quotes to &quot; for safe embedding in the outer single-quoted HTML attribute
-    // This ensures the value passed to openImageModalWithCarousel is a single, clean JSON string.
-    const imageClickData = jsonString.replace(/"/g, '&quot;'); 
+    // Convert to JSON and escape double quotes for HTML
+    const modalJson = JSON.stringify(modalPayload).replace(/"/g, '&quot;'); 
 
     return `
-        <div class="collection-card border border-gray-100 rounded-lg overflow-hidden bg-white hover:shadow-lg transition duration-300" data-collection-id="${collection._id}">
-            <div 
-                class="relative card-image-box cursor-pointer" 
-                onclick="openImageModalWithCarousel('${imageClickData}')" 
-                title="View full image"
-            >
+        <div class="collection-card border border-gray-100 rounded-lg overflow-hidden bg-white hover:shadow-lg transition duration-300 flex flex-col h-full" 
+             data-collection-id="${collection._id}">
+            
+            <div class="relative card-image-box cursor-pointer" onclick="openProductQuickView('${modalJson}')">
                 ${stockBadge}
-
-                <div class="absolute inset-0 transition-opacity duration-300">
-                    <img
-                        class="w-full h-full object-cover bg-gray-50 absolute transition-opacity duration-300 active"
-                        id="front-image-${collection._id}"
-                        src="${frontImageUrl}"
-                        alt="${collection.name} (Front View)"
-                        onerror="this.onerror=null;this.src='${defaultFrontImage}';"
-                        style="opacity: 1;"
-                    >
-                    <img
-                        class="w-full h-full object-cover bg-gray-50 absolute transition-opacity duration-300"
-                        id="back-image-${collection._id}"
-                        src="${backImageUrl}"
-                        alt="${collection.name} (Back View)"
-                        onerror="this.onerror=null;this.src='${defaultBackImage}';"
-                        style="opacity: 0;"
-                    >
+                <div class="absolute inset-0">
+                    <img class="w-full h-full object-cover absolute transition-opacity duration-300 active" id="front-image-${collection._id}" src="${frontImageUrl}" alt="${collection.name}">
+                    <img class="w-full h-full object-cover absolute transition-opacity duration-300" id="back-image-${collection._id}" src="${backImageUrl}" style="opacity: 0;">
                 </div>
-
-                <div class="absolute inset-0 bg-black bg-opacity-10 opacity-0 hover:opacity-100 transition duration-300 flex items-end justify-center p-3">
-                    <button
-                        id="image-toggle-btn-${collection._id}"
-                        onclick="event.stopPropagation(); toggleImage('${collection._id}')" 
-                        class="bg-color-white text-ash-dark text-[0.6rem] sm:text-xs font-semibold py-1 px-3 rounded-full shadow-md hover:bg-gray-200 transition"
-                        title="Show Back View"
-                    >
+                <div class="absolute inset-0 bg-black bg-opacity-10 opacity-0 hover:opacity-100 transition flex items-end justify-center p-3">
+                    <button onclick="event.stopPropagation(); toggleImage('${collection._id}')" class="bg-white text-ash-dark text-[0.6rem] sm:text-xs font-semibold py-1 px-3 rounded-full shadow-md">
                         <i class="fas fa-sync-alt"></i> Back View
                     </button>
                 </div>
             </div>
-            <div class="${cardPadding}">
+
+            <div class="${cardPadding} flex flex-col flex-grow">
                 <p class="text-[0.6rem] text-gray-500 uppercase font-semibold">Outflickz</p>
                 <h3 class="${nameFontSize} font-semibold text-color-black truncate">${collection.name}</h3>
-
-                <p class="${descriptionFontSize} text-red-700 mt-0.5 mb-1 truncate">${description}</p>
-
-                ${isPreorder ? `<p class="${descriptionFontSize} text-green-600 mt-0.5 mb-1 font-semibold">Available: ${preorderAvailableDate}</p>` : ''}
-
+                <p class="${descriptionFontSize} text-red-700 mt-0.5 truncate">${cardDescription}</p>
                 <p class="${priceFontSize} text-ash-dark mt-1">${currencySymbol}${formattedPrice}</p>
 
                 <div class="flex items-center gap-2 mt-2">
                     <span class="text-xs font-medium text-gray-700">Color:</span>
-                    <div class="flex gap-1 text-gray-700">
-                        ${colorListHtml}
-                    </div>
+                    <div class="flex gap-1">${colorListHtml}</div>
                 </div>
                 
-                <div class="flex flex-col md:flex-row items-start md:items-center justify-between w-full mt-2 gap-2">
+                <div class="flex flex-col items-start w-full mt-2 gap-2">
                     ${sizeListHtml} 
                     ${quantityControlHtml}
                 </div>
                 
-                <div class="flex space-x-2 mt-3">
-                    ${cartButtonHtml}
-                    ${buyNowButtonHtml}
+                <div class="mt-4">
+                   <button
+    ${isButtonDisabled ? 'disabled' : ''}
+    onclick="simulateAddToCart({
+        productId: '${collection._id}',
+        name: '${safeName}',
+        price: ${itemPrice},
+        imageUrl: '${frontImageUrl}',
+        // Force the type to 'caps' if isCaps is true so validation skips size
+        productType: '${isCaps ? 'caps' : safeProductType}',
+        // Pre-set the size for caps so the cart receives O/S immediately
+        size: '${isCaps ? 'O/S' : ''}' 
+    })"
+    class="w-full ${controlHeight} ${controlTextSize} ${cartButtonClasses} rounded-sm transition font-bold uppercase tracking-widest flex items-center justify-center gap-2">
+    <i class="fas fa-shopping-bag"></i>
+    ${cartButtonText}
+</button>
                 </div>
             </div>
         </div>
     `;
 }
 
-/**
- * Generates the HTML for the size selection options within the collection card.
- * CRITICAL FIX: Filters out sizes that have zero or less stock.
- * @param {string} collectionId The unique ID of the collection.
- * @param {Object} sizeStockMap A map of {Size: StockCount} received from the backend (e.g., {S: 10, M: 0, L: 5}).
- * @param {boolean} isReduced Flag for styling.
- * @returns {string} The HTML for the size buttons, or an 'N/A' span if none are in stock.
- */
+
 function createSizeList(collectionId, sizeStockMap, isReduced = false) {
     if (!sizeStockMap) {
         return `<span class="text-xs font-medium text-gray-400">N/A</span>`;
     }
 
-    // Standard sizes list (used for ordering or ensuring only valid sizes are processed)
     const standardSizes = ['S', 'M', 'L', 'XL'];
     
-    // 1. **FILTERING LOGIC:** Convert the map to an array and filter by stock > 0
     const sizesWithStock = Object.entries(sizeStockMap)
         .filter(([size, stock]) => 
-            // 1a. Check if the size is one of the standard sizes
             standardSizes.includes(size.toUpperCase().trim()) && 
-            // 1b. CRITICAL: Check if stock is greater than zero
             stock > 0
         )
-        // 2. Map back to just the size string for easy HTML generation
         .map(([size]) => size); 
 
     if (sizesWithStock.length === 0) {
         return `<span class="text-xs font-medium text-gray-400">N/A</span>`;
     }
 
-    const sizeClasses = isReduced 
-        ? 'text-[0.6rem] px-1.5 py-0.5' // Smaller for reduced card
-        : 'text-xs px-2 py-0.5 md:px-2 md:py-1'; // Default size
+    // ⭐ AUTO-INITIALIZE: If nothing is selected yet, set the first available size
+    // as the default in our global tracker so "Add to Cart" works immediately.
+    if (!window.selectedSizes) window.selectedSizes = {};
+    if (!window.selectedSizes[collectionId]) {
+        window.selectedSizes[collectionId] = sizesWithStock[0];
+    }
 
-    const groupName = `size-${collectionId}`; // Use the same name for all radios in this group
+    const sizeClasses = isReduced 
+        ? 'text-[0.6rem] px-1.5 py-0.5' 
+        : 'text-xs px-2 py-0.5 md:px-2 md:py-1';
+
+    const groupName = `size-${collectionId}`; 
     
-    // 3. Generate HTML using the filtered list (sizesWithStock)
     return sizesWithStock.map((size, index) => {
         const safeSize = size.toUpperCase().trim().replace(/[^A-Z0-9]/g, '');
         const inputId = `size-${collectionId}-${safeSize}`;
@@ -1360,36 +1047,38 @@ function createSizeList(collectionId, sizeStockMap, isReduced = false) {
         return `
             <label for="${inputId}" class="size-label border border-gray-300 cursor-pointer hover:border-ash-dark transition-all rounded-sm has-[:checked]:border-ash-dark has-[:checked]:bg-gray-100">
                 <input 
-                    type="radio" 
-                    id="${inputId}" 
-                    name="${groupName}" 
-                    value="${size}" 
-                    data-stock="${sizeStockMap[size]}" 
-                    class="hidden" 
-                    onchange="updateMaxQuantity('${collectionId}', this.value)"
-                    ${index === 0 ? 'checked' : ''}
-                >
-                <span class="${sizeClasses}">${size}</span>
-            </label>
+                type="radio" 
+                id="${inputId}" 
+                name="${groupName}" 
+                value="${size}" 
+                data-stock="${sizeStockMap[size]}" 
+                data-index="${index}" 
+                class="hidden" 
+                onchange="
+                    if(!window.selectedSizes) window.selectedSizes = {};
+    window.selectedSizes['${collectionId}'] = this.value;
+    updateMaxQuantity('${collectionId}', this.value); // Updates main grid
+    updateModalMaxQuantity('${collectionId}', this.value); // ⭐ ADD THIS LINE FOR THE MODAL
+"
+                ${index === 0 ? 'checked' : ''} 
+            >
+            <span class="${sizeClasses}">${size}</span>
+        </label>
         `;
     }).join('');
 }
 
 
-
-/**
- * Standardizes the stock and variant data for a product, handling both
- * Wears (with 'sizes') and Caps (with direct 'stock').
- * @param {object} productData - The database product object.
- * @returns {object} {totalAvailable, variantsData}
- */
 function standardizeStockData(productData) {
     let totalAvailable = 0;
     let variantsData = [];
+    const productId = productData._id;
+
+    // Initialize global object if it doesn't exist
+    if (!window.selectedSizes) window.selectedSizes = {};
 
     // --- Case 1: Wears Collection (Has sizes array) ---
     if (productData.variations && productData.variations.length > 0 && productData.variations[0].sizes) {
-        // Assuming all sizes belong to the first variation (common for colorHex variations)
         const sizes = productData.variations[0].sizes;
         
         sizes.forEach(s => {
@@ -1408,12 +1097,13 @@ function standardizeStockData(productData) {
     } else if (productData.variations && productData.variations.length > 0 && typeof productData.variations[0].stock === 'number') {
         const variation = productData.variations[0];
         const isAvailable = variation.stock > 0;
-        
-        // Use a generic size/variant identifier for Caps (e.g., the colorHex, or just 'One Size')
         const sizeIdentifier = 'One Size'; 
         
         if (isAvailable) {
             totalAvailable += variation.stock;
+            // ⭐ THE FIX FOR CAPS: Auto-select 'One Size' if stock is available
+            window.selectedSizes[productId] = sizeIdentifier;
+            console.log(`[AUTO-SELECT] ${productId} set to ${sizeIdentifier}`);
         }
 
         variantsData.push({
@@ -1426,60 +1116,316 @@ function standardizeStockData(productData) {
     return { totalAvailable, variantsData };
 }
 
-/**
- * Analyzes a product's variants to determine overall stock status 
- * and controls visibility of the 'Out of Stock' label and individual size buttons.
- * @param {object} productData - The database product object.
- * @param {string} productElementId - The ID of the main HTML element wrapping the product (e.g., 'product-card-P123').
- */
-function updateStockStatusDisplay(productData, productElementId) {
-    const productElement = document.getElementById(productElementId);
-    if (!productElement) return;
 
-    // Use the helper function to standardize the stock data
-    const { totalAvailable, variantsData } = standardizeStockData(productData);
+function openProductQuickView(jsonPayload) {
+    const product = JSON.parse(jsonPayload);
+    const collectionType = product.collectionType || product.category || 'Wears';
+    const isCap = collectionType.toLowerCase().includes('cap');
+
+    // Reset and initialize global state
+    if (!window.selectedSizes) window.selectedSizes = {};
     
-    // --- 1. Iterate through variants and handle individual size visibility (Wears only) ---
-    // This part only affects products with multiple selectable sizes (Wears)
-    if (variantsData.length > 1) { // Only run individual hiding logic if there are multiple sizes
-        variantsData.forEach(variant => {
-            const sizeButton = productElement.querySelector(`[data-size="${variant.size}"]`);
-            
-            if (sizeButton) {
-                if (variant.isAvailable) {
-                    // Ensure size button is active
-                    sizeButton.classList.remove('hidden', 'opacity-50', 'cursor-not-allowed');
-                    sizeButton.disabled = false;
-                } else {
-                    // Requirement: If size is out of stock, it should disappear/be hidden.
-                    sizeButton.classList.add('hidden'); 
-                    // sizeButton.disabled = true; // Optional: use this if you want to display it as disabled instead of hiding
-                }
-            }
-        });
-    }
+    let initialSize = null;
+    let initialMax = 1;
 
-
-    // --- 2. Determine and display the overall 'Out of Stock' label ---
-    // Requirement: If ALL sizes (Wears) OR the single item (Caps) is out of stock, show the label.
-    const outOfStockLabel = productElement.querySelector('.out-of-stock-label');
-    
-    if (outOfStockLabel) {
-        if (totalAvailable === 0) {
-            outOfStockLabel.classList.remove('hidden');
-            
-            // For single-variant items (Caps), also hide the main size button if present
-            if (variantsData.length === 1) {
-                 const singleSizeButton = productElement.querySelector(`[data-size="${variantsData[0].size}"]`);
-                 if (singleSizeButton) {
-                    singleSizeButton.classList.add('hidden');
-                 }
-            }
-        } else {
-            outOfStockLabel.classList.add('hidden');
+    if (isCap) {
+        initialSize = 'One Size';
+        window.selectedSizes[product._id] = initialSize;
+        initialMax = (product.variations && product.variations[0].stock) || 1;
+    } else if (product.sizeStockMap) {
+        initialSize = Object.keys(product.sizeStockMap).find(s => product.sizeStockMap[s] > 0);
+        if (initialSize) {
+            window.selectedSizes[product._id] = initialSize;
+            initialMax = product.sizeStockMap[initialSize];
         }
     }
+
+    const existingModal = document.getElementById('quick-view-modal');
+    if (existingModal) existingModal.remove();
+
+    const modalOverlay = document.createElement('div');
+    modalOverlay.id = 'quick-view-modal';
+    modalOverlay.className = 'fixed inset-0 z-[1000] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm transition-opacity duration-300';
+    
+    const formattedPrice = product.price.toLocaleString('en-US');
+    const description = product.description || "No description available for this premium item.";
+    
+    // Check if back image exists
+    const hasBackImage = product.backImageUrl && product.backImageUrl.trim() !== "";
+
+    modalOverlay.innerHTML = `
+        <div class="bg-white w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl relative animate-in fade-in zoom-in duration-300">
+            <button onclick="closeQuickView()" class="absolute top-3 right-3 z-[1050] bg-white/80 rounded-full p-2.5 shadow-md hover:bg-gray-100 transition active:scale-90">
+                <i class="fas fa-times text-lg text-gray-800"></i>
+            </button>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 h-full">
+                <div class="bg-[#f9f9f9] flex flex-col items-center justify-center relative min-h-[350px] md:min-h-[500px] border-b md:border-b-0 md:border-r border-gray-100 p-4">
+                    <div class="w-full h-full flex items-center justify-center overflow-hidden">
+                        <img id="modal-main-image" src="${product.frontImageUrl}" class="max-w-full max-h-[300px] md:max-h-[450px] object-contain transition-all duration-500 transform">
+                    </div>
+
+                    ${hasBackImage ? `
+                    <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-3 z-10">
+                        <button onclick="updateModalImage('${product.frontImageUrl}', this)" class="w-12 h-12 border-2 border-black rounded-md overflow-hidden bg-white shadow-sm transition-all thumb-btn active-thumb">
+                            <img src="${product.frontImageUrl}" class="w-full h-full object-cover">
+                        </button>
+                        <button onclick="updateModalImage('${product.backImageUrl}', this)" class="w-12 h-12 border-2 border-transparent rounded-md overflow-hidden bg-white shadow-sm transition-all thumb-btn">
+                            <img src="${product.backImageUrl}" class="w-full h-full object-cover">
+                        </button>
+                    </div>
+                    ` : ''}
+                </div>
+
+                <div class="p-6 sm:p-10 flex flex-col justify-between bg-white">
+                    <div>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="w-8 h-[1px] bg-red-600"></span>
+                            <span class="text-[0.65rem] font-black text-red-600 uppercase tracking-widest">Outflickz Exclusive</span>
+                        </div>
+                        <h2 class="text-2xl sm:text-3xl font-black text-gray-900 uppercase">${product.name}</h2>
+                        <p class="text-2xl font-bold text-gray-900 mt-2">₦${formattedPrice}</p>
+                        
+                        <div class="mt-4 mb-6">
+                             <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-2">Description</span>
+                             <p class="text-sm font-bold leading-relaxed" style="color: #4B5320;">${description}</p>
+                        </div>
+
+                        <div class="h-px bg-gray-100 my-6"></div>
+
+                        <div class="space-y-6">
+                            <div>
+                                <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-3">Colorways</span>
+                                <div class="flex flex-wrap gap-2">
+                                    ${createColorList(product._id, product.variants || product.variations)}
+                                </div>
+                            </div>
+
+                            <div class="${isCap ? 'hidden' : ''}">
+                                <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-3">Select Size</span>
+                                <div class="flex flex-wrap gap-2">
+                                    ${createSizeList(product._id, product.sizeStockMap, false)}
+                                </div>
+                            </div>
+
+                            <div>
+                                <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-3">Quantity</span>
+                                <div class="flex items-center border border-gray-200 w-fit rounded-lg overflow-hidden">
+                                    <button onclick="this.parentNode.querySelector('input').stepDown()" class="px-4 py-2 hover:bg-gray-50 transition">-</button>
+                                    <input type="number" id="modal-qty-${product._id}" value="1" min="1" max="${initialMax}" class="w-12 text-center font-bold text-sm focus:outline-none [appearance:textfield]">
+                                    <button onclick="this.parentNode.querySelector('input').stepUp()" class="px-4 py-2 hover:bg-gray-50 transition">+</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-10">
+                        <button onclick="handleModalAddToCart('${product._id}', '${collectionType}')" 
+                                class="w-full bg-black text-white py-4 rounded-md font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3 active:scale-[0.97] shadow-lg shadow-black/10">
+                            <i class="fas fa-shopping-bag text-sm"></i> Add to Bag
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modalOverlay);
+    document.body.style.overflow = 'hidden';
 }
+
+// Global Helper to Switch Images
+window.updateModalImage = function(imgSrc, btnElement) {
+    const mainImg = document.getElementById('modal-main-image');
+    if (!mainImg) return;
+
+    // Fade out
+    mainImg.style.opacity = '0';
+    mainImg.style.transform = 'scale(0.98)';
+    
+    // Update border highlights on thumbnails
+    document.querySelectorAll('.thumb-btn').forEach(btn => btn.classList.remove('border-black'));
+    document.querySelectorAll('.thumb-btn').forEach(btn => btn.classList.add('border-transparent'));
+    btnElement.classList.replace('border-transparent', 'border-black');
+
+    setTimeout(() => {
+        mainImg.src = imgSrc;
+        mainImg.style.opacity = '1';
+        mainImg.style.transform = 'scale(1)';
+    }, 300);
+};
+
+function closeQuickView() {
+    const modal = document.getElementById('quick-view-modal');
+    if (modal) {
+        modal.classList.add('opacity-0');
+        setTimeout(() => {
+            modal.remove();
+            document.body.style.overflow = 'auto';
+        }, 300);
+    }
+}
+function handleModalAddToCart(productId, productType) {
+    const modal = document.getElementById('quick-view-modal');
+    if (!modal) return;
+
+    const isCap = productType.toLowerCase().includes('cap');
+    
+    // --- 1. SIZE & VARIATION RETRIEVAL ---
+    let selectedSize = isCap ? "One Size" : null;
+    let variationIndex = 1; // ⭐ DEFAULT TO 1 (Satisfies Database min: 1)
+
+    // Find the checked radio button in the modal
+    const checkedSizeRadio = modal.querySelector(`input[name="size-${productId}"]:checked`);
+
+    if (checkedSizeRadio) {
+        selectedSize = checkedSizeRadio.value;
+        
+        // Convert 0-based HTML loop index to 1-based Database index
+        const rawIndex = checkedSizeRadio.getAttribute('data-index');
+        if (rawIndex !== null) {
+            variationIndex = parseInt(rawIndex) + 1;
+        }
+    } else if (isCap) {
+        // Caps/Headwear logic: force standard values
+        selectedSize = "One Size";
+        variationIndex = 1; 
+    } else if (window.selectedSizes && window.selectedSizes[productId]) {
+        // Fallback to global state if radio isn't checked but size was pre-selected
+        selectedSize = window.selectedSizes[productId];
+    }
+
+    // ⭐ VALIDATION CHECK: Ensure we stay within 1-4 for the Schema
+    if (variationIndex < 1 || variationIndex > 4 || isNaN(variationIndex)) {
+        console.warn(`[Inventory] Variation index ${variationIndex} out of bounds. Resetting to 1.`);
+        variationIndex = 1;
+    }
+
+    // --- 2. COLOR RETRIEVAL ---
+    const checkedColorRadio = modal.querySelector(`input[name="color-${productId}"]:checked`);
+    const selectedColor = checkedColorRadio ? checkedColorRadio.value : "Original";
+
+    // --- 3. SELECTION VALIDATION ---
+    if (!isCap && !selectedSize) {
+        alert("Please select a size first.");
+        return;
+    }
+
+    // --- 4. DATA EXTRACTION ---
+    const qtyInput = document.getElementById(`modal-qty-${productId}`);
+    const quantityValue = qtyInput ? parseInt(qtyInput.value) : 1;
+    const productName = modal.querySelector('h2').innerText;
+    
+    const priceText = modal.querySelector('p.text-2xl')?.innerText || "0";
+    const priceValue = parseFloat(priceText.replace(/,/g, '').replace(/[^\d.]/g, ''));
+    
+    const imageUrl = document.getElementById('modal-main-image')?.src || "";
+
+    // --- 5. BUILD FINAL PAYLOAD ---
+    const itemData = {
+        productId: productId, 
+        name: productName,
+        price: priceValue, 
+        quantity: quantityValue,
+        size: selectedSize, // Now "One Size" for caps or the selected size for wears
+        color: selectedColor,
+        imageUrl: imageUrl,
+        productType: productType,
+        variationIndex: variationIndex // ⭐ CORRECT 1-BASED INDEX
+    };
+
+    console.log("🚀 Submitting to simulateAddToCart:", itemData);
+
+    // --- 6. EXECUTION ---
+    if (typeof simulateAddToCart === 'function') {
+        simulateAddToCart(itemData);
+
+        // --- 7. UI SUCCESS FEEDBACK ---
+        const addBtn = modal.querySelector('button[onclick*="handleModalAddToCart"]');
+        if (addBtn) {
+            const originalContent = addBtn.innerHTML;
+            addBtn.innerHTML = '<i class="fas fa-check"></i> Added to Bag';
+            addBtn.classList.replace('bg-black', 'bg-green-600');
+            addBtn.disabled = true;
+
+            setTimeout(() => {
+                closeQuickView();
+                addBtn.innerHTML = originalContent;
+                addBtn.classList.replace('bg-green-600', 'bg-black');
+                addBtn.disabled = false;
+            }, 1000);
+        }
+    } else {
+        console.error("simulateAddToCart function not found!");
+    }
+}
+
+function updateModalMaxQuantity(productId, selectedSize) {
+    const modal = document.getElementById('quick-view-modal');
+    if (!modal) return;
+
+    // 1. Find the radio button for the selected size
+    // Note: Ensure your createSizeList function includes data-stock="${s.stock}"
+    const sizeInput = modal.querySelector(`input[name="size-${productId}"][value="${selectedSize}"]`);
+    const qtyInput = document.getElementById(`modal-qty-${productId}`);
+
+    if (sizeInput && qtyInput) {
+        const stock = parseInt(sizeInput.getAttribute('data-stock'));
+        
+        // 2. Safety: If stock is NaN or 0, cap at 0 (or 1 for UI stability)
+        const safeStock = isNaN(stock) || stock < 0 ? 0 : stock;
+        
+        qtyInput.max = safeStock; 
+
+        // 3. UI Sync: If current value exceeds new stock, push it down
+        let currentVal = parseInt(qtyInput.value) || 1;
+        if (currentVal > safeStock) {
+            qtyInput.value = safeStock > 0 ? safeStock : 1;
+        }
+
+        // 4. Reset to 1 if the user switches from a high-stock size to a low-stock size
+        if (safeStock === 0) {
+            qtyInput.value = 0; // Or handle with an "Out of Stock" label
+        }
+
+        console.log(`[Inventory Sync] ${productId} | Size: ${selectedSize} | Max Stock: ${safeStock}`);
+    }
+}
+
+// 3. IMAGE TOGGLE (With dot active state)
+function updateModalImg(url, btnElement) {
+    const img = document.getElementById('modal-main-image');
+    if (!img || img.src === url) return;
+
+    // Transition effect
+    img.classList.add('opacity-0');
+    
+    // Update dots styling
+    const dots = btnElement.parentElement.querySelectorAll('button');
+    dots.forEach(d => {
+        d.classList.remove('bg-black', 'ring-2', 'ring-black');
+        d.classList.add('bg-gray-300');
+    });
+    btnElement.classList.add('bg-black', 'ring-2', 'ring-black');
+    btnElement.classList.remove('bg-gray-300');
+
+    setTimeout(() => {
+        img.src = url;
+        img.classList.remove('opacity-0');
+    }, 250);
+}
+
+function closeQuickView() {
+    const modal = document.getElementById('quick-view-modal');
+    if (modal) {
+        modal.classList.add('opacity-0');
+        setTimeout(() => {
+            modal.remove();
+            document.body.style.overflow = 'auto';
+        }, 300);
+    }
+}
+
 
         /**
          * Fetches ALL pre-order collections and renders them into the dedicated full-page grid.
@@ -1542,66 +1488,19 @@ function updateStockStatusDisplay(productData, productElementId) {
         }
 
 
-/**
- * Opens the full-screen modal to display a large image with switching controls.
- * @param {string} jsonString - JSON string containing imageUrls (array) and altText.
- */
-function openImageModalWithCarousel(jsonString) {
-    const modal = document.getElementById('image-modal-overlay');
-    
-    try {
-        // Safely parse the data passed from the HTML
-        const data = JSON.parse(jsonString.replace(/\\'/g, "'"));
-        
-        // Filter out placeholders and set global state
-        modalImageUrls = data.imageUrls.filter(url => url && url !== PLACEHOLDER_URL_MODAL && url !== 'null');
-        currentImageIndex = 0;
-
-        if (modal && modalImageUrls.length > 0) {
-            updateModalImage(data.altText);
-            
-            modal.classList.remove('hidden');
-            document.body.style.overflow = 'hidden'; // Prevent scrolling the background
-        } else {
-            console.warn("No valid images available for modal.");
-        }
-    } catch (e) {
-        console.error("Error parsing image data:", e);
-    }
-}
-
-/**
- * Closes the full-screen image modal.
- */
-function closeImageModal() {
-    const modal = document.getElementById('image-modal-overlay');
-    
-    if (modal) {
-        modal.classList.add('hidden');
-        document.body.style.overflow = ''; // Restore background scrolling
-        // Clear global state
-        modalImageUrls = [];
-        currentImageIndex = 0;
-    }
-}
-
  document.addEventListener('DOMContentLoaded', () => {
     
     updateCartBadge();
    fetchAndRenderFullPreorderCollections(); 
-   
-    
-    // 2. Image Modal Close Handler
-    // Optional: Close modal when clicking outside the image
-    const modal = document.getElementById('image-modal-overlay');
-    if (modal) {
-        modal.addEventListener('click', (e) => {
-            // Close only if the click is directly on the overlay, not the image or button
-            if (e.target.id === 'image-modal-overlay') {
-                closeImageModal();
-            }
-        });
-    }
+
+    document.addEventListener('click', (e) => {
+        const modalOverlay = document.getElementById('quick-view-modal');
+        
+        // If the user clicks the dark background (the overlay itself), close it
+        if (modalOverlay && e.target === modalOverlay) {
+            closeQuickView();
+        }
+    });
 });
     </script>
 </body>
