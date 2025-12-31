@@ -210,48 +210,49 @@ function renderCartItems(items, isApiCart) {
         return;
     }
 
-    cartList.innerHTML = items.map(item => {
-        const id = item.productId || item._id || (item.product && item.product._id);
-        const name = item.name || (item.product && item.product.name) || 'Premium Product';
-        const price = item.price || (item.product && item.product.price) || 0;
-        const img = item.imageUrl || (item.product && item.product.imageUrl) || 'https://i.imgur.com/PZLMws6.jpeg'; 
-        const qty = item.quantity || 1;
-        
-        // Important: We should ideally have the stock info here from the API/Local storage
-        const availableStock = item.stock || 10; 
+   cartList.innerHTML = items.map(item => {
+    const id = item.productId || item._id || (item.product && item.product._id);
+    const name = item.name || (item.product && item.product.name) || 'Premium Product';
+    const price = item.price || (item.product && item.product.price) || 0;
+    const img = item.imageUrl || (item.product && item.product.imageUrl) || 'https://i.imgur.com/PZLMws6.jpeg'; 
+    const qty = item.quantity || 1;
+    
+    // ⭐ NEW: Capture variationIndex (default to 0 for caps/single items)
+    const vIndex = (item.variationIndex !== undefined) ? item.variationIndex : 0;
 
-        const displaySize = item.size ? item.size : "Standard";
-        const displayColor = item.color || (item.product && item.product.color) || null;
+    const availableStock = item.stock || 10; 
+    const displaySize = item.size ? item.size : "O/S"; // Default to O/S for caps
+    const displayColor = item.color || (item.product && item.product.color) || null;
 
-        return `
-        <div class="flex py-6 border-b border-gray-100 last:border-0">
-            <div class="w-20 h-20 sm:w-28 sm:h-28 flex-shrink-0 rounded-lg overflow-hidden border bg-gray-50">
-                <img src="${img}" alt="${name}" class="w-full h-full object-cover" onerror="this.src='https://i.imgur.com/PZLMws6.jpeg'">
-            </div>
-            <div class="ml-4 flex-1 flex flex-col justify-between">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <h3 class="text-sm sm:text-base font-bold text-gray-900">${name}</h3>
-                        <div class="flex flex-wrap items-center gap-2 mt-1">
-                            <span class="text-[10px] font-bold uppercase text-gray-400">Size: <span class="text-gray-900">${displaySize}</span></span>
-                            ${displayColor ? `<span class="text-[10px] font-bold uppercase text-gray-400 ml-2">Color: <span class="text-gray-900">${displayColor}</span></span>` : ''}
-                        </div>
+    return `
+    <div class="flex py-6 border-b border-gray-100 last:border-0" data-v-index="${vIndex}">
+        <div class="w-20 h-20 sm:w-28 sm:h-28 flex-shrink-0 rounded-lg overflow-hidden border bg-gray-50">
+            <img src="${img}" alt="${name}" class="w-full h-full object-cover">
+        </div>
+        <div class="ml-4 flex-1 flex flex-col justify-between">
+            <div class="flex justify-between items-start">
+                <div>
+                    <h3 class="text-sm sm:text-base font-bold text-gray-900">${name}</h3>
+                    <div class="flex flex-wrap items-center gap-2 mt-1">
+                        <span class="text-[10px] font-bold uppercase text-gray-400">Size: <span class="text-gray-900">${displaySize}</span></span>
+                        ${displayColor ? `<span class="text-[10px] font-bold uppercase text-gray-400 ml-2">Color: <span class="text-gray-900">${displayColor}</span></span>` : ''}
                     </div>
-                    <p class="text-sm font-bold text-gray-900">${currency}${(price * qty).toLocaleString()}</p>
                 </div>
-                <div class="flex items-center justify-between mt-4">
-                    <div class="flex items-center border border-gray-200 rounded overflow-hidden">
-                        <button onclick="${isApiCart ? `changeCartQuantity('${id}', -1)` : `changeLocalQuantity('${id}', -1)`}" class="px-3 py-1 hover:bg-gray-100 transition-colors font-bold text-gray-600">-</button>
-                        <input type="number" id="quantity-input-${id}" value="${qty}" max="${availableStock}" readonly class="px-1 text-xs font-black w-8 text-center bg-transparent focus:outline-none appearance-none">
-                        <button onclick="${isApiCart ? `changeCartQuantity('${id}', 1)` : `changeLocalQuantity('${id}', 1)`}" class="px-3 py-1 hover:bg-gray-100 transition-colors font-bold text-gray-600">+</button>
-                    </div>
-                    <button onclick="${isApiCart ? `removeItemFromCart('${id}')` : `handleLocalItemRemoval('${id}')`}" class="text-[10px] text-gray-400 hover:text-ash-red font-bold transition-colors tracking-widest">
-                        <i class="fas fa-trash-alt mr-1"></i> REMOVE
-                    </button>
-                </div>
+                <p class="text-sm font-bold text-gray-900">${currency}${(price * qty).toLocaleString()}</p>
             </div>
-        </div>`;
-    }).join('');
+            <div class="flex items-center justify-between mt-4">
+                <div class="flex items-center border border-gray-200 rounded overflow-hidden">
+                    <button onclick="${isApiCart ? `changeCartQuantity('${id}', -1)` : `changeLocalQuantity('${id}', -1)`}" class="px-3 py-1 hover:bg-gray-100 transition-colors font-bold text-gray-600">-</button>
+                    <input type="number" id="quantity-input-${id}" value="${qty}" max="${availableStock}" readonly class="px-1 text-xs font-black w-8 text-center bg-transparent focus:outline-none appearance-none">
+                    <button onclick="${isApiCart ? `changeCartQuantity('${id}', 1)` : `changeLocalQuantity('${id}', 1)`}" class="px-3 py-1 hover:bg-gray-100 transition-colors font-bold text-gray-600">+</button>
+                </div>
+                <button onclick="${isApiCart ? `removeItemFromCart('${id}')` : `handleLocalItemRemoval('${id}')`}" class="text-[10px] text-gray-400 hover:text-ash-red font-bold transition-colors tracking-widest">
+                    <i class="fas fa-trash-alt mr-1"></i> REMOVE
+                </button>
+            </div>
+        </div>
+    </div>`;
+}).join('');
 }
 
 async function removeItemFromCart(itemId) {
@@ -339,18 +340,36 @@ async function clearCart() {
 }
 
 function updateCartSummary(data) {
-    const items = data.items || JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
-    const subtotal = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+    // 1. Get items from API data or LocalStorage
+    let items = data.items || JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
     
+    // 2. ⭐ CRITICAL: Ensure every item has the required variationIndex for the backend
+    items = items.map(item => {
+        return {
+            ...item,
+            // If it's missing, default to 0 (important for Caps/Single-size items)
+            variationIndex: (item.variationIndex !== undefined && item.variationIndex !== null) 
+                            ? item.variationIndex 
+                            : 0
+        };
+    });
+
+    const subtotal = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
     const total = subtotal; 
 
     document.getElementById('subtotal').textContent = `₦${subtotal.toLocaleString()}`;
     document.getElementById('estimated-total').textContent = `₦${total.toLocaleString()}`;
 
+    // 3. Save to localStorage for the Checkout page
     localStorage.setItem('outflickzOrderSubtotal', subtotal.toString());
     localStorage.setItem('outflickzOrderTotal', total.toString());
+    
+    // This is what the checkout page reads - it now contains variationIndex!
     localStorage.setItem('outflickzOrderItems', JSON.stringify(items));
+    
+    console.log("Cart Summary Updated: variationIndex verified for all items.");
 }
+
 
 document.addEventListener('DOMContentLoaded', () => {
     updateCartBadge();
