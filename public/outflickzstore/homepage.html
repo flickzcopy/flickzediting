@@ -1171,7 +1171,6 @@ function standardizeStockData(productData) {
     
     return { totalAvailable, variantsData };
 }
-
 function openProductQuickView(jsonPayload) {
     const product = JSON.parse(jsonPayload);
     const collectionType = product.collectionType || product.category || 'Wears';
@@ -1180,13 +1179,22 @@ function openProductQuickView(jsonPayload) {
     // Reset and initialize global state for this specific product open
     if (!window.selectedSizes) window.selectedSizes = {};
     
-    // If it's a cap, it's always One Size
+    // --- 1. DETERMINE INITIAL SIZE & STOCK ---
+    let initialSize = null;
+    let initialMax = 1; // Default fallback
+
     if (isCap) {
-        window.selectedSizes[product._id] = 'One Size';
+        initialSize = 'One Size';
+        window.selectedSizes[product._id] = initialSize;
+        // For caps, stock is usually in variations[0].stock
+        initialMax = (product.variations && product.variations[0].stock) || 1;
     } else if (product.sizeStockMap) {
-        // Auto-select the first available size in the map
-        const firstSize = Object.keys(product.sizeStockMap).find(s => product.sizeStockMap[s] > 0);
-        if (firstSize) window.selectedSizes[product._id] = firstSize;
+        // Auto-select the first available size
+        initialSize = Object.keys(product.sizeStockMap).find(s => product.sizeStockMap[s] > 0);
+        if (initialSize) {
+            window.selectedSizes[product._id] = initialSize;
+            initialMax = product.sizeStockMap[initialSize];
+        }
     }
 
     const existingModal = document.getElementById('quick-view-modal');
@@ -1199,6 +1207,7 @@ function openProductQuickView(jsonPayload) {
     const formattedPrice = product.price.toLocaleString('en-US');
     const description = product.description || "No description available for this premium item.";
 
+    // --- 2. RENDER HTML WITH initialMax ---
     modalOverlay.innerHTML = `
         <div class="bg-white w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl relative animate-in fade-in zoom-in duration-300">
             <button onclick="closeQuickView()" class="absolute top-3 right-3 z-[1050] bg-white/80 rounded-full p-2.5 shadow-md hover:bg-gray-100 transition active:scale-90">
@@ -1247,7 +1256,12 @@ function openProductQuickView(jsonPayload) {
                                 <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-3">Quantity</span>
                                 <div class="flex items-center border border-gray-200 w-fit rounded-lg overflow-hidden">
                                     <button onclick="this.parentNode.querySelector('input').stepDown()" class="px-4 py-2 hover:bg-gray-50 transition">-</button>
-                                    <input type="number" id="modal-qty-${product._id}" value="1" min="1" max="${initialMax}"  <-- ⭐ Dynamically set initial max class="w-12 text-center font-bold text-sm focus:outline-none [appearance:textfield]">
+                                    <input type="number" 
+                                           id="modal-qty-${product._id}" 
+                                           value="1" 
+                                           min="1" 
+                                           max="${initialMax}" 
+                                           class="w-12 text-center font-bold text-sm focus:outline-none [appearance:textfield]">
                                     <button onclick="this.parentNode.querySelector('input').stepUp()" class="px-4 py-2 hover:bg-gray-50 transition">+</button>
                                 </div>
                             </div>
@@ -1364,20 +1378,31 @@ function updateModalMaxQuantity(productId, selectedSize) {
     const modal = document.getElementById('quick-view-modal');
     if (!modal) return;
 
-    // Find the radio button for the selected size to get its stock data
+    // 1. Find the radio button for the selected size
+    // Note: Ensure your createSizeList function includes data-stock="${s.stock}"
     const sizeInput = modal.querySelector(`input[name="size-${productId}"][value="${selectedSize}"]`);
     const qtyInput = document.getElementById(`modal-qty-${productId}`);
 
     if (sizeInput && qtyInput) {
-        const stock = parseInt(sizeInput.getAttribute('data-stock')) || 0;
-        qtyInput.max = stock; // Set the HTML max attribute
+        const stock = parseInt(sizeInput.getAttribute('data-stock'));
         
-        // If the current value is already higher than the new stock, bring it down
-        if (parseInt(qtyInput.value) > stock) {
-            qtyInput.value = stock;
+        // 2. Safety: If stock is NaN or 0, cap at 0 (or 1 for UI stability)
+        const safeStock = isNaN(stock) || stock < 0 ? 0 : stock;
+        
+        qtyInput.max = safeStock; 
+
+        // 3. UI Sync: If current value exceeds new stock, push it down
+        let currentVal = parseInt(qtyInput.value) || 1;
+        if (currentVal > safeStock) {
+            qtyInput.value = safeStock > 0 ? safeStock : 1;
         }
-        
-        console.log(`[Inventory] Max quantity for ${selectedSize} updated to: ${stock}`);
+
+        // 4. Reset to 1 if the user switches from a high-stock size to a low-stock size
+        if (safeStock === 0) {
+            qtyInput.value = 0; // Or handle with an "Out of Stock" label
+        }
+
+        console.log(`[Inventory Sync] ${productId} | Size: ${selectedSize} | Max Stock: ${safeStock}`);
     }
 }
 
