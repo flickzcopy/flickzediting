@@ -490,6 +490,7 @@ function enforceAuthGate() {
     const PAYSTACK_PUBLIC_KEY = 'pk_live_914b068e58d4ff0d8c50e5a035cae86b1142da35'; 
     const CURRENCY_CODE = 'NGN'; 
     const CURRENCY_SYMBOL = '₦';
+    const TAX_RATE = 150.00; // Define globally at the top of your script
 
 
         /**
@@ -838,56 +839,56 @@ function validateAndProceedToReview() {
         updateCheckoutView();
         window.scrollTo(0, 0); 
     }
+function renderCartData(cartData, paymentBtn) {
+    const subtotalEl = document.getElementById('summary-subtotal');
+    const shippingCostEl = document.getElementById('summary-shipping-cost');
+    const taxEstimateEl = document.getElementById('summary-tax-estimate');
+    const estimatedTotalEl = document.getElementById('summary-estimated-total');
+    const finalTotalEl = document.getElementById('summary-estimated-total-final');
+    const itemsListEl = document.getElementById('review-items-list');
 
-    // --- HELPER FUNCTION TO RENDER CART DATA (Unchanged) ---
-    function renderCartData(cartData, paymentBtn) {
-        const subtotalEl = document.getElementById('summary-subtotal');
-        const shippingCostEl = document.getElementById('summary-shipping-cost');
-        const taxEstimateEl = document.getElementById('summary-tax-estimate');
-        const estimatedTotalEl = document.getElementById('summary-estimated-total');
-        const finalTotalEl = document.getElementById('summary-estimated-total-final');
-        const itemsListEl = document.getElementById('review-items-list');
+    // Render Summary
+    const subtotal = cartData.subtotal || 0;
+    const shipping = cartData.shipping || 0;
+    
+    // ⭐ Fix: Ensure tax is applied if there is a subtotal
+    const tax = subtotal > 0 ? TAX_RATE : 0;
+    const total = subtotal + shipping + tax;
 
-        // Render Summary
-        const subtotal = cartData.subtotal || 0;
-        const shipping = cartData.shipping || 0;
-        const tax = cartData.tax || 0;
-        const total = cartData.estimatedTotal || (subtotal + shipping + tax);
-
-        const formatCurrency = (amount) => `${CURRENCY_SYMBOL}${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
-        
-        subtotalEl.textContent = formatCurrency(subtotal);
-        shippingCostEl.textContent = formatCurrency(shipping);
-        taxEstimateEl.textContent = formatCurrency(tax);
-        estimatedTotalEl.textContent = formatCurrency(total);
-        finalTotalEl.textContent = total.toLocaleString(undefined, { minimumFractionDigits: 2 }); // For Step 3
-
-        // Render Review Items List
-        itemsListEl.innerHTML = cartData.items.map(item => `
-            <div class="flex justify-between items-start py-2">
-                <div class="flex items-center">
-                    <img src="${item.imageUrl}" alt="${item.name}" class="w-10 h-10 rounded-md border mr-3">
-                    <div class="text-sm">
-                        <p class="font-medium text-gray-900">${item.name}</p>
-                        <p class="text-xs text-gray-500">${item.size} / ${item.color} (Qty: ${item.quantity})</p>
-                    </div>
-                </div>
-                <span class="text-sm font-semibold text-gray-900">${formatCurrency(item.price * item.quantity)}</span>
-            </div>
-        `).join('');
-        
-        // Store order components for server-side processing later
-        localStorage.setItem('outflickzOrderItems', JSON.stringify(cartData.items));
-        localStorage.setItem('outflickzOrderTotal', total.toFixed(2));
-        localStorage.setItem('outflickzOrderSubtotal', subtotal.toFixed(2));
-        localStorage.setItem('outflickzOrderShipping', shipping.toFixed(2));
-        localStorage.setItem('outflickzOrderTax', tax.toFixed(2));
-
-        // Enable button
-        paymentBtn.disabled = false;
+    const formatCurrency = (amount) => `₦${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+    
+    subtotalEl.textContent = formatCurrency(subtotal);
+    shippingCostEl.textContent = formatCurrency(shipping);
+    taxEstimateEl.textContent = formatCurrency(tax);
+    estimatedTotalEl.textContent = formatCurrency(total);
+    
+    if (finalTotalEl) {
+        finalTotalEl.textContent = total.toLocaleString(undefined, { minimumFractionDigits: 2 });
     }
 
+    // Render Review Items List
+    itemsListEl.innerHTML = cartData.items.map(item => `
+        <div class="flex justify-between items-start py-2">
+            <div class="flex items-center">
+                <img src="${item.imageUrl}" alt="${item.name}" class="w-10 h-10 rounded-md border mr-3">
+                <div class="text-sm">
+                    <p class="font-medium text-gray-900">${item.name}</p>
+                    <p class="text-xs text-gray-500">${item.size} / ${item.color || 'N/A'} (Qty: ${item.quantity})</p>
+                </div>
+            </div>
+            <span class="text-sm font-semibold text-gray-900">${formatCurrency(item.price * item.quantity)}</span>
+        </div>
+    `).join('');
+    
+    // Store components for server-side processing
+    localStorage.setItem('outflickzOrderItems', JSON.stringify(cartData.items));
+    localStorage.setItem('outflickzOrderTotal', total.toFixed(2));
+    localStorage.setItem('outflickzOrderSubtotal', subtotal.toFixed(2));
+    localStorage.setItem('outflickzOrderShipping', shipping.toFixed(2));
+    localStorage.setItem('outflickzOrderTax', tax.toFixed(2));
 
+    paymentBtn.disabled = false;
+}
 
  /**
  * ⭐ UPDATED: Fetches cart data from LocalStorage (Guest) or API (User).
@@ -929,7 +930,7 @@ async function fetchInitialCartData() {
                 items: localCart,
                 subtotal: subtotal,
                 shipping: 0, // Force 0.00 shipping
-                tax: 0
+                tax: TAX_RATE
             };
             console.log("Guest checkout processed locally.");
         } else {

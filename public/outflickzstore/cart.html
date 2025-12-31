@@ -33,6 +33,9 @@ const CART_STORAGE_KEY = 'outflickzCartCount';
 const LOCAL_CART_KEY = 'outflickzLocalCart';
 const AUTH_TOKEN_KEY = 'userAccessToken';
 
+// Define the Tax Rate at the top of your script
+const TAX_RATE = 150.00;
+
 // --- QUANTITY AND STOCK VALIDATION UTILITIES ---
 
 /**
@@ -366,11 +369,12 @@ async function clearCart() {
     displayMessage("<i class='fas fa-trash-alt mr-2'></i> Bag cleared successfully.");
 }
 
+
 function updateCartSummary(data) {
     // 1. Get items from API data or LocalStorage
     let items = data.items || JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
     
-    // 2. ⭐ RE-VALIDATION: Ensure variationIndex is saved for the Checkout process
+    // 2. ⭐ RE-VALIDATION: Ensure variationIndex is saved
     const verifiedItems = items.map(item => ({
         ...item,
         variationIndex: (item.variationIndex !== undefined && item.variationIndex !== null) 
@@ -378,21 +382,28 @@ function updateCartSummary(data) {
                         : 1
     }));
 
+    // 3. CALCULATIONS
     const subtotal = verifiedItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-
-    document.getElementById('subtotal').textContent = `₦${subtotal.toLocaleString()}`;
-    document.getElementById('estimated-total').textContent = `₦${subtotal.toLocaleString()}`;
-
-    // 3. Save to localStorage for the Checkout page
-    localStorage.setItem('outflickzOrderSubtotal', subtotal.toString());
-    localStorage.setItem('outflickzOrderTotal', subtotal.toString());
     
-    // This is what the checkout page reads - it now GUARANTEES variationIndex exists!
+    // If the cart is empty, tax should be 0. Otherwise, use TAX_RATE.
+    const currentTax = subtotal > 0 ? TAX_RATE : 0;
+    const total = subtotal + currentTax;
+
+    // 4. UPDATE UI
+    document.getElementById('subtotal').textContent = `₦${subtotal.toLocaleString()}`;
+    document.getElementById('tax-cost').textContent = `₦${currentTax.toLocaleString()}`;
+    document.getElementById('estimated-total').textContent = `₦${total.toLocaleString()}`;
+
+    // 5. SAVE TO LOCALSTORAGE FOR CHECKOUT PAGE
+    localStorage.setItem('outflickzOrderSubtotal', subtotal.toString());
+    localStorage.setItem('outflickzOrderTax', currentTax.toString()); // Added for checkout
+    localStorage.setItem('outflickzOrderTotal', total.toString());
+    
+    // Guarantee variationIndex exists for the checkout page
     localStorage.setItem('outflickzOrderItems', JSON.stringify(verifiedItems));
     
-    console.log("Cart Summary Updated: variationIndex verified for all items.");
+    console.log(`Cart Updated: Subtotal: ₦${subtotal}, Tax: ₦${currentTax}, Total: ₦${total}`);
 }
-
 
 document.addEventListener('DOMContentLoaded', () => {
     updateCartBadge();
