@@ -874,26 +874,25 @@ function createColorList(collectionId, variants) {
         
         // Logic for white/light color borders
         const isWhite = (safeColor === '#FFFFFF' || safeColor === '#FFF' || safeColor === 'WHITE');
-        const extraClass = isWhite ? 'border-gray-300' : 'border-transparent';
+        const extraClass = isWhite ? 'border-gray-200' : 'border-transparent';
         
-        // ⭐ THE FIX: Ensure index 0 color is recorded immediately for the modal logic
+        // Initialization logging
         if (index === 0) {
-            // This ensures handleModalAddToCart sees a color even if user doesn't click
-            console.log(`[COLOR] Auto-selected default color for ${collectionId}: ${colorHex}`);
+            console.log(`[COLOR] Initialized ${collectionId} with ${colorHex}`);
         }
 
         return `
-            <label for="color-${collectionId}-${index}" class="color-label cursor-pointer p-[2px] rounded-full border-2 border-transparent hover:border-gray-400 transition-all has-[:checked]:border-ash-dark shadow-sm">
+            <label for="color-modal-${collectionId}-${index}" class="color-label cursor-pointer p-[1.5px] rounded-full border border-transparent hover:border-gray-400 transition-all has-[:checked]:border-black shadow-sm">
                 <input 
                     type="radio" 
-                    id="color-${collectionId}-${index}" 
+                    id="color-modal-${collectionId}-${index}" 
                     name="color-${collectionId}" 
                     value="${colorHex}" 
                     class="hidden" 
                     onchange="changeVariantImage('${collectionId}', this.value)" 
                     ${index === 0 ? 'checked' : ''}
                 >
-                <span class="block w-5 h-5 md:w-6 md:h-6 rounded-full border ${extraClass}" style="${style}"></span>
+                <span class="block w-4 h-4 rounded-full border ${extraClass}" style="${style}"></span>
             </label>
         `;
     }).join('');
@@ -1154,6 +1153,7 @@ function standardizeStockData(productData) {
     
     return { totalAvailable, variantsData };
 }
+
 function openProductQuickView(jsonPayload) {
     const product = JSON.parse(jsonPayload);
     const collectionType = product.collectionType || product.category || 'Wears';
@@ -1293,7 +1293,7 @@ function handleModalAddToCart(productId, productType) {
     const quantity = qtyInput ? parseInt(qtyInput.value) : 1;
     const productName = modal.querySelector('h2').innerText;
     const priceText = modal.querySelector('p.text-2xl')?.innerText || "0";
-    const price = parseFloat(priceText.replace(/[^\d.]/g, ''));
+    const price = parseFloat(priceText.replace(/,/g, '').replace(/[^\d.]/g, ''));
     const imageUrl = document.getElementById('modal-main-image')?.src || "";
 
     const finalPayload = {
@@ -1307,10 +1307,16 @@ function handleModalAddToCart(productId, productType) {
         productType: productType
     };
 
+    // 7. SEND TO CART (Stringify the object first)
     if (typeof simulateAddToCart === 'function' || typeof addToCart === 'function') {
         const cartFn = typeof addToCart === 'function' ? addToCart : simulateAddToCart;
-        cartFn(finalPayload);
+        
+        // ⭐ THE CRITICAL FIX: Convert the object to a JSON string
+        const jsonStringPayload = JSON.stringify(finalPayload);
+        
+        cartFn(jsonStringPayload);
 
+        // UI Success Feedback
         const addBtn = modal.querySelector('button[onclick*="handleModalAddToCart"]');
         if (addBtn) {
             addBtn.innerHTML = '<i class="fas fa-check"></i> Added to Bag';
