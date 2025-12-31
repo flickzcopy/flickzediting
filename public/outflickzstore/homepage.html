@@ -1766,13 +1766,14 @@ async function fetchAndRenderPreorderCollections() {
         container.innerHTML = '<p class="col-span-full text-center text-red-600 py-10 w-full font-semibold">Error: Could not connect to API server (502/Down).</p>';
     }
 }
+
 document.addEventListener('DOMContentLoaded', function() {
-    // 1. IMAGE ROTATION (20 Second Cycle)
+    // 1. IMAGE ROTATION (60 Second Cycle)
     const rotatingImages = document.querySelectorAll('.rotating-image');
     if (rotatingImages.length > 0) {
         rotatingImages.forEach(img => {
-            // High-end slow transition (1.5 seconds for the fade itself)
-            img.style.transition = 'opacity 1.5s ease-in-out, transform 1.5s ease-in-out';
+            // Ultra-smooth slow transition (60 seconds for the fade itself)
+            img.style.transition = 'opacity 60s ease-in-out, transform 60s ease-in-out';
         });
 
         setInterval(() => {
@@ -1783,7 +1784,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (altSrc && altSrc.trim() !== "" && !altSrc.includes("YOUR_SECOND")) {
                     // Start slow fade out
                     img.style.opacity = '0';
-                    img.style.transform = 'scale(0.98)';
+                    img.style.transform = 'scale(0.97)';
                     
                     setTimeout(() => {
                         // Swap image source
@@ -1793,13 +1794,13 @@ document.addEventListener('DOMContentLoaded', function() {
                         // Slow fade back in
                         img.style.opacity = '1';
                         img.style.transform = 'scale(1)';
-                    }, 1500); // Wait for the 1.5s transition to finish
+                    }, 2000); // Matches the 2s transition speed
                 }
             });
-        }, 20000); // 20 Seconds
+        }, 60000); // 60 Seconds / 1 Minute
     }
     
-    // Banner slideshow logic removed to keep text static
+    // Note: Banner slideshow is static as requested previously.
 });
 // --- Updated Consolidated Initialization Logic ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -1953,7 +1954,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     <div class="w-full bg-[#1a2b49] py-5 mt-4 border-t border-yellow-600/20 relative flex items-center justify-center">
         <p class="text-center text-white text-[8px] sm:text-[10px] md:text-xs font-black tracking-[0.2em] md:tracking-[0.4em] uppercase px-4">
-            ✨ Happy New Year: The Official 2026 Collection for Outflickz ✨
+            THE OFFICIAL ONLINE STORE FOR OUTFLICKZ LIMITED IN NIGERIA
         </p>
     </div>
 </section>
