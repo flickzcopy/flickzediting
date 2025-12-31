@@ -1201,7 +1201,7 @@ function standardizeStockData(productData) {
 function openProductQuickView(jsonPayload) {
     const product = JSON.parse(jsonPayload);
     const collectionType = product.collectionType || product.category || 'Wears';
-    const isCap = collectionType.toLowerCase().includes('cap');
+    const isCaps = collectionType.toLowerCase().includes('caps');
 
     // --- 🎯 ROBUST STOCK CALCULATION ---
     let totalStock = 0;
