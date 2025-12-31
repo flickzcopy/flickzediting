@@ -1264,7 +1264,7 @@ async function fetchAndRenderAllWearsCollections() {
     const container = document.getElementById('full-wears-collections-grid');
     if (!container) return;
 
-     const spinnerColor = 'text-gray-900';
+    const spinnerColor = 'text-gray-900';
     const textColor = 'text-gray-700';
 
     container.innerHTML = `
@@ -1273,43 +1273,39 @@ async function fetchAndRenderAllWearsCollections() {
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            Loading Wears Collections...
+            Loading All Wears Collections...
         </div>`;
 
-      try {
-        // NOTE: Replace this with your actual API endpoint for wears collections
-        // For demonstration, we'll assume the API provides data based on the schema you provided.
+    try {
         const wearsApiUrl = `${API_BASE_URL}/api/collections/wears`; 
 
         const response = await fetch(wearsApiUrl, {
             method: 'GET',
             headers: {
-                'Content-Type': 'application/json',
-            credentials: 'include'
+                'Content-Type': 'application/json'
             }
         });
 
         if (!response.ok) {
-            // Throw error to trigger fallback/error block
-            throw new Error(`Failed to load collections from server. Status: ${response.status}`);
+            throw new Error(`Failed to load collections. Status: ${response.status}`);
         }
 
         const collections = await response.json();
-
         container.innerHTML = '';
         
         let collectionsToRender = collections && collections.length > 0 ? collections : [];
 
-        if (collectionsToRender && collectionsToRender.length > 0) {
-            
+        if (collectionsToRender.length > 0) {
             collectionsToRender.forEach(collection => {
-                if (collection.price !== undefined && collection.price !== null) {
-                    // Pass 'wears' size to trigger the REDUCED card style
+                /** * FIX: Removed the strict 'price !== null' check. 
+                 * Even if an item is out of stock, we want the object to pass 
+                 * into createCollectionCard so the "Out of Stock" badge can show.
+                 */
+                if (collection) {
                     container.innerHTML += createCollectionCard(collection, 'wears');
                 }
             });
 
-            // If no items were rendered (e.g., due to missing price)
             if (container.innerHTML === '') {
                 container.innerHTML = `<p class="col-span-full text-center ${textColor} py-10 w-full">No Wears Collections are currently available.</p>`;
             }
@@ -1318,9 +1314,7 @@ async function fetchAndRenderAllWearsCollections() {
         }
     } catch (error) {
         console.error('Error fetching wears collections:', error);
-        
-        // Clean error message on API failure
-        container.innerHTML = '<p class="col-span-full text-center text-red-600 py-10 w-full font-semibold">Error: Could not connect to API server (502/Down).</p>';
+        container.innerHTML = '<p class="col-span-full text-center text-red-600 py-10 w-full font-semibold">Error: Could not connect to API server.</p>';
     }
 }
 
