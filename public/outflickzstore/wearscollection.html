@@ -287,6 +287,27 @@ function addToCart(collectionId, quantity) {
     console.log(`Added ${quantity} of item ${collectionId}. New cart total: ${newCount}`);
 }
 
+// Helper to manage guest cart
+function handleLocalCartOnly(details) {
+    let localCart = JSON.parse(localStorage.getItem(LOCAL_CART_KEY) || '[]');
+    const existingIndex = localCart.findIndex(item => 
+        item.productId === details.productId && 
+        item.size === details.size && 
+        item.color === details.color
+    );
+
+    if (existingIndex > -1) {
+        localCart[existingIndex].quantity += details.quantity;
+    } else {
+        localCart.push(details);
+    }
+
+    localStorage.setItem(LOCAL_CART_KEY, JSON.stringify(localCart));
+    if (typeof updateCartBadge === "function") updateCartBadge();
+    displayCartAlert(`"${details.name}" added to bag!`, 'info');
+}
+
+
 /**
  * Handles adding an item to the cart. 
  * Correctly handles Cap sizes (O/S) and maps variationIndex to 1-based for Database.
