@@ -6385,7 +6385,6 @@ app.delete('/api/users/cart', verifyUserToken, async (req, res) => {
 });
 
 // --- 1. WEBHOOK ENDPOINT ---
-// --- 1. WEBHOOK ENDPOINT ---
 app.post('/api/paystack/webhook', async (req, res) => {
     const secret = process.env.PAYSTACK_SECRET_KEY;
     const paystackSignature = req.headers['x-paystack-signature'];
@@ -6537,7 +6536,7 @@ app.post('/api/orders/place/paystack', verifyUserToken, async (req, res) => {
                 productType: validatedType,
                 quantity: parseInt(item.quantity),
                 priceAtTimeOfPurchase: parseFloat(item.price || item.priceAtTimeOfPurchase),
-                variationIndex: parseInt(item.variationIndex) || 0, 
+                variationIndex: parseInt(item.variationIndex) || 1, 
                 size: item.size,
                 color: item.color,
                 variation: item.variation

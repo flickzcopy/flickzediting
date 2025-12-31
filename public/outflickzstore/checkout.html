@@ -1003,38 +1003,54 @@ function handlePaystackSuccessRedirect(mongoId, orderRef) { // 👈 ADD mongoId 
         // as the confirmation page will now successfully fetch by 'id'.
     }, 2000);
 }
-
-    /**
+/**
  * Helper function to notify admin of a new order. 
+ * Captures full financial breakdown and item details from localStorage.
  */
 async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = null) {
-    const orderTotal = localStorage.getItem('outflickzOrderTotal');
+    // 1. Retrieve all financial data stored during checkout
+    const orderTotal = localStorage.getItem('outflickzOrderTotal') || '0';
+    const subtotal = localStorage.getItem('outflickzOrderSubtotal') || '0';
+    const shippingFee = localStorage.getItem('outflickzOrderShipping') || '0';
+    const tax = localStorage.getItem('outflickzOrderTax') || '0';
+
+    // 2. Retrieve Customer and Item data
     const shippingData = localStorage.getItem('outflickzShippingData');
     const orderItems = localStorage.getItem('outflickzOrderItems');
 
-   const notificationPayload = {
-     orderId: orderId,
-     totalAmount: orderTotal,
-     paymentMethod: paymentMethod,
-     shippingDetails: JSON.parse(shippingData || '{}'),
-     items: JSON.parse(orderItems || '[]'),
-     adminEmail: DEFAULT_ADMIN_EMAIL, // Assuming DEFAULT_ADMIN_EMAIL is defined globally
-     paymentReceiptUrl: receiptUrl // Pass the receipt URL if available
-   };
+    // 3. Construct the payload matching the Backend's expected structure
+    const notificationPayload = {
+        orderId: orderId,
+        totalAmount: orderTotal,
+        subtotal: subtotal,         // Added for price breakdown
+        shippingFee: shippingFee,   // Added for price breakdown
+        tax: tax,                   // Added for price breakdown
+        paymentMethod: paymentMethod,
+        shippingDetails: JSON.parse(shippingData || '{}'),
+        items: JSON.parse(orderItems || '[]'),
+        adminEmail: typeof DEFAULT_ADMIN_EMAIL !== 'undefined' ? DEFAULT_ADMIN_EMAIL : 'admin@outflickz.com',
+        paymentReceiptUrl: receiptUrl 
+    };
+
+    console.log("📤 Sending Admin Notification Payload:", notificationPayload);
 
     try {
-        // Assuming API_BASE_URL is defined globally
         const response = await fetch(`${API_BASE_URL}/api/notifications/admin-order-email`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json' 
+            },
             body: JSON.stringify(notificationPayload)
         });
 
-        if (!response.ok) {
-            console.error('Failed to send admin notification email:', response.status);
+        if (response.ok) {
+            console.log('✅ Admin notification email sent successfully.');
+        } else {
+            const errorData = await response.json();
+            console.error('❌ Failed to send admin email:', response.status, errorData.message);
         }
     } catch (error) {
-        console.error('Network error while sending admin notification:', error);
+        console.error('❌ Network error while sending admin notification:', error);
     }
 }
 
@@ -1086,9 +1102,9 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
         payBtn.innerHTML = 'Confirm & Pay Now';
     }
 }
-
 /**
- * ⭐ UPDATED: Processes Paystack payment with Guest detection.
+ * ⭐ UPDATED: Processes Paystack payment with Guest detection and 
+ * saves order state for Admin Notification.
  */
 async function processPaystackPayment(totalAmount, email) {
     const payBtn = document.getElementById('checkout-next-btn');
@@ -1112,25 +1128,30 @@ async function processPaystackPayment(totalAmount, email) {
         return { ...item, productType: pType };
     });
 
+    // ⭐ STEP: Save current state for Admin Email verification later
+    localStorage.setItem('outflickzOrderItems', JSON.stringify(itemsToOrder));
+    localStorage.setItem('outflickzOrderTotal', totalAmount);
+    // Subtotal, shipping, and tax should be saved here if they aren't already
+    const subtotal = localStorage.getItem('outflickzOrderSubtotal') || '0';
+    const shippingFee = localStorage.getItem('outflickzOrderShipping') || '0';
+
     payBtn.disabled = true;
     payBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Initializing...';
 
     try {
-        // ⭐ FIX: Determine if this is a Guest Checkout
         const isLoggedIn = isUserLoggedIn(); 
 
-        // 3. Create the pending order
+        // 3. Create the pending order in the Database
         const response = await secureUserFetch(`${API_BASE_URL}/api/orders/place/paystack`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 shippingAddress, 
                 totalAmount, 
-                // ⭐ CRITICAL: Pass guest details to satisfy backend schema
                 email: email, 
                 isGuest: !isLoggedIn,
-                subtotal: localStorage.getItem('outflickzOrderSubtotal') || '0',
-                shippingFee: localStorage.getItem('outflickzOrderShipping') || '0', 
+                subtotal: subtotal,
+                shippingFee: shippingFee, 
                 tax: localStorage.getItem('outflickzOrderTax') || '0',
                 orderItems: itemsToOrder 
             })
@@ -1148,6 +1169,11 @@ async function processPaystackPayment(totalAmount, email) {
             currency: 'NGN',
             callback: function(paymentResponse) {
                 payBtn.innerHTML = '<i class="fas fa-sync fa-spin"></i> Verifying...';
+                
+                /** * ⭐ THE MAGIC HAPPENS HERE:
+                 * Pass the IDs to verifyPayment. Inside verifyPayment, 
+                 * you MUST call sendAdminOrderNotification() upon success.
+                 */
                 verifyPayment(paymentResponse.reference, data.orderId, data.orderReference);
             },
             onClose: function() {
@@ -1200,12 +1226,11 @@ async function processPaystackPayment(totalAmount, email) {
             payBtn.innerHTML = '<span id="checkout-btn-text">Confirm & Pay Now</span>';
         }
     }
-
 async function verifyPayment(paymentReference, mongoId, internalOrderRef) {
     const payBtn = document.getElementById('checkout-next-btn');
     
     try {
-        // Use standard fetch so Guests (who have no token) aren't blocked
+        // 1. Verify payment with backend
         const response = await fetch(`${API_BASE_URL}/api/orders/verify/${paymentReference}`, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' }
@@ -1213,26 +1238,37 @@ async function verifyPayment(paymentReference, mongoId, internalOrderRef) {
 
         const data = await response.json();
 
-        if (response.ok && (data.status === 'Paid' || data.message === 'Verified')) {
+        // 2. CHECK SUCCESS CONDITIONS
+        if (response.ok && (data.status === 'Paid' || data.status === 'success' || data.message === 'Verified')) {
             console.log("✅ Payment verified by backend.");
             
-            // Use the ID returned by the backend or the one we had
             const finalId = data.orderId || mongoId;
+
+            // ⭐ CRITICAL CHANGE: Notify the Admin now that payment is confirmed
+            // We pass 'Paystack/Card' as the method so the email template knows the status
+            try {
+                await sendAdminOrderNotification(finalId, 'Paystack/Card');
+            } catch (emailErr) {
+                // We log the error but don't stop the redirect, 
+                // as the customer has already paid successfully.
+                console.error("⚠️ Admin notification failed, but payment was successful:", emailErr);
+            }
             
-            // Clean up cart and redirect
+            // 3. Clean up cart and redirect to success page
             handlePaystackSuccessRedirect(finalId, paymentReference);
         } else {
             throw new Error(data.message || "Verification failed");
         }
     } catch (error) {
         console.error("❌ Verification Error:", error);
-        displayMessage("We couldn't confirm the payment automatically. Please refresh or contact support with Ref: " + paymentReference);
+        displayMessage("We couldn't confirm the payment automatically. Please contact support with Ref: " + paymentReference);
         
-        payBtn.disabled = false;
-        payBtn.innerHTML = 'Confirm & Pay Now';
+        if (payBtn) {
+            payBtn.disabled = false;
+            payBtn.innerHTML = 'Confirm & Pay Now';
+        }
     }
 }
-
     // -----------------------------------------------------------------
     // ⭐ NEW ACCORDION/DROPDOWN LOGIC FOR BANK TRANSFER DETAILS ⭐ (Unchanged - Logic is correct)
     // -----------------------------------------------------------------
