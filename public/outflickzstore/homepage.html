@@ -474,55 +474,71 @@ function updateCartBadge() {
         badgeElement.classList.toggle('hidden', count === 0);
     }
 }
-
 /**
- * Handles adding an item (or quantity of items) to the cart and updates the badge.
- * @param {string} collectionId - The ID of the item being added (used for logging/future API integration).
- * @param {number} quantity - The number of items to add.
+ * Handles adding detailed item objects to the cart and updates localStorage.
+ * @param {string|object} itemData - Either a collectionId (string) or a full item object.
+ * @param {number} quantity - Number of items to add.
  */
-function addToCart(collectionId, quantity) {
-    let currentCount = getCartCount();
-    let newCount = currentCount + quantity;
-    
-    // Safety clamp
-    if (newCount < 0) newCount = 0;
+function addToCart(itemData, quantity = 1) {
+    // 1. Get existing cart array from localStorage (or empty array if none)
+    let cart = [];
+    try {
+        const storedCart = localStorage.getItem('OUTFLICKZ_CART_ITEMS');
+        cart = storedCart ? JSON.parse(storedCart) : [];
+    } catch (e) {
+        cart = [];
+    }
 
-    localStorage.setItem(CART_STORAGE_KEY, newCount.toString());
-    
-    // Update the visual badge
+    let itemToAdd;
+
+    // 2. Handle both String (simple) and Object (detailed) inputs
+    if (typeof itemData === 'string') {
+        itemToAdd = { _id: itemData, quantity: quantity, name: "Product" };
+    } else {
+        itemToAdd = { ...itemData, quantity: quantity };
+    }
+
+    // 3. Check if item already exists (same ID, Size, and Color)
+    const existingItemIndex = cart.findIndex(item => 
+        item._id === itemToAdd._id && 
+        item.size === itemToAdd.size && 
+        item.color === itemToAdd.color
+    );
+
+    if (existingItemIndex > -1) {
+        // Increment quantity of existing item
+        cart[existingItemIndex].quantity += quantity;
+    } else {
+        // Add new item to array
+        cart.push(itemToAdd);
+    }
+
+    // 4. Save back to localStorage
+    localStorage.setItem('OUTFLICKZ_CART_ITEMS', JSON.stringify(cart));
+
+    // 5. Update the total item count (for the badge)
+    const totalCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+    localStorage.setItem(CART_STORAGE_KEY, totalCount.toString());
+
+    // 6. Update Visuals
     updateCartBadge();
     
-    // Optional: Add a simple confirmation flash/message
+    // Trigger Alert Message
     const alertMessage = document.getElementById('cart-alert');
     if (alertMessage) {
-        alertMessage.textContent = `${quantity} item(s) added to cart! Total: ${newCount}`;
+        const displayName = itemToAdd.name || 'Item';
+        alertMessage.textContent = `${quantity}x ${displayName} added to bag!`;
         
-        // --- START FIX: Show the alert using the new fixed positioning classes ---
-        
-        // 1. Ensure any 'hidden' or old negative transform state is removed
         alertMessage.classList.remove('hidden', 'opacity-0', '-translate-y-full');
-        
-        // 2. Add the visible state: full opacity and translate down by 16 units (to clear the header)
-        // This is the class that moves the alert *into* view, just below the header.
         alertMessage.classList.add('opacity-100', 'translate-y-16');
         
         setTimeout(() => {
-            // 3. Hide the alert: restore initial state (zero opacity and moved off-screen up)
             alertMessage.classList.remove('opacity-100', 'translate-y-16');
             alertMessage.classList.add('opacity-0', '-translate-y-full');
-
-            // Optional: Re-add 'hidden' after the transition completes (500ms, matching transition-all duration-500)
-            // This is good practice to prevent click interference if needed.
-            setTimeout(() => {
-                 // alertMessage.classList.add('hidden'); // Only required if the element is causing layout issues, but fixed should handle it.
-            }, 500); 
-
-        }, 3000); // Display time
-        
-        // --- END FIX ---
+        }, 3000);
     }
 
-    console.log(`Added ${quantity} of item ${collectionId}. New cart total: ${newCount}`);
+    console.log("🛒 Cart Updated:", cart);
 }
 
 /**
@@ -1268,7 +1284,7 @@ function handleModalAddToCart(productId, productType) {
 
     const isCap = productType.toLowerCase().includes('cap');
     
-    // 1. SIZE RETRIEVAL (Priority: Radio Button -> Global State)
+    // 1. SIZE RETRIEVAL (Ensures a selection is made)
     let selectedSize = null;
     const checkedSizeRadio = modal.querySelector(`input[name="size-${productId}"]:checked`);
     
@@ -1278,53 +1294,23 @@ function handleModalAddToCart(productId, productType) {
         selectedSize = window.selectedSizes[productId];
     }
 
-    // 2. COLOR RETRIEVAL
-    const checkedColorRadio = modal.querySelector(`input[name="color-${productId}"]:checked`);
-    const selectedColor = checkedColorRadio ? checkedColorRadio.value : "Original";
-
-    // 3. VALIDATION
+    // 2. VALIDATION
     if (!isCap && !selectedSize) {
         alert("Please select a size first.");
         return;
     }
 
-    // 4. DATA EXTRACTION
+    // 3. QUANTITY RETRIEVAL
     const qtyInput = document.getElementById(`modal-qty-${productId}`);
     const quantity = qtyInput ? parseInt(qtyInput.value) : 1;
-    const productName = modal.querySelector('h2').innerText;
-    
-    // Robust Price Extraction (Removes currency symbols and commas)
-    const priceText = modal.querySelector('p.text-2xl')?.innerText || "0";
-    const priceValue = parseFloat(priceText.replace(/,/g, '').replace(/[^\d.]/g, ''));
-    
-    const imageUrl = document.getElementById('modal-main-image')?.src || "";
 
-    // 5. BUILD FINAL PAYLOAD (Standardized for your existing cart logic)
-    // Changing keys to match what your homepage.html logic expects
-    const finalPayload = {
-        _id: productId,             // Use _id instead of productId
-        name: productName,
-        productPrice: priceValue,    // Use productPrice instead of price
-        price: priceValue,           // Keep price as fallback
-        imageUrl: imageUrl,
-        size: isCap ? "One Size" : selectedSize,
-        color: selectedColor,
-        quantity: quantity,
-        productType: productType
-    };
+    // 4. SEND TO CART (Matches original addToCart(collectionId, quantity) signature)
+    if (typeof addToCart === 'function') {
+        // ⭐ THE FIX: Passing raw productId and number quantity
+        // This prevents the [object Object] and NaN errors.
+        addToCart(productId, quantity);
 
-    console.log("🚀 Submitting Standardized Payload:", finalPayload);
-
-    // 6. SEND TO CART
-    if (typeof addToCart === 'function' || typeof simulateAddToCart === 'function') {
-        const cartFn = typeof addToCart === 'function' ? addToCart : simulateAddToCart;
-        
-        // Convert to JSON string because your cart logic uses JSON.parse()
-        const jsonStringPayload = JSON.stringify(finalPayload);
-        
-        cartFn(jsonStringPayload);
-
-        // 7. UI SUCCESS FEEDBACK
+        // 5. UI SUCCESS FEEDBACK
         const addBtn = modal.querySelector('button[onclick*="handleModalAddToCart"]');
         if (addBtn) {
             const originalContent = addBtn.innerHTML;
@@ -1334,14 +1320,14 @@ function handleModalAddToCart(productId, productType) {
 
             setTimeout(() => {
                 closeQuickView();
-                // Reset button state for the next time a modal opens
+                // Clean up button state for next time
                 addBtn.innerHTML = originalContent;
                 addBtn.classList.replace('bg-green-600', 'bg-black');
                 addBtn.disabled = false;
             }, 1000);
         }
     } else {
-        console.error("Cart function not found in homepage.html");
+        console.error("The addToCart function was not found on this page.");
     }
 }
 
