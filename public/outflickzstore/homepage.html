@@ -1741,15 +1741,14 @@ async function fetchAndRenderPreorderCollections() {
             const limitedCollections = collectionsToRender.slice(0, 4);
             
             limitedCollections.forEach((collection, index) => {
-                if (collection.price !== undefined && collection.price !== null) {
-                    
+                   
                     // --- LOG 3: Check the specific image URLs being passed to the card creator ---
                     console.log(`[PRE-ORDER RENDER] Item #${index + 1} (${collection.name}):`);
                     console.log(`   > frontImageUrl: ${collection.frontImageUrl}`);
                     console.log(`   > backImageUrl: ${collection.backImageUrl}`);
                     
                     container.innerHTML += createCollectionCard(collection, 'preorder');
-                }
+                
             });
 
             if (container.innerHTML === '') {
