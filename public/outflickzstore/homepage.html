@@ -1203,23 +1203,28 @@ function openProductQuickView(jsonPayload) {
     const collectionType = product.collectionType || product.category || 'Wears';
     const isCap = collectionType.toLowerCase().includes('caps');
 
-    // --- 🎯 IMPROVED STOCK CALCULATION ---
+    // --- 🎯 IMPROVED STOCK CALCULATION FIX ---
     let totalStock = 0;
 
-    // 1. Check direct availableStock property
-    if (product.availableStock !== undefined && product.availableStock !== null) {
+    // 1. Check variations (Standard for Caps)
+    if (product.variants && Array.isArray(product.variants) && isCap) {
+        // Many systems use 'stock' inside the variant object
+        totalStock = product.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+    } 
+    // 2. Fallback to direct availableStock
+    else if (product.availableStock !== undefined && product.availableStock !== null) {
         totalStock = Number(product.availableStock);
     } 
-    // 2. Check sizeStockMap (Standard for Wears)
+    // 3. Check sizeStockMap (Standard for Wears)
     else if (product.sizeStockMap) {
         totalStock = Object.values(product.sizeStockMap).reduce((sum, val) => sum + Number(val), 0);
     }
-    // 3. Check variations (Standard for Caps)
-    else if (product.variations && Array.isArray(product.variations)) {
+
+    // 🎯 IF STILL 0, check your variations array specifically
+    if (totalStock === 0 && product.variations) {
         totalStock = product.variations.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
     }
 
-    // 🎯 CRITICAL FIX: Ensure isOutOfStock is strictly based on calculated totalStock
     const isOutOfStock = totalStock <= 0;
 
     // Reset and initialize global state
