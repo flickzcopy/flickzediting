@@ -1229,13 +1229,13 @@ function openProductQuickView(jsonPayload) {
     let initialMax = 1;
 
     // Logic to select the first available size/stock
-    if (!isOutOfStock) {
+   if (!isOutOfStock) {
         if (isCap) {
             initialSize = 'One Size';
             window.selectedSizes[product._id] = initialSize;
-            initialMax = (product.variations && product.variations[0].stock) || 1;
+            // Get stock from the first variation for the cap
+            initialMax = (product.variations && product.variations[0].stock) ? Number(product.variations[0].stock) : 1;
         } else if (product.sizeStockMap) {
-            // Find the first size that actually has stock > 0
             initialSize = Object.keys(product.sizeStockMap).find(s => Number(product.sizeStockMap[s]) > 0);
             if (initialSize) {
                 window.selectedSizes[product._id] = initialSize;
