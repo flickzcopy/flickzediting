@@ -224,7 +224,7 @@ async function fetchUserData() {
             button.textContent = originalText;
         }
     }
-    async function fetchOrderHistory() {
+   async function fetchOrderHistory() {
     const listContainer = document.getElementById('order-history-list');
     
     try {
@@ -237,30 +237,38 @@ async function fetchUserData() {
             listContainer.innerHTML = `
                 <div class="text-center py-10 text-gray-500">
                     <i class="fas fa-box-open text-4xl mb-3 opacity-20"></i>
-                    <p>You haven't placed any orders yet.</p>
-                    <a href="wearscollection.html" class="text-ash-red font-bold hover:underline">Start Shopping</a>
+                    <p class="text-sm">You haven't placed any orders yet.</p>
+                    <a href="wearscollection.html" class="text-ash-red font-bold hover:underline text-sm">Start Shopping</a>
                 </div>`;
             return;
         }
 
         listContainer.innerHTML = data.orders.map(order => `
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 border-b border-gray-100 hover:bg-gray-50 transition">
-                <div class="mb-2 sm:mb-0">
-                    <p class="font-bold text-gray-900">Order #${order.id.slice(-6).toUpperCase()}</p>
-                    <p class="text-xs text-gray-500">${new Date(order.date).toLocaleDateString()} • ${order.items} Items</p>
+            <div class="flex items-center justify-between p-3 sm:p-4 border-b border-gray-100 hover:bg-gray-50 transition duration-150">
+                <div class="flex-1 min-w-0">
+                    <p class="font-bold text-gray-900 text-xs sm:text-sm truncate">
+                        #${order.id.slice(-6).toUpperCase()}
+                    </p>
+                    <p class="text-[10px] sm:text-xs text-gray-500 mt-0.5">
+                        ${new Date(order.date).toLocaleDateString()}
+                    </p>
                 </div>
-                
-                <div class="flex items-center w-full sm:w-auto justify-between sm:justify-end gap-4">
-                    <div class="text-right mr-2">
-                        <p class="font-bold text-gray-900">₦${order.total.toLocaleString()}</p>
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${getStatusClass(order.status)}">
+
+                <div class="flex-1 text-center px-2">
+                    <p class="font-bold text-gray-900 text-xs sm:text-sm">
+                        ₦${order.total.toLocaleString()}
+                    </p>
+                    <div class="mt-1">
+                        <span class="inline-block px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${getStatusClass(order.status)}">
                             ${order.status}
                         </span>
                     </div>
-                    
+                </div>
+
+                <div class="flex-none ml-2 sm:ml-4">
                     <a href="order-details.html?id=${order.id}" 
-                       class="px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-ash-red hover:text-white hover:border-ash-red transition-all duration-200 flex items-center">
-                        View <i class="fas fa-chevron-right ml-2 text-xs"></i>
+                       class="inline-flex items-center px-3 py-1.5 sm:px-4 sm:py-2 bg-white border border-gray-200 text-gray-700 text-[10px] sm:text-xs font-semibold rounded-md hover:bg-ash-red hover:text-white hover:border-ash-red transition-all duration-200 shadow-sm">
+                        View <i class="fas fa-chevron-right ml-1.5 text-[8px]"></i>
                     </a>
                 </div>
             </div>
@@ -268,7 +276,7 @@ async function fetchUserData() {
 
     } catch (error) {
         console.error("Order history error:", error);
-        listContainer.innerHTML = '<p class="text-red-500 text-center py-4">Failed to load orders.</p>';
+        listContainer.innerHTML = '<p class="text-red-500 text-center py-4 text-xs">Failed to load orders.</p>';
     }
 }
 
