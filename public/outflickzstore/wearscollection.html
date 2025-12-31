@@ -928,7 +928,17 @@ function standardizeStockData(productData) {
 
 
 function openProductQuickView(jsonPayload) {
-    const product = JSON.parse(jsonPayload);
+    let product;
+    try {
+        // Decode the Base64 string passed from the product card
+        const jsonString = decodeURIComponent(escape(atob(jsonPayload)));
+        product = JSON.parse(jsonString);
+    } catch (e) {
+        console.error("Error parsing product data:", e);
+        // Fallback: If it's not base64, try parsing it directly as a string
+        try { product = JSON.parse(jsonPayload); } catch(i) { return; }
+    }
+
     const collectionType = product.collectionType || product.category || 'Wears';
     const isCap = collectionType.toLowerCase().includes('cap');
 
@@ -936,12 +946,13 @@ function openProductQuickView(jsonPayload) {
     if (!window.selectedSizes) window.selectedSizes = {};
     
     let initialSize = null;
-    let initialMax = 1;
+    let initialMax = 0; // Start at 0
 
     if (isCap) {
         initialSize = 'One Size';
         window.selectedSizes[product._id] = initialSize;
-        initialMax = (product.variations && product.variations[0].stock) || 1;
+        // Check variations[0] for caps
+        initialMax = (product.variants && product.variants[0]?.stock) || (product.variations && product.variations[0]?.stock) || 0;
     } else if (product.sizeStockMap) {
         initialSize = Object.keys(product.sizeStockMap).find(s => product.sizeStockMap[s] > 0);
         if (initialSize) {
@@ -950,80 +961,70 @@ function openProductQuickView(jsonPayload) {
         }
     }
 
+    // Modal UI Generation...
     const existingModal = document.getElementById('quick-view-modal');
     if (existingModal) existingModal.remove();
 
     const modalOverlay = document.createElement('div');
     modalOverlay.id = 'quick-view-modal';
-    modalOverlay.className = 'fixed inset-0 z-[1000] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm transition-opacity duration-300';
+    modalOverlay.className = 'fixed inset-0 z-[1000] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm';
     
     const formattedPrice = product.price.toLocaleString('en-US');
     const description = product.description || "No description available for this premium item.";
-    
-    // Check if back image exists
     const hasBackImage = product.backImageUrl && product.backImageUrl.trim() !== "";
 
     modalOverlay.innerHTML = `
-        <div class="bg-white w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl relative animate-in fade-in zoom-in duration-300">
+        <div class="bg-white w-full max-w-5xl max-h-[95vh] overflow-y-auto rounded-xl shadow-2xl relative animate-in fade-in zoom-in duration-300">
             <button onclick="closeQuickView()" class="absolute top-3 right-3 z-[1050] bg-white/80 rounded-full p-2.5 shadow-md hover:bg-gray-100 transition active:scale-90">
                 <i class="fas fa-times text-lg text-gray-800"></i>
             </button>
 
             <div class="grid grid-cols-1 md:grid-cols-2 h-full">
-                <div class="bg-[#f9f9f9] flex flex-col items-center justify-center relative min-h-[350px] md:min-h-[500px] border-b md:border-b-0 md:border-r border-gray-100 p-4">
-                    <div class="w-full h-full flex items-center justify-center overflow-hidden">
-                        <img id="modal-main-image" src="${product.frontImageUrl}" class="max-w-full max-h-[300px] md:max-h-[450px] object-contain transition-all duration-500 transform">
-                    </div>
-
+                <div class="bg-[#f9f9f9] flex flex-col items-center justify-center relative min-h-[350px] p-4">
+                    <img id="modal-main-image" src="${product.frontImageUrl}" class="max-w-full max-h-[450px] object-contain transition-all duration-500">
+                    
                     ${hasBackImage ? `
                     <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-3 z-10">
-                        <button onclick="updateModalImage('${product.frontImageUrl}', this)" class="w-12 h-12 border-2 border-black rounded-md overflow-hidden bg-white shadow-sm transition-all thumb-btn active-thumb">
+                        <button onclick="updateModalImage('${product.frontImageUrl}', this)" class="w-12 h-12 border-2 border-black rounded-md overflow-hidden bg-white thumb-btn">
                             <img src="${product.frontImageUrl}" class="w-full h-full object-cover">
                         </button>
-                        <button onclick="updateModalImage('${product.backImageUrl}', this)" class="w-12 h-12 border-2 border-transparent rounded-md overflow-hidden bg-white shadow-sm transition-all thumb-btn">
+                        <button onclick="updateModalImage('${product.backImageUrl}', this)" class="w-12 h-12 border-2 border-transparent rounded-md overflow-hidden bg-white thumb-btn">
                             <img src="${product.backImageUrl}" class="w-full h-full object-cover">
                         </button>
-                    </div>
-                    ` : ''}
+                    </div>` : ''}
                 </div>
 
                 <div class="p-6 sm:p-10 flex flex-col justify-between bg-white">
                     <div>
-                        <div class="flex items-center gap-2 mb-2">
-                            <span class="w-8 h-[1px] bg-red-600"></span>
-                            <span class="text-[0.65rem] font-black text-red-600 uppercase tracking-widest">Outflickz Exclusive</span>
-                        </div>
                         <h2 class="text-2xl sm:text-3xl font-black text-gray-900 uppercase">${product.name}</h2>
                         <p class="text-2xl font-bold text-gray-900 mt-2">₦${formattedPrice}</p>
                         
                         <div class="mt-4 mb-6">
-                             <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-2">Description</span>
+                             <span class="text-[0.7rem] font-bold text-gray-900 uppercase block mb-2">Description</span>
                              <p class="text-sm font-bold leading-relaxed" style="color: #4B5320;">${description}</p>
                         </div>
 
-                        <div class="h-px bg-gray-100 my-6"></div>
-
                         <div class="space-y-6">
                             <div>
-                                <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-3">Colorways</span>
+                                <span class="text-[0.7rem] font-bold text-gray-900 uppercase block mb-3">Colorways</span>
                                 <div class="flex flex-wrap gap-2">
                                     ${createColorList(product._id, product.variants || product.variations)}
                                 </div>
                             </div>
 
                             <div class="${isCap ? 'hidden' : ''}">
-                                <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-3">Select Size</span>
+                                <span class="text-[0.7rem] font-bold text-gray-900 uppercase block mb-3">Select Size</span>
                                 <div class="flex flex-wrap gap-2">
                                     ${createSizeList(product._id, product.sizeStockMap, false)}
                                 </div>
                             </div>
 
                             <div>
-                                <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-3">Quantity</span>
+                                <span class="text-[0.7rem] font-bold text-gray-900 uppercase block mb-3">Quantity</span>
                                 <div class="flex items-center border border-gray-200 w-fit rounded-lg overflow-hidden">
-                                    <button onclick="this.parentNode.querySelector('input').stepDown()" class="px-4 py-2 hover:bg-gray-50 transition">-</button>
-                                    <input type="number" id="modal-qty-${product._id}" value="1" min="1" max="${initialMax}" class="w-12 text-center font-bold text-sm focus:outline-none [appearance:textfield]">
-                                    <button onclick="this.parentNode.querySelector('input').stepUp()" class="px-4 py-2 hover:bg-gray-50 transition">+</button>
+                                    <button onclick="const input = this.parentNode.querySelector('input'); if(input.value > 1) input.stepDown()" class="px-4 py-2 hover:bg-gray-50">-</button>
+                                    <input type="number" id="modal-qty-${product._id}" value="1" min="1" max="${initialMax}" class="w-12 text-center font-bold text-sm focus:outline-none">
+                                    <button onclick="const input = this.parentNode.querySelector('input'); if(input.value < ${initialMax}) input.stepUp()" class="px-4 py-2 hover:bg-gray-50">+</button>
                                 </div>
                             </div>
                         </div>
@@ -1031,7 +1032,7 @@ function openProductQuickView(jsonPayload) {
 
                     <div class="mt-10">
                         <button onclick="handleModalAddToCart('${product._id}', '${collectionType}')" 
-                                class="w-full bg-black text-white py-4 rounded-md font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all flex items-center justify-center gap-3 active:scale-[0.97] shadow-lg shadow-black/10">
+                                class="w-full bg-black text-white py-4 rounded-md font-bold uppercase hover:bg-zinc-800 transition-all flex items-center justify-center gap-3 active:scale-[0.97]">
                             <i class="fas fa-shopping-bag text-sm"></i> Add to Bag
                         </button>
                     </div>
@@ -1262,6 +1263,7 @@ async function fetchAndRenderAllWearsCollections() {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
+            credentials: 'include'
             }
         });
 
