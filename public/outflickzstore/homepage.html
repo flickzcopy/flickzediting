@@ -1201,25 +1201,25 @@ function standardizeStockData(productData) {
 function openProductQuickView(jsonPayload) {
     const product = JSON.parse(jsonPayload);
     const collectionType = product.collectionType || product.category || 'Wears';
-    const isCaps = collectionType.toLowerCase().includes('caps');
+    const isCap = collectionType.toLowerCase().includes('caps');
 
-    // --- 🎯 ROBUST STOCK CALCULATION ---
+    // --- 🎯 IMPROVED STOCK CALCULATION ---
     let totalStock = 0;
 
-    // 1. Check variations (Primary for Caps)
-    if (product.variations && Array.isArray(product.variations) && product.variations.length > 0) {
-        totalStock = product.variations.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+    // 1. Check direct availableStock property
+    if (product.availableStock !== undefined && product.availableStock !== null) {
+        totalStock = Number(product.availableStock);
     } 
     // 2. Check sizeStockMap (Standard for Wears)
     else if (product.sizeStockMap) {
-        totalStock = Object.values(product.sizeStockMap).reduce((sum, val) => sum + (Number(val) || 0), 0);
+        totalStock = Object.values(product.sizeStockMap).reduce((sum, val) => sum + Number(val), 0);
     }
-    // 3. Fallback to direct availableStock
-    else if (product.availableStock !== undefined) {
-        totalStock = Number(product.availableStock);
+    // 3. Check variations (Standard for Caps)
+    else if (product.variations && Array.isArray(product.variations)) {
+        totalStock = product.variations.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
     }
 
-    // Determine state based on calculated sum
+    // 🎯 CRITICAL FIX: Ensure isOutOfStock is strictly based on calculated totalStock
     const isOutOfStock = totalStock <= 0;
 
     // Reset and initialize global state
@@ -1228,12 +1228,12 @@ function openProductQuickView(jsonPayload) {
     let initialSize = null;
     let initialMax = 1;
 
-    // --- 🎯 AUTO-INITIALIZE "ONE SIZE" FOR CAPS ---
-    if (!isOutOfStock) {
+    // Logic to select the first available size/stock
+   if (!isOutOfStock) {
         if (isCap) {
             initialSize = 'One Size';
             window.selectedSizes[product._id] = initialSize;
-            // Set max quantity based on the first variation's stock
+            // Get stock from the first variation for the cap
             initialMax = (product.variations && product.variations[0].stock) ? Number(product.variations[0].stock) : 1;
         } else if (product.sizeStockMap) {
             initialSize = Object.keys(product.sizeStockMap).find(s => Number(product.sizeStockMap[s]) > 0);
