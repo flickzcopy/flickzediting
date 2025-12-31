@@ -568,10 +568,13 @@ async function simulateAddToCart(productDetails) {
     
     // Size logic: Use 'O/S' for caps, otherwise use the radio value, otherwise fallback to details
     let size = 'N/A';
+    let variationIndex = 0; // ⭐ DEFAULT TO 0
+
     if (isCap) {
         size = 'O/S';
     } else if (selectedSizeInput) {
         size = selectedSizeInput.value;
+        variationIndex = parseInt(selectedSizeInput.getAttribute('data-index')) || 0;
     } else if (productDetails.size) {
         size = productDetails.size;
     }
@@ -613,7 +616,8 @@ async function simulateAddToCart(productDetails) {
         size: size,
         color: color,
         imageUrl: selectedImageUrl,
-        variation: `${color} / ${size}`
+        variation: `${color} / ${size}`,
+        variationIndex: variationIndex // ⭐ ADD THIS LINE
     };
 
     // 7. EXECUTION (API vs Local)
@@ -1061,6 +1065,7 @@ function createCollectionCard(collection, size = 'default') {
         </div>
     `;
 }
+
 function createSizeList(collectionId, sizeStockMap, isReduced = false) {
     if (!sizeStockMap) {
         return `<span class="text-xs font-medium text-gray-400">N/A</span>`;
@@ -1104,12 +1109,14 @@ function createSizeList(collectionId, sizeStockMap, isReduced = false) {
                 name="${groupName}" 
                 value="${size}" 
                 data-stock="${sizeStockMap[size]}" 
+                data-index="${index}" 
                 class="hidden" 
                 onchange="
                     if(!window.selectedSizes) window.selectedSizes = {};
-                    window.selectedSizes['${collectionId}'] = this.value;
-                    updateMaxQuantity('${collectionId}', this.value);
-                "
+    window.selectedSizes['${collectionId}'] = this.value;
+    updateMaxQuantity('${collectionId}', this.value); // Updates main grid
+    updateModalMaxQuantity('${collectionId}', this.value); // ⭐ ADD THIS LINE FOR THE MODAL
+"
                 ${index === 0 ? 'checked' : ''} 
             >
             <span class="${sizeClasses}">${size}</span>
@@ -1240,7 +1247,7 @@ function openProductQuickView(jsonPayload) {
                                 <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-3">Quantity</span>
                                 <div class="flex items-center border border-gray-200 w-fit rounded-lg overflow-hidden">
                                     <button onclick="this.parentNode.querySelector('input').stepDown()" class="px-4 py-2 hover:bg-gray-50 transition">-</button>
-                                    <input type="number" id="modal-qty-${product._id}" value="1" min="1" max="10" class="w-12 text-center font-bold text-sm focus:outline-none [appearance:textfield]">
+                                    <input type="number" id="modal-qty-${product._id}" value="1" min="1" max="${initialMax}"  <-- ⭐ Dynamically set initial max class="w-12 text-center font-bold text-sm focus:outline-none [appearance:textfield]">
                                     <button onclick="this.parentNode.querySelector('input').stepUp()" class="px-4 py-2 hover:bg-gray-50 transition">+</button>
                                 </div>
                             </div>
@@ -1272,6 +1279,7 @@ function closeQuickView() {
         }, 300);
     }
 }
+
 function handleModalAddToCart(productId, productType) {
     const modal = document.getElementById('quick-view-modal');
     if (!modal) return;
@@ -1280,9 +1288,11 @@ function handleModalAddToCart(productId, productType) {
     
     // 1. SIZE RETRIEVAL
     let selectedSize = null;
+    let variationIndex = 0; // Default for caps/one-size
     const checkedSizeRadio = modal.querySelector(`input[name="size-${productId}"]:checked`);
     if (checkedSizeRadio) {
         selectedSize = checkedSizeRadio.value;
+        variationIndex = parseInt(checkedSizeRadio.getAttribute('data-index')) || 0;
     } else if (window.selectedSizes && window.selectedSizes[productId]) {
         selectedSize = window.selectedSizes[productId];
     }
@@ -1316,7 +1326,8 @@ function handleModalAddToCart(productId, productType) {
         size: isCap ? "One Size" : selectedSize,
         color: selectedColor,
         imageUrl: imageUrl,
-        productType: productType
+        productType: productType,
+        variationIndex: variationIndex // ⭐ ADD THIS LINE
     };
 
     console.log("🚀 Submitting to simulateAddToCart:", itemData);
@@ -1346,6 +1357,27 @@ function handleModalAddToCart(productId, productType) {
         }
     } else {
         console.error("simulateAddToCart function not found!");
+    }
+}
+
+function updateModalMaxQuantity(productId, selectedSize) {
+    const modal = document.getElementById('quick-view-modal');
+    if (!modal) return;
+
+    // Find the radio button for the selected size to get its stock data
+    const sizeInput = modal.querySelector(`input[name="size-${productId}"][value="${selectedSize}"]`);
+    const qtyInput = document.getElementById(`modal-qty-${productId}`);
+
+    if (sizeInput && qtyInput) {
+        const stock = parseInt(sizeInput.getAttribute('data-stock')) || 0;
+        qtyInput.max = stock; // Set the HTML max attribute
+        
+        // If the current value is already higher than the new stock, bring it down
+        if (parseInt(qtyInput.value) > stock) {
+            qtyInput.value = stock;
+        }
+        
+        console.log(`[Inventory] Max quantity for ${selectedSize} updated to: ${stock}`);
     }
 }
 
