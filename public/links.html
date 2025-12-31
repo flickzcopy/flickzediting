@@ -7,48 +7,60 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="icon" type="image/png" href="https://i.imgur.com/ioWFyQB.png">
-
+    <style>
+        /* Custom smooth transition for the glass effect */
+        .link-card {
+            backdrop-filter: blur(5px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    </style>
 </head>
-<body class="bg-black text-white font-sans">
+<body class="bg-black text-white font-sans antialiased">
 
-    <div class="flex flex-col items-center justify-center min-h-screen p-6">
-        <div class="text-center mb-10">
-            <h1 class="text-3xl font-black tracking-tighter uppercase italic">Outflickz</h1>
-            <p class="text-gray-400 text-xs tracking-widest uppercase mt-2">Streetwear & Lifestyle</p>
+    <div class="flex flex-col items-center justify-center min-h-screen p-4 sm:p-8 lg:p-12">
+        
+        <div class="text-center mb-8 md:mb-12">
+            <div class="flex justify-center mb-4">
+                <img src="https://i.imgur.com/ioWFyQB.png" alt="Outflickz Logo" class="w-20 h-20 md:w-28 md:h-28 object-contain rounded-full border-2 border-white/10 p-1">
+            </div>
+            <h1 class="text-3xl md:text-5xl font-black tracking-tighter uppercase italic">Outflickz</h1>
+            <p class="text-gray-400 text-[0.6rem] md:text-xs tracking-[0.3em] uppercase mt-2">Streetwear & Lifestyle Collective</p>
         </div>
 
-        <div class="w-full max-w-sm space-y-4">
+        <div class="w-full max-w-md md:max-w-lg space-y-4">
             
-            <a href="https://outflickz.com" class="flex items-center justify-between w-full p-4 border border-white/20 rounded-lg hover:bg-white hover:text-black transition-all group">
-                <span class="font-bold uppercase tracking-widest">Official Website</span>
-                <i class="fas fa-globe group-hover:scale-110"></i>
+            <a href="https://outflickz.com" class="link-card flex items-center justify-between w-full p-4 md:p-5 border border-white/20 rounded-xl hover:bg-white hover:text-black group">
+                <span class="font-bold uppercase tracking-widest text-sm md:text-base">Official Website</span>
+                <i class="fas fa-globe text-lg group-hover:scale-110"></i>
             </a>
 
-            <a href="https://www.instagram.com/outflickz01?igsh=Yzl3d3BjaGt5djll" class="flex items-center justify-between w-full p-4 border border-white/20 rounded-lg hover:bg-white hover:text-black transition-all group">
-                <span class="font-bold uppercase tracking-widest">Instagram</span>
-                <i class="fab fa-instagram group-hover:scale-110"></i>
+            <a href="https://www.instagram.com/outflickz01?igsh=Yzl3d3BjaGt5djll" class="link-card flex items-center justify-between w-full p-4 md:p-5 border border-white/20 rounded-xl hover:bg-gradient-to-tr hover:from-[#f9ce34] hover:via-[#ee2a7b] hover:to-[#6228d7] hover:text-white group">
+                <span class="font-bold uppercase tracking-widest text-sm md:text-base">Instagram</span>
+                <i class="fab fa-instagram text-lg group-hover:scale-110"></i>
             </a>
-            <a href="https://www.facebook.com/profile.php?id=61584421929170" class="flex items-center justify-between w-full p-4 rounded-xl glass-effect hover:bg-[#1877F2] hover:text-white transition-all duration-300 group">
-                <span class="font-bold uppercase tracking-widest text-sm">Facebook</span>
+
+            <a href="https://www.facebook.com/profile.php?id=61584421929170" class="link-card flex items-center justify-between w-full p-4 md:p-5 border border-white/20 rounded-xl hover:bg-[#1877F2] hover:text-white group">
+                <span class="font-bold uppercase tracking-widest text-sm md:text-base">Facebook</span>
                 <i class="fab fa-facebook text-lg group-hover:scale-110"></i>
             </a>
 
-            <a href="https://www.tiktok.com/@outflickz?_r=1&_t=ZS-92AInaYzuTt"class="flex items-center justify-between w-full p-4 border border-white/20 rounded-lg hover:bg-white hover:text-black transition-all group">
-                <span class="font-bold uppercase tracking-widest">TikTok</span>
-                <i class="fab fa-tiktok group-hover:scale-110"></i>
+            <a href="https://www.tiktok.com/@outflickz?_r=1&_t=ZS-92AInaYzuTt" class="link-card flex items-center justify-between w-full p-4 md:p-5 border border-white/20 rounded-xl hover:bg-white hover:text-black group">
+                <span class="font-bold uppercase tracking-widest text-sm md:text-base">TikTok</span>
+                <i class="fab fa-tiktok text-lg group-hover:scale-110"></i>
             </a>
 
-            <a href="https://wa.me/2347042882706?text=HELLO%20OUTFLICKZ!%20My%20name%20is%20..."class="flex items-center justify-between w-full p-4 bg-green-600 rounded-lg hover:bg-green-500 transition-all group border border-green-600">
-                <span class="font-bold uppercase tracking-widest">WhatsApp Support</span>
-                <i class="fab fa-whatsapp group-hover:scale-110 text-xl"></i>
+            <a href="https://wa.me/2347042882706?text=HELLO%20OUTFLICKZ!%20My%20name%20is%20..." class="flex items-center justify-between w-full p-4 md:p-5 bg-green-600 rounded-xl hover:bg-green-500 transition-all group border border-green-600 shadow-lg shadow-green-900/20">
+                <span class="font-bold uppercase tracking-widest text-sm md:text-base">WhatsApp Support</span>
+                <i class="fab fa-whatsapp group-hover:scale-110 text-xl md:text-2xl"></i>
             </a>
 
         </div>
 
-        <p class="mt-12 text-[0.6rem] text-gray-500 uppercase tracking-widest">© 2025 Outflickz Collective</p>
+        <footer class="mt-12 md:mt-20 text-center">
+            <p class="text-[0.6rem] md:text-[0.7rem] text-gray-500 uppercase tracking-[0.4em] mb-2">Designed for the Bold</p>
+            <p class="text-[0.5rem] md:text-[0.6rem] text-gray-600 uppercase tracking-widest">© 2025 Outflickz Collective</p>
+        </footer>
     </div>
 
 </body>
 </html>
-
- 
