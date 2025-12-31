@@ -1018,17 +1018,16 @@ async function sendAdminOrderNotification(orderId, paymentMethod, receiptUrl = n
     const shippingData = localStorage.getItem('outflickzShippingData');
     const orderItems = localStorage.getItem('outflickzOrderItems');
 
-    // 3. Construct the payload matching the Backend's expected structure
     const notificationPayload = {
         orderId: orderId,
         totalAmount: orderTotal,
-        subtotal: subtotal,         // Added for price breakdown
-        shippingFee: shippingFee,   // Added for price breakdown
-        tax: tax,                   // Added for price breakdown
+        subtotal: subtotal,         
+        shippingFee: shippingFee,  
+        tax: tax,                   
         paymentMethod: paymentMethod,
         shippingDetails: JSON.parse(shippingData || '{}'),
         items: JSON.parse(orderItems || '[]'),
-        adminEmail: typeof DEFAULT_ADMIN_EMAIL !== 'undefined' ? DEFAULT_ADMIN_EMAIL : 'admin@outflickz.com',
+        adminEmail: typeof DEFAULT_ADMIN_EMAIL !== 'undefined' ? DEFAULT_ADMIN_EMAIL : 'outflickzlimited@gmail.com',
         paymentReceiptUrl: receiptUrl 
     };
 
