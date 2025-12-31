@@ -6451,7 +6451,7 @@ app.get('/api/orders/verify/:reference', async (req, res) => {
                 { orderReference: reference },
                 { 
                     paymentStatus: 'Paid', 
-                    status: 'Processing', // Note: status is 'Processing', your function handles 'Confirmed'/'Completed'
+                    status: 'Processing', 
                     amountPaidKobo: data.data.amount,
                     isPaystackPending: false,
                     paidAt: new Date()
@@ -6460,15 +6460,11 @@ app.get('/api/orders/verify/:reference', async (req, res) => {
             );
 
             if (updated) {
-                // ⭐ CORRECTED: Pass Email AND Order Object
-                const targetEmail = updated.guestEmail || updated.shippingAddress?.email;
+                // ⭐ REMOVED the crashing call to frontend helper
+                // The frontend verifyPayment() function will now trigger the notification 
+                // using the frontend helper after it receives this 200 response.
                 
-                try {
-                    await  sendAdminOrderNotification(targetEmail, updated);
-                    console.log("✅ Admin Notified via Verify Route");
-                } catch (emailErr) {
-                    console.error("❌ Admin Email Error (Verify Route):", emailErr);
-                }
+                console.log("✅ Order updated to Paid in DB");
 
                 return res.status(200).json({ 
                     message: 'Verified', 
@@ -6480,6 +6476,7 @@ app.get('/api/orders/verify/:reference', async (req, res) => {
         res.status(400).json({ message: 'Payment verification failed' });
     } catch (error) {
         console.error("Verify Error:", error);
+        // Ensure we send JSON even on error so the frontend doesn't see "E"
         res.status(500).json({ message: "Internal Server Error" });
     }
 });
