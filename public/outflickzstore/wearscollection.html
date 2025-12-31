@@ -928,16 +928,8 @@ function standardizeStockData(productData) {
 
 
 function openProductQuickView(jsonPayload) {
-
-let product;
-    try {
-const jsonString = decodeURIComponent(escape(atob(jsonPayload)));
-        product = JSON.parse(jsonString);
-    } catch (e) {
-        console.error("Error parsing product data:", e);
-        return;
-    }
-        const collectionType = product.collectionType || product.category || 'Wears';
+    const product = JSON.parse(jsonPayload);
+    const collectionType = product.collectionType || product.category || 'Wears';
     const isCap = collectionType.toLowerCase().includes('cap');
 
     // Reset and initialize global state
