@@ -793,11 +793,13 @@ function createCollectionCard(collection, size = 'default') {
                     <img class="w-full h-full object-cover absolute transition-opacity duration-300 active" id="front-image-${collection._id}" src="${frontImageUrl}" alt="${collection.name}">
                     <img class="w-full h-full object-cover absolute transition-opacity duration-300" id="back-image-${collection._id}" src="${backImageUrl}" style="opacity: 0;">
                 </div>
-                <div class="absolute inset-0 bg-black bg-opacity-10 opacity-0 hover:opacity-100 transition flex items-end justify-center p-3">
-                    <button onclick="event.stopPropagation(); toggleImage('${collection._id}')" class="bg-white text-ash-dark text-[0.6rem] sm:text-xs font-semibold py-1 px-3 rounded-full shadow-md">
-                        <i class="fas fa-sync-alt"></i> Back View
-                    </button>
-                </div>
+               <div class="absolute inset-0 bg-black bg-opacity-10 opacity-0 hover:opacity-100 transition flex items-end justify-center p-3">
+    <button id="toggle-btn-${collection._id}" 
+            onclick="event.stopPropagation(); toggleImage('${collection._id}')" 
+            class="bg-white text-ash-dark text-[0.6rem] sm:text-xs font-semibold py-1 px-3 rounded-full shadow-md">
+        <i class="fas fa-sync-alt"></i> Back View
+    </button>
+</div>
             </div>
 
             <div class="${cardPadding} flex flex-col flex-grow">
@@ -1321,6 +1323,29 @@ async function fetchAndRenderAllWearsCollections() {
         container.innerHTML = '<p class="col-span-full text-center text-red-600 py-10 w-full font-semibold">Error: Could not connect to API server (502/Down).</p>';
     }
 }
+
+window.toggleImage = function(id) {
+    const frontImg = document.getElementById(`front-image-${id}`);
+    const backImg = document.getElementById(`back-image-${id}`);
+    const btn = document.getElementById(`toggle-btn-${id}`);
+
+    if (!frontImg || !backImg) {
+        console.error("Images not found for ID:", id);
+        return;
+    }
+
+    if (frontImg.style.opacity === '0') {
+        // Show Front
+        frontImg.style.opacity = '1';
+        backImg.style.opacity = '0';
+        if (btn) btn.innerHTML = '<i class="fas fa-sync-alt"></i> Back View';
+    } else {
+        // Show Back
+        frontImg.style.opacity = '0';
+        backImg.style.opacity = '1';
+        if (btn) btn.innerHTML = '<i class="fas fa-sync-alt"></i> Front View';
+    }
+};
 
  document.addEventListener('DOMContentLoaded', () => {
     
