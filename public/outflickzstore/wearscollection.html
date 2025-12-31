@@ -1241,7 +1241,7 @@ async function fetchAndRenderAllWearsCollections() {
     const container = document.getElementById('full-wears-collections-grid');
     if (!container) return;
 
-    const spinnerColor = 'text-gray-900';
+     const spinnerColor = 'text-gray-900';
     const textColor = 'text-gray-700';
 
     container.innerHTML = `
@@ -1253,8 +1253,9 @@ async function fetchAndRenderAllWearsCollections() {
             Loading Wears Collections...
         </div>`;
 
-    try {
+      try {
         // NOTE: Replace this with your actual API endpoint for wears collections
+        // For demonstration, we'll assume the API provides data based on the schema you provided.
         const wearsApiUrl = `${API_BASE_URL}/api/collections/wears`; 
 
         const response = await fetch(wearsApiUrl, {
@@ -1276,9 +1277,6 @@ async function fetchAndRenderAllWearsCollections() {
         let collectionsToRender = collections && collections.length > 0 ? collections : [];
 
         if (collectionsToRender && collectionsToRender.length > 0) {
-            
-            // --- LIMITATION REMOVED ---
-            // const limitedCollections = collectionsToRender.slice(0, 4); <-- REMOVED
             
             collectionsToRender.forEach(collection => {
                 if (collection.price !== undefined && collection.price !== null) {
@@ -1317,7 +1315,6 @@ async function fetchAndRenderAllWearsCollections() {
         }
     });
 });
-
 </script>                 
 
 
@@ -1396,9 +1393,6 @@ async function fetchAndRenderAllWearsCollections() {
             
             </div>
     </section>
-
-
-
     <footer class="bg-black text-gray-300 py-6 sm:py-14 border-t border-gray-800 mt-12">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-8">
