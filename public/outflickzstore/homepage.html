@@ -781,31 +781,51 @@ function updateMaxQuantity(collectionId, selectedSize) {
         console.log(`[STOCK UPDATE] Product ${collectionId}: Max quantity set to ${newMaxStock} for size ${selectedSize}.`);
     }
 }
-
-// --- NEW FUNCTION TO HANDLE IMAGE SWITCHING (Uses Color Hex/Code as Identifier) ---
 function changeVariantImage(collectionId, colorHex) {
-    const card = document.querySelector(`.collection-card[data-collection-id="${collectionId}"]`);
-    if (!card) return;
+    // 1. Try to find the image inside the Quick View Modal first
+    const modal = document.getElementById('quick-view-modal');
+    const isModalContext = modal && modal.contains(event?.target);
 
-    const colorMapContainer = card.querySelector(`#color-map-${collectionId}`);
+    let container;
+    let frontImg, backImg;
+
+    if (isModalContext) {
+        container = modal;
+        // In the modal, we use a generic ID for the main display image
+        frontImg = modal.querySelector('#modal-main-image');
+        // If you have a secondary image in modal, you can target it here
+    } else {
+        // 2. Fallback to the Collection Card grid
+        container = document.querySelector(`.collection-card[data-collection-id="${collectionId}"]`);
+        if (container) {
+            frontImg = container.querySelector(`#front-image-${collectionId}`);
+            backImg = container.querySelector(`#back-image-${collectionId}`);
+        }
+    }
+
+    if (!container) return;
+
+    // 3. Extract the Image Map
+    const colorMapContainer = container.querySelector(`#color-map-${collectionId}`);
     if (!colorMapContainer) return;
     
-    // Parse the stored map from the data attribute. This map now stores an object {frontImageUrl, backImageUrl}
-    const colorMap = JSON.parse(colorMapContainer.getAttribute('data-color-map'));
-    const newImageUrls = colorMap[colorHex];
+    try {
+        const colorMap = JSON.parse(colorMapContainer.getAttribute('data-color-map'));
+        const newImageUrls = colorMap[colorHex];
 
-    if (newImageUrls) {
-        const frontImageElement = card.querySelector(`#front-image-${collectionId}`);
-        const backImageElement = card.querySelector(`#back-image-${collectionId}`);
-
-        // Update Front Image
-        if (frontImageElement) {
-            frontImageElement.src = newImageUrls.frontImageUrl;
+        if (newImageUrls) {
+            // Apply updates with a slight fade for a premium feel
+            if (frontImg) {
+                frontImg.style.opacity = '0.4'; // Quick dip in opacity
+                frontImg.src = newImageUrls.frontImageUrl;
+                setTimeout(() => frontImg.style.opacity = '1', 100);
+            }
+            if (backImg && newImageUrls.backImageUrl) {
+                backImg.src = newImageUrls.backImageUrl;
+            }
         }
-            // Update Back Image
-        if (backImageElement) {
-            backImageElement.src = newImageUrls.backImageUrl;
-        }
+    } catch (e) {
+        console.error("Image swap failed:", e);
     }
 }
 
@@ -831,50 +851,49 @@ function toggleImage(collectionId) {
         toggleButton.title = "Show Back View";
     }
 }
-
 // --- UTILITY FOR COLOR LIST (Stock-Aware) ---
 function createColorList(collectionId, variants) {
-    // 1. Initial Safety Check
-    // 'variants' now only includes colors with total stock > 0 (filtered by backend)
     if (!variants || variants.length === 0) return '';
     
-    // NOTE: The previous 'pre-order' filter is removed because the backend should 
-    // already ensure that every variant passed here is intended to be displayed.
     const coloredVariants = variants; 
 
-    // If there are no colored variants, return empty.
-    if (coloredVariants.length === 0) return ''; 
-
-    // 2. Create a map for the image switching logic
+    // 1. Create the color map for image switching
     const colorMap = coloredVariants.reduce((acc, v) => {
-        // We only map the necessary image URLs
         acc[v.color] = { frontImageUrl: v.frontImageUrl, backImageUrl: v.backImageUrl };
         return acc;
     }, {});
 
-    // 3. Store the map in the DOM
+    // 2. Store the map in the DOM
     const mapHtml = `<div id="color-map-${collectionId}" data-color-map='${JSON.stringify(colorMap)}' class="hidden"></div>`;
 
-    // 4. Generate the color swatch buttons
+    // 3. Generate Swatches
     const buttonsHtml = coloredVariants.map((variant, index) => {
         const colorHex = variant.color; 
         const style = `background-color: ${colorHex};`;
         const safeColor = String(colorHex).toUpperCase(); 
         
-        const extraClass = (safeColor === '#FFFFFF' || safeColor === '#FFF') ? 'border-gray-400' : 'border-gray-200';
+        // Logic for white/light color borders
+        const isWhite = (safeColor === '#FFFFFF' || safeColor === '#FFF' || safeColor === 'WHITE');
+        const extraClass = isWhite ? 'border-gray-300' : 'border-transparent';
         
+        // ⭐ THE FIX: Ensure index 0 color is recorded immediately for the modal logic
+        if (index === 0) {
+            // This ensures handleModalAddToCart sees a color even if user doesn't click
+            console.log(`[COLOR] Auto-selected default color for ${collectionId}: ${colorHex}`);
+        }
+
         return `
-            <label for="color-${collectionId}-${colorHex}" class="color-label cursor-pointer p-[1px] rounded-full border border-transparent hover:border-ash-red transition-all has-[:checked]:border-ash-red">
+            <label for="color-${collectionId}-${index}" class="color-label cursor-pointer p-[2px] rounded-full border-2 border-transparent hover:border-gray-400 transition-all has-[:checked]:border-ash-dark shadow-sm">
                 <input 
                     type="radio" 
-                    id="color-${collectionId}-${colorHex}" 
+                    id="color-${collectionId}-${index}" 
                     name="color-${collectionId}" 
                     value="${colorHex}" 
                     class="hidden" 
                     onchange="changeVariantImage('${collectionId}', this.value)" 
                     ${index === 0 ? 'checked' : ''}
                 >
-                <span class="block w-4 h-4 rounded-full border ${extraClass}" style="${style}"></span>
+                <span class="block w-5 h-5 md:w-6 md:h-6 rounded-full border ${extraClass}" style="${style}"></span>
             </label>
         `;
     }).join('');
@@ -1032,46 +1051,37 @@ function createCollectionCard(collection, size = 'default') {
         </div>
     `;
 }
-
-// Function to DELETE (The block-style version)
-/**
- * Generates the HTML for the size selection options within the collection card.
- * CRITICAL FIX: Filters out sizes that have zero or less stock.
- * @param {string} collectionId The unique ID of the collection.
- * @param {Object} sizeStockMap A map of {Size: StockCount} received from the backend (e.g., {S: 10, M: 0, L: 5}).
- * @param {boolean} isReduced Flag for styling.
- * @returns {string} The HTML for the size buttons, or an 'N/A' span if none are in stock.
- */
 function createSizeList(collectionId, sizeStockMap, isReduced = false) {
     if (!sizeStockMap) {
         return `<span class="text-xs font-medium text-gray-400">N/A</span>`;
     }
 
-    // Standard sizes list (used for ordering or ensuring only valid sizes are processed)
     const standardSizes = ['S', 'M', 'L', 'XL'];
     
-    // 1. **FILTERING LOGIC:** Convert the map to an array and filter by stock > 0
     const sizesWithStock = Object.entries(sizeStockMap)
         .filter(([size, stock]) => 
-            // 1a. Check if the size is one of the standard sizes
             standardSizes.includes(size.toUpperCase().trim()) && 
-            // 1b. CRITICAL: Check if stock is greater than zero
             stock > 0
         )
-        // 2. Map back to just the size string for easy HTML generation
         .map(([size]) => size); 
 
     if (sizesWithStock.length === 0) {
         return `<span class="text-xs font-medium text-gray-400">N/A</span>`;
     }
 
-    const sizeClasses = isReduced 
-        ? 'text-[0.6rem] px-1.5 py-0.5' // Smaller for reduced card
-        : 'text-xs px-2 py-0.5 md:px-2 md:py-1'; // Default size
+    // ⭐ AUTO-INITIALIZE: If nothing is selected yet, set the first available size
+    // as the default in our global tracker so "Add to Cart" works immediately.
+    if (!window.selectedSizes) window.selectedSizes = {};
+    if (!window.selectedSizes[collectionId]) {
+        window.selectedSizes[collectionId] = sizesWithStock[0];
+    }
 
-    const groupName = `size-${collectionId}`; // Use the same name for all radios in this group
+    const sizeClasses = isReduced 
+        ? 'text-[0.6rem] px-1.5 py-0.5' 
+        : 'text-xs px-2 py-0.5 md:px-2 md:py-1';
+
+    const groupName = `size-${collectionId}`; 
     
-    // 3. Generate HTML using the filtered list (sizesWithStock)
     return sizesWithStock.map((size, index) => {
         const safeSize = size.toUpperCase().trim().replace(/[^A-Z0-9]/g, '');
         const inputId = `size-${collectionId}-${safeSize}`;
@@ -1087,17 +1097,16 @@ function createSizeList(collectionId, sizeStockMap, isReduced = false) {
                 class="hidden" 
                 onchange="
                     if(!window.selectedSizes) window.selectedSizes = {};
-                    window.selectedSizes['${collectionId}'] = this.value; // ⭐ THE FIX: Save selection globally
+                    window.selectedSizes['${collectionId}'] = this.value;
                     updateMaxQuantity('${collectionId}', this.value);
                 "
-                ${index === 0 ? 'checked' : ''}
+                ${index === 0 ? 'checked' : ''} 
             >
             <span class="${sizeClasses}">${size}</span>
         </label>
         `;
     }).join('');
 }
-
 
 function standardizeStockData(productData) {
     let totalAvailable = 0;
@@ -1145,18 +1154,21 @@ function standardizeStockData(productData) {
     
     return { totalAvailable, variantsData };
 }
-
 function openProductQuickView(jsonPayload) {
     const product = JSON.parse(jsonPayload);
-    
-    // ⭐ DYNAMIC COLLECTION DETECTION
     const collectionType = product.collectionType || product.category || 'Wears';
-    const isCap = collectionType === 'CapCollection';
+    const isCap = collectionType.toLowerCase().includes('cap');
 
-    // Auto-initialize global selection if it's a Cap to bypass validation
+    // Reset and initialize global state for this specific product open
+    if (!window.selectedSizes) window.selectedSizes = {};
+    
+    // If it's a cap, it's always One Size
     if (isCap) {
-        if (!window.selectedSizes) window.selectedSizes = {};
         window.selectedSizes[product._id] = 'One Size';
+    } else if (product.sizeStockMap) {
+        // Auto-select the first available size in the map
+        const firstSize = Object.keys(product.sizeStockMap).find(s => product.sizeStockMap[s] > 0);
+        if (firstSize) window.selectedSizes[product._id] = firstSize;
     }
 
     const existingModal = document.getElementById('quick-view-modal');
@@ -1167,8 +1179,6 @@ function openProductQuickView(jsonPayload) {
     modalOverlay.className = 'fixed inset-0 z-[1000] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm transition-opacity duration-300';
     
     const formattedPrice = product.price.toLocaleString('en-US');
-    
-    // Fallback for description if it doesn't exist
     const description = product.description || "No description available for this premium item.";
 
     modalOverlay.innerHTML = `
@@ -1195,9 +1205,7 @@ function openProductQuickView(jsonPayload) {
                         
                         <div class="mt-4 mb-6">
                              <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-2">Description</span>
-                             <p class="text-sm font-bold leading-relaxed" style="color: #4B5320;">
-                                ${description}
-                             </p>
+                             <p class="text-sm font-bold leading-relaxed" style="color: #4B5320;">${description}</p>
                         </div>
 
                         <div class="h-px bg-gray-100 my-6"></div>
@@ -1220,9 +1228,9 @@ function openProductQuickView(jsonPayload) {
                             <div>
                                 <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-3">Quantity</span>
                                 <div class="flex items-center border border-gray-200 w-fit rounded-lg overflow-hidden">
-                                    <button onclick="this.parentNode.querySelector('input').stepDown()" class="px-4 py-2 hover:bg-gray-50 active:bg-gray-100 transition text-gray-600 border-r border-gray-200">-</button>
+                                    <button onclick="this.parentNode.querySelector('input').stepDown()" class="px-4 py-2 hover:bg-gray-50 transition">-</button>
                                     <input type="number" id="modal-qty-${product._id}" value="1" min="1" max="10" class="w-12 text-center font-bold text-sm focus:outline-none [appearance:textfield]">
-                                    <button onclick="this.parentNode.querySelector('input').stepUp()" class="px-4 py-2 hover:bg-gray-50 active:bg-gray-100 transition text-gray-600 border-l border-gray-200">+</button>
+                                    <button onclick="this.parentNode.querySelector('input').stepUp()" class="px-4 py-2 hover:bg-gray-50 transition">+</button>
                                 </div>
                             </div>
                         </div>
@@ -1253,51 +1261,41 @@ function closeQuickView() {
         }, 300);
     }
 }
+
 function handleModalAddToCart(productId, productType) {
     const modal = document.getElementById('quick-view-modal');
     if (!modal) return;
 
-    // 1. IDENTIFY TYPE
-    // Check if it's a cap or a standard wear
     const isCap = productType.toLowerCase().includes('cap');
     
-    // 2. RETRIEVE SIZE (Using your existing global state logic)
-    // Your createSizeList updates window.selectedSizes[productId] on change.
-    // We check that first, then fallback to a direct DOM check just in case.
-    let selectedSize = window.selectedSizes ? window.selectedSizes[productId] : null;
-
-    if (!selectedSize) {
-        const checkedRadio = modal.querySelector(`input[name="size-${productId}"]:checked`);
-        if (checkedRadio) {
-            selectedSize = checkedRadio.value;
-            // Sync back to your global state
-            if (!window.selectedSizes) window.selectedSizes = {};
-            window.selectedSizes[productId] = selectedSize;
-        }
+    // 1. SIZE RETRIEVAL (Priority: Radio Button -> Global State)
+    let selectedSize = null;
+    const checkedSizeRadio = modal.querySelector(`input[name="size-${productId}"]:checked`);
+    
+    if (checkedSizeRadio) {
+        selectedSize = checkedSizeRadio.value;
+    } else if (window.selectedSizes && window.selectedSizes[productId]) {
+        selectedSize = window.selectedSizes[productId];
     }
 
-    // 3. RETRIEVE COLOR
-    const checkedColor = modal.querySelector(`input[name="color-${productId}"]:checked`);
-    const selectedColor = checkedColor ? checkedColor.value : "Original";
+    // 2. COLOR RETRIEVAL
+    const checkedColorRadio = modal.querySelector(`input[name="color-${productId}"]:checked`);
+    const selectedColor = checkedColorRadio ? checkedColorRadio.value : "Original";
 
-    // 4. VALIDATION
+    // 3. VALIDATION
     if (!isCap && !selectedSize) {
         alert("Please select a size first.");
         return;
     }
 
-    // 5. DATA EXTRACTION
+    // 4. DATA EXTRACTION
     const qtyInput = document.getElementById(`modal-qty-${productId}`);
     const quantity = qtyInput ? parseInt(qtyInput.value) : 1;
     const productName = modal.querySelector('h2').innerText;
-    
-    // Clean price (removes ₦ and commas)
     const priceText = modal.querySelector('p.text-2xl')?.innerText || "0";
     const price = parseFloat(priceText.replace(/[^\d.]/g, ''));
-    
     const imageUrl = document.getElementById('modal-main-image')?.src || "";
 
-    // 6. BUILD FINAL PAYLOAD
     const finalPayload = {
         productId: productId,
         name: productName,
@@ -1306,29 +1304,19 @@ function handleModalAddToCart(productId, productType) {
         size: isCap ? "One Size" : selectedSize,
         color: selectedColor,
         quantity: quantity,
-        productType: productType // This ensures "CAPS" or "WEARS" displays correctly
+        productType: productType
     };
 
-    console.log("🚀 Submitting to Cart:", finalPayload);
+    if (typeof simulateAddToCart === 'function' || typeof addToCart === 'function') {
+        const cartFn = typeof addToCart === 'function' ? addToCart : simulateAddToCart;
+        cartFn(finalPayload);
 
-    // 7. SEND TO CART FUNCTION
-    if (typeof simulateAddToCart === 'function') {
-        simulateAddToCart(finalPayload);
-
-        // UI Success Feedback
         const addBtn = modal.querySelector('button[onclick*="handleModalAddToCart"]');
         if (addBtn) {
             addBtn.innerHTML = '<i class="fas fa-check"></i> Added to Bag';
             addBtn.classList.replace('bg-black', 'bg-green-600');
             addBtn.disabled = true;
-
-            setTimeout(() => {
-                closeQuickView();
-                // Optional: Reset button for next open
-                addBtn.innerHTML = '<i class="fas fa-shopping-bag text-sm"></i> Add to Bag';
-                addBtn.classList.replace('bg-green-600', 'bg-black');
-                addBtn.disabled = false;
-            }, 1000);
+            setTimeout(() => closeQuickView(), 1000);
         }
     }
 }
