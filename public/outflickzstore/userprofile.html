@@ -224,6 +224,79 @@ async function fetchUserData() {
             button.textContent = originalText;
         }
     }
+    // --- Order History Logic ---
+async function fetchOrderHistory() {
+    const listContainer = document.getElementById('order-history-list');
+    
+    try {
+        const response = await secureUserFetch(`${API_BASE_URL}/api/orders/history`);
+        const data = await response.json();
+
+        if (!response.ok) throw new Error(data.message);
+
+        if (!data.orders || data.orders.length === 0) {
+            listContainer.innerHTML = `
+                <div class="text-center py-10 text-gray-500">
+                    <i class="fas fa-box-open text-4xl mb-3 opacity-20"></i>
+                    <p>You haven't placed any orders yet.</p>
+                    <a href="wearscollection.html" class="text-ash-red font-bold hover:underline">Start Shopping</a>
+                </div>`;
+            return;
+        }
+
+        listContainer.innerHTML = data.orders.map(order => `
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 border-b border-gray-100 hover:bg-gray-50 transition">
+                <div class="mb-2 sm:mb-0">
+                    <p class="font-bold text-gray-900">Order #${order.id.slice(-6).toUpperCase()}</p>
+                    <p class="text-xs text-gray-500">${new Date(order.date).toLocaleDateString()} • ${order.items} Items</p>
+                </div>
+                <div class="flex items-center w-full sm:w-auto justify-between sm:justify-end gap-4">
+                    <p class="font-bold text-gray-900">₦${order.total.toLocaleString()}</p>
+                    <span class="px-3 py-1 rounded-full text-xs font-bold ${getStatusClass(order.status)}">
+                        ${order.status}
+                    </span>
+                </div>
+            </div>
+        `).join('');
+
+    } catch (error) {
+        listContainer.innerHTML = '<p class="text-red-500 text-center py-4">Failed to load orders.</p>';
+    }
+}
+
+function getStatusClass(status) {
+    status = status.toLowerCase();
+    if (status === 'delivered') return 'bg-green-100 text-green-700';
+    if (status === 'processing' || status === 'pending') return 'bg-yellow-100 text-yellow-700';
+    return 'bg-gray-100 text-gray-700';
+}
+
+// --- Password & Modal Helpers ---
+function togglePasswordVisibility(inputId, iconId) {
+    const input = document.getElementById(inputId);
+    const icon = document.getElementById(iconId);
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.replace('fa-eye', 'fa-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.replace('fa-eye-slash', 'fa-eye');
+    }
+}
+
+function openEditProfileModal() {
+    const p = currentProfileData.profile || {};
+    document.getElementById('edit-profile-firstName').value = p.firstName || '';
+    document.getElementById('edit-profile-lastName').value = p.lastName || '';
+    document.getElementById('edit-profile-phone').value = p.phone || '';
+    document.getElementById('edit-profile-whatsapp').value = p.whatsapp || '';
+    document.getElementById('edit-profile-modal').classList.remove('hidden');
+}
+
+function openChangePasswordModal() {
+    document.getElementById('change-password-form').reset();
+    document.getElementById('change-password-modal').classList.remove('hidden');
+}
 
     // --- Utility Functions ---
     function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
