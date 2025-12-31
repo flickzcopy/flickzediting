@@ -953,20 +953,31 @@ function standardizeStockData(productData) {
 function openProductQuickView(jsonPayload) {
     const product = JSON.parse(jsonPayload);
     const collectionType = product.collectionType || product.category || 'Wears';
-    const isCap = collectionType.toLowerCase().includes('cap');
+    const isCap = collectionType.toLowerCase().includes('caps');
 
-    // --- 🎯 STOCK CALCULATION ---
-    // Use the standardized helper to find total available stock
-    const stockInfo = standardizeStockData(product);
+    // --- 🎯 IMPROVED STOCK CALCULATION FIX ---
     let totalStock = 0;
-    
-    if (product.availableStock !== undefined && product.availableStock !== null) {
+
+    // 1. Check variations (Standard for Caps)
+    if (product.variants && Array.isArray(product.variants) && isCap) {
+        // Many systems use 'stock' inside the variant object
+        totalStock = product.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+    } 
+    // 2. Fallback to direct availableStock
+    else if (product.availableStock !== undefined && product.availableStock !== null) {
         totalStock = Number(product.availableStock);
-    } else {
-        totalStock = Number(stockInfo.totalAvailable) || 0;
+    } 
+    // 3. Check sizeStockMap (Standard for Wears)
+    else if (product.sizeStockMap) {
+        totalStock = Object.values(product.sizeStockMap).reduce((sum, val) => sum + Number(val), 0);
     }
 
-    const isOutOfStock = totalStock === 0;
+    // 🎯 IF STILL 0, check your variations array specifically
+    if (totalStock === 0 && product.variations) {
+        totalStock = product.variations.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+    }
+
+    const isOutOfStock = totalStock <= 0;
 
     // Reset and initialize global state
     if (!window.selectedSizes) window.selectedSizes = {};
@@ -974,16 +985,18 @@ function openProductQuickView(jsonPayload) {
     let initialSize = null;
     let initialMax = 1;
 
-    if (!isOutOfStock) {
+    // Logic to select the first available size/stock
+   if (!isOutOfStock) {
         if (isCap) {
             initialSize = 'One Size';
             window.selectedSizes[product._id] = initialSize;
-            initialMax = (product.variations && product.variations[0].stock) || 1;
+            // Get stock from the first variation for the cap
+            initialMax = (product.variations && product.variations[0].stock) ? Number(product.variations[0].stock) : 1;
         } else if (product.sizeStockMap) {
-            initialSize = Object.keys(product.sizeStockMap).find(s => product.sizeStockMap[s] > 0);
+            initialSize = Object.keys(product.sizeStockMap).find(s => Number(product.sizeStockMap[s]) > 0);
             if (initialSize) {
                 window.selectedSizes[product._id] = initialSize;
-                initialMax = product.sizeStockMap[initialSize];
+                initialMax = Number(product.sizeStockMap[initialSize]);
             }
         }
     }
@@ -993,45 +1006,41 @@ function openProductQuickView(jsonPayload) {
 
     const modalOverlay = document.createElement('div');
     modalOverlay.id = 'quick-view-modal';
-    modalOverlay.className = 'fixed inset-0 z-[1000] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm transition-opacity duration-300';
+    modalOverlay.className = 'fixed inset-0 z-[1000] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm';
     
     const formattedPrice = product.price.toLocaleString('en-US');
-    const description = product.description || "No description available for this premium item.";
+    const description = product.description || "No description available.";
     const hasBackImage = product.backImageUrl && product.backImageUrl.trim() !== "";
 
     // --- 🎯 UI STATES FOR OUT OF STOCK ---
     const buttonText = isOutOfStock ? 'OUT OF STOCK' : 'ADD TO BAG';
     const buttonClass = isOutOfStock 
-        ? 'bg-gray-400 cursor-not-allowed' 
-        : 'bg-black hover:bg-zinc-800 active:scale-[0.97] shadow-black/10';
+        ? 'bg-zinc-400 cursor-not-allowed opacity-50' 
+        : 'bg-black hover:bg-zinc-800 active:scale-[0.97]';
+
+    // Toggle between the Quantity Selector and the Unavailable message
     const quantityUI = isOutOfStock 
-        ? `<div class="text-red-600 font-bold text-sm uppercase tracking-tighter mt-2">Currently Unavailable</div>`
+        ? `<div class="text-red-600 font-bold text-sm uppercase tracking-tighter mt-2 bg-red-50 p-3 rounded-lg border border-red-100">Currently Unavailable</div>`
         : `
             <div class="flex items-center border border-gray-200 w-fit rounded-lg overflow-hidden">
-                <button onclick="this.parentNode.querySelector('input').stepDown()" class="px-4 py-2 hover:bg-gray-50 transition">-</button>
-                <input type="number" id="modal-qty-${product._id}" value="1" min="1" max="${initialMax}" class="w-12 text-center font-bold text-sm focus:outline-none [appearance:textfield]">
-                <button onclick="this.parentNode.querySelector('input').stepUp()" class="px-4 py-2 hover:bg-gray-50 transition">+</button>
+                <button onclick="this.parentNode.querySelector('input').stepDown()" class="px-4 py-2 hover:bg-gray-50">-</button>
+                <input type="number" id="modal-qty-${product._id}" value="1" min="1" max="${initialMax}" class="w-12 text-center font-bold text-sm focus:outline-none">
+                <button onclick="this.parentNode.querySelector('input').stepUp()" class="px-4 py-2 hover:bg-gray-50">+</button>
             </div>`;
 
     modalOverlay.innerHTML = `
-        <div class="bg-white w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl relative animate-in fade-in zoom-in duration-300">
-            <button onclick="closeQuickView()" class="absolute top-3 right-3 z-[1050] bg-white/80 rounded-full p-2.5 shadow-md hover:bg-gray-100 transition active:scale-90">
+        <div class="bg-white w-full max-w-5xl max-h-[95vh] overflow-y-auto rounded-xl shadow-2xl relative">
+            <button onclick="closeQuickView()" class="absolute top-3 right-3 z-[1050] bg-white/90 rounded-full p-2 hover:bg-gray-100 transition shadow-sm">
                 <i class="fas fa-times text-lg text-gray-800"></i>
             </button>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 h-full">
-                <div class="bg-[#f9f9f9] flex flex-col items-center justify-center relative min-h-[350px] md:min-h-[500px] border-b md:border-b-0 md:border-r border-gray-100 p-4">
-                    <div class="w-full h-full flex items-center justify-center overflow-hidden">
-                        <img id="modal-main-image" src="${product.frontImageUrl}" class="max-w-full max-h-[300px] md:max-h-[450px] object-contain transition-all duration-500 transform">
-                    </div>
+            <div class="grid grid-cols-1 md:grid-cols-2">
+                <div class="bg-[#f9f9f9] flex flex-col items-center justify-center relative min-h-[350px] p-4">
+                    <img id="modal-main-image" src="${product.frontImageUrl}" class="max-w-full max-h-[450px] object-contain">
                     ${hasBackImage ? `
-                    <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-3 z-10">
-                        <button onclick="updateModalImage('${product.frontImageUrl}', this)" class="w-12 h-12 border-2 border-black rounded-md overflow-hidden bg-white shadow-sm transition-all thumb-btn active-thumb">
-                            <img src="${product.frontImageUrl}" class="w-full h-full object-cover">
-                        </button>
-                        <button onclick="updateModalImage('${product.backImageUrl}', this)" class="w-12 h-12 border-2 border-transparent rounded-md overflow-hidden bg-white shadow-sm transition-all thumb-btn">
-                            <img src="${product.backImageUrl}" class="w-full h-full object-cover">
-                        </button>
+                    <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-3">
+                        <button onclick="updateModalImage('${product.frontImageUrl}', this)" class="w-12 h-12 border-2 border-black rounded-md overflow-hidden bg-white"><img src="${product.frontImageUrl}" class="w-full h-full object-cover"></button>
+                        <button onclick="updateModalImage('${product.backImageUrl}', this)" class="w-12 h-12 border-2 border-transparent rounded-md overflow-hidden bg-white"><img src="${product.backImageUrl}" class="w-full h-full object-cover"></button>
                     </div>` : ''}
                 </div>
 
@@ -1041,21 +1050,19 @@ function openProductQuickView(jsonPayload) {
                             <span class="w-8 h-[1px] bg-red-600"></span>
                             <span class="text-[0.65rem] font-black text-red-600 uppercase tracking-widest">Outflickz Exclusive</span>
                         </div>
-                        <h2 class="text-2xl sm:text-3xl font-black text-gray-900 uppercase">${product.name}</h2>
+                        <h2 class="text-2xl font-black text-gray-900 uppercase">${product.name}</h2>
                         <p class="text-2xl font-bold text-gray-900 mt-2">₦${formattedPrice}</p>
                         
                         <div class="mt-4 mb-6">
                              <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-2">Description</span>
-                             <p class="text-sm font-bold leading-relaxed" style="color: #4B5320;">${description}</p>
+                             <p class="text-sm font-medium leading-relaxed text-zinc-600">${description}</p>
                         </div>
-
-                        <div class="h-px bg-gray-100 my-6"></div>
 
                         <div class="space-y-6">
                             <div>
                                 <span class="text-[0.7rem] font-bold text-gray-900 uppercase tracking-widest block mb-3">Colorways</span>
                                 <div class="flex flex-wrap gap-2">
-                                    ${createColorList(product._id, product.variants || product.variations)}
+                                    ${createColorList(product._id, product.variants || product.variations || [])}
                                 </div>
                             </div>
 
@@ -1077,7 +1084,7 @@ function openProductQuickView(jsonPayload) {
                         <button 
                             ${isOutOfStock ? 'disabled' : ''}
                             onclick="handleModalAddToCart('${product._id}', '${collectionType}')" 
-                            class="w-full text-white py-4 rounded-md font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-3 shadow-lg ${buttonClass}">
+                            class="w-full text-white py-4 rounded-md font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-3 ${buttonClass}">
                             <i class="fas fa-shopping-bag text-sm"></i> ${buttonText}
                         </button>
                     </div>
@@ -1089,6 +1096,7 @@ function openProductQuickView(jsonPayload) {
     document.body.appendChild(modalOverlay);
     document.body.style.overflow = 'hidden';
 }
+
 
 // Global Helper to Switch Images
 window.updateModalImage = function(imgSrc, btnElement) {
