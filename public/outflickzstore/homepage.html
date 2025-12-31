@@ -1261,17 +1261,15 @@ function closeQuickView() {
         }, 300);
     }
 }
-
 function handleModalAddToCart(productId, productType) {
     const modal = document.getElementById('quick-view-modal');
     if (!modal) return;
 
     const isCap = productType.toLowerCase().includes('cap');
     
-    // 1. SIZE RETRIEVAL (Priority: Radio Button -> Global State)
+    // 1. SIZE RETRIEVAL
     let selectedSize = null;
     const checkedSizeRadio = modal.querySelector(`input[name="size-${productId}"]:checked`);
-    
     if (checkedSizeRadio) {
         selectedSize = checkedSizeRadio.value;
     } else if (window.selectedSizes && window.selectedSizes[productId]) {
@@ -1290,39 +1288,35 @@ function handleModalAddToCart(productId, productType) {
 
     // 4. DATA EXTRACTION
     const qtyInput = document.getElementById(`modal-qty-${productId}`);
-    const quantity = qtyInput ? parseInt(qtyInput.value) : 1;
+    const quantityValue = qtyInput ? parseInt(qtyInput.value) : 1;
     const productName = modal.querySelector('h2').innerText;
     
-    // Robust Price Extraction (Removes currency symbols and commas)
     const priceText = modal.querySelector('p.text-2xl')?.innerText || "0";
     const priceValue = parseFloat(priceText.replace(/,/g, '').replace(/[^\d.]/g, ''));
     
     const imageUrl = document.getElementById('modal-main-image')?.src || "";
 
-    // 5. BUILD FINAL PAYLOAD (Standardized for your existing cart logic)
-    // Changing keys to match what your homepage.html logic expects
-    const finalPayload = {
-        _id: productId,             // Use _id instead of productId
+    // 5. BUILD FINAL PAYLOAD (Standardized Object)
+    const itemData = {
+        productId: productId, 
         name: productName,
-        productPrice: priceValue,    // Use productPrice instead of price
-        price: priceValue,           // Keep price as fallback
-        imageUrl: imageUrl,
+        price: priceValue, 
+        quantity: quantityValue,
         size: isCap ? "One Size" : selectedSize,
         color: selectedColor,
-        quantity: quantity,
+        imageUrl: imageUrl,
         productType: productType
     };
 
-    console.log("🚀 Submitting Standardized Payload:", finalPayload);
+    console.log("🚀 Submitting to simulateAddToCart:", itemData);
 
-    // 6. SEND TO CART
-    if (typeof addToCart === 'function' || typeof simulateAddToCart === 'function') {
-        const cartFn = typeof addToCart === 'function' ? addToCart : simulateAddToCart;
+    // 6. EXECUTION 
+    // We call simulateAddToCart because it handles the logic for 
+    // both logged-in users (Netlify API) and guests (localStorage Objects)
+    if (typeof simulateAddToCart === 'function') {
         
-        // Convert to JSON string because your cart logic uses JSON.parse()
-        const jsonStringPayload = JSON.stringify(finalPayload);
-        
-        cartFn(jsonStringPayload);
+        // --- KEY CHANGE: PASS THE OBJECT, NOT A STRING ---
+        simulateAddToCart(itemData);
 
         // 7. UI SUCCESS FEEDBACK
         const addBtn = modal.querySelector('button[onclick*="handleModalAddToCart"]');
@@ -1334,14 +1328,13 @@ function handleModalAddToCart(productId, productType) {
 
             setTimeout(() => {
                 closeQuickView();
-                // Reset button state for the next time a modal opens
                 addBtn.innerHTML = originalContent;
                 addBtn.classList.replace('bg-green-600', 'bg-black');
                 addBtn.disabled = false;
             }, 1000);
         }
     } else {
-        console.error("Cart function not found in homepage.html");
+        console.error("simulateAddToCart function not found!");
     }
 }
 
