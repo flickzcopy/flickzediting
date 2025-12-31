@@ -931,7 +931,7 @@ function openProductQuickView(jsonPayload) {
 
 let product;
     try {
-        const jsonString = decodeURIComponent(escape(atob(base64Payload)));
+const jsonString = decodeURIComponent(escape(atob(jsonPayload)));
         product = JSON.parse(jsonString);
     } catch (e) {
         console.error("Error parsing product data:", e);
