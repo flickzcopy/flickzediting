@@ -904,6 +904,54 @@ function createSizeList(collectionId, sizeStockMap, isReduced = false) {
 }
 
 
+function standardizeStockData(productData) {
+    let totalAvailable = 0;
+    let variantsData = [];
+    const productId = productData._id;
+
+    // Initialize global object if it doesn't exist
+    if (!window.selectedSizes) window.selectedSizes = {};
+
+    // --- Case 1: Wears Collection (Has sizes array) ---
+    if (productData.variations && productData.variations.length > 0 && productData.variations[0].sizes) {
+        const sizes = productData.variations[0].sizes;
+        
+        sizes.forEach(s => {
+            const isAvailable = s.stock > 0;
+            if (isAvailable) {
+                totalAvailable += s.stock;
+            }
+            variantsData.push({
+                size: s.size,
+                stockQuantity: s.stock,
+                isAvailable: isAvailable
+            });
+        });
+        
+    // --- Case 2: Caps Collection (Stock is defined on the variation/product) ---
+    } else if (productData.variations && productData.variations.length > 0 && typeof productData.variations[0].stock === 'number') {
+        const variation = productData.variations[0];
+        const isAvailable = variation.stock > 0;
+        const sizeIdentifier = 'One Size'; 
+        
+        if (isAvailable) {
+            totalAvailable += variation.stock;
+            // ⭐ THE FIX FOR CAPS: Auto-select 'One Size' if stock is available
+            window.selectedSizes[productId] = sizeIdentifier;
+            console.log(`[AUTO-SELECT] ${productId} set to ${sizeIdentifier}`);
+        }
+
+        variantsData.push({
+            size: sizeIdentifier, 
+            stockQuantity: variation.stock,
+            isAvailable: isAvailable
+        });
+    }
+    
+    return { totalAvailable, variantsData };
+}
+
+
 function openProductQuickView(jsonPayload) {
     const product = JSON.parse(jsonPayload);
     const collectionType = product.collectionType || product.category || 'Wears';
@@ -1050,7 +1098,6 @@ function openProductQuickView(jsonPayload) {
     document.body.appendChild(modalOverlay);
     document.body.style.overflow = 'hidden';
 }
-
 
 // Global Helper to Switch Images
 window.updateModalImage = function(imgSrc, btnElement) {
