@@ -1119,7 +1119,7 @@ const OrderItemSchema = new mongoose.Schema({
     variationIndex: { 
         type: Number, 
         required: [true, 'Variation index is required for inventory deduction.'],
-        min: 1 
+        min: 0 
     },    size: { type: String },
     color: { type: String },
     variation: { type: String } 
