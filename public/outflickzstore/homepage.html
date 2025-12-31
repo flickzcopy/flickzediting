@@ -273,7 +273,6 @@ async function redirectToProfileOrLogin() {
 }
 
 
-
 /**
  * CONCEPTUAL: This function should be called ONLY after a successful login API response 
  * from your server (in useraccount.html). It sets the login flag and redirects 
@@ -537,6 +536,7 @@ function addToCart(collectionId, quantity) {
 
     console.log(`Added ${quantity} of item ${collectionId}. New cart total: ${newCount}`);
 }
+
 /**
  * Handles adding an item to the cart. 
  * Correctly handles Cap sizes (O/S) and maps variationIndex to 1-based for Database.
@@ -728,7 +728,6 @@ function displayCartAlert(message, type) {
     }, 3000);
 }
 
-// Initialize the cart badge on page load
 // NOTE: Assuming updateCartBadge() is defined elsewhere
 document.addEventListener('DOMContentLoaded', updateCartBadge);
 // --- END CART MANAGEMENT JS ---
@@ -813,6 +812,7 @@ function updateMaxQuantity(collectionId, selectedSize) {
         console.log(`[STOCK UPDATE] Product ${collectionId}: Max quantity set to ${newMaxStock} for size ${selectedSize}.`);
     }
 }
+
 function changeVariantImage(collectionId, colorHex) {
     // 1. Try to find the image inside the Quick View Modal first
     const modal = document.getElementById('quick-view-modal');
@@ -883,6 +883,7 @@ function toggleImage(collectionId) {
         toggleButton.title = "Show Back View";
     }
 }
+
 // --- UTILITY FOR COLOR LIST (Stock-Aware) ---
 function createColorList(collectionId, variants) {
     if (!variants || variants.length === 0) return '';
