@@ -1666,9 +1666,7 @@ async function fetchAndRenderCapsCollection() {
         }
 
         const collections = await response.json();
-
         container.innerHTML = '';
-        
         let collectionsToRender = collections && collections.length > 0 ? collections : [];
 
         if (collectionsToRender && collectionsToRender.length > 0) {
