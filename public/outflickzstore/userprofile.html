@@ -224,8 +224,7 @@ async function fetchUserData() {
             button.textContent = originalText;
         }
     }
-    // --- Order History Logic ---
-async function fetchOrderHistory() {
+    async function fetchOrderHistory() {
     const listContainer = document.getElementById('order-history-list');
     
     try {
@@ -250,16 +249,25 @@ async function fetchOrderHistory() {
                     <p class="font-bold text-gray-900">Order #${order.id.slice(-6).toUpperCase()}</p>
                     <p class="text-xs text-gray-500">${new Date(order.date).toLocaleDateString()} • ${order.items} Items</p>
                 </div>
+                
                 <div class="flex items-center w-full sm:w-auto justify-between sm:justify-end gap-4">
-                    <p class="font-bold text-gray-900">₦${order.total.toLocaleString()}</p>
-                    <span class="px-3 py-1 rounded-full text-xs font-bold ${getStatusClass(order.status)}">
-                        ${order.status}
-                    </span>
+                    <div class="text-right mr-2">
+                        <p class="font-bold text-gray-900">₦${order.total.toLocaleString()}</p>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${getStatusClass(order.status)}">
+                            ${order.status}
+                        </span>
+                    </div>
+                    
+                    <a href="order-details.html?id=${order.id}" 
+                       class="px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-ash-red hover:text-white hover:border-ash-red transition-all duration-200 flex items-center">
+                        View <i class="fas fa-chevron-right ml-2 text-xs"></i>
+                    </a>
                 </div>
             </div>
         `).join('');
 
     } catch (error) {
+        console.error("Order history error:", error);
         listContainer.innerHTML = '<p class="text-red-500 text-center py-4">Failed to load orders.</p>';
     }
 }
