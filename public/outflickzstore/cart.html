@@ -200,7 +200,6 @@ async function fetchAndRenderCart() {
         } else { renderLocalCart(); }
     } catch (error) { renderLocalCart(); }
 }
-
 function renderCartItems(items, isApiCart) {
     const cartList = document.getElementById('cart-items-list');
     const currency = '₦';
@@ -216,13 +215,28 @@ function renderCartItems(items, isApiCart) {
         const price = item.price || (item.product && item.product.price) || 0;
         const img = item.imageUrl || (item.product && item.product.imageUrl) || 'https://i.imgur.com/PZLMws6.jpeg'; 
         const qty = item.quantity || 1;
-        
-        // ⭐ VERIFIED: Capture variationIndex (default to 0 if missing)
-        const vIndex = (item.variationIndex !== undefined && item.variationIndex !== null) ? item.variationIndex : 0;
-
-        const availableStock = item.stock || 10; 
+        const vIndex = (item.variationIndex !== undefined && item.variationIndex !== null) ? item.variationIndex : 1;
         const displaySize = item.size ? item.size : "O/S"; 
         const displayColor = item.color || (item.product && item.product.color) || null;
+
+        // ⭐ DYNAMIC STOCK CALCULATION (No more hardcoded 10)
+        let availableStock = 0;
+        const productData = item.product || item; // Handle both API and Local structures
+        
+        if (productData.variations && productData.variations.length > 0) {
+            // Find variation (subtract 1 because DB is 1-based, Array is 0-based)
+            const variation = productData.variations[vIndex - 1];
+            if (variation) {
+                if (item.productType === 'CapCollection' || !variation.sizes) {
+                    availableStock = variation.stock || 0;
+                } else {
+                    const sizeData = variation.sizes.find(s => s.size === item.size);
+                    availableStock = sizeData ? sizeData.stock : 0;
+                }
+            }
+        } else {
+            availableStock = item.stock || 0; // Fallback
+        }
 
         return `
         <div class="flex py-6 border-b border-gray-100 last:border-0" data-variation-index="${vIndex}">
@@ -243,7 +257,7 @@ function renderCartItems(items, isApiCart) {
                 <div class="flex items-center justify-between mt-4">
                     <div class="flex items-center border border-gray-200 rounded overflow-hidden">
                         <button onclick="${isApiCart ? `changeCartQuantity('${item._id}', -1)` : `changeLocalQuantity('${id}', -1)`}" class="px-3 py-1 hover:bg-gray-100 transition-colors font-bold text-gray-600">-</button>
-                        <input type="number" id="quantity-input-${id}" value="${qty}" max="${availableStock}" readonly class="px-1 text-xs font-black w-8 text-center bg-transparent focus:outline-none appearance-none">
+                        <input type="number" id="quantity-input-${id}" value="${qty}" data-max="${availableStock}" readonly class="px-1 text-xs font-black w-8 text-center bg-transparent focus:outline-none appearance-none">
                         <button onclick="${isApiCart ? `changeCartQuantity('${item._id}', 1)` : `changeLocalQuantity('${id}', 1)`}" class="px-3 py-1 hover:bg-gray-100 transition-colors font-bold text-gray-600">+</button>
                     </div>
                     <button onclick="${isApiCart ? `removeItemFromCart('${item._id}')` : `handleLocalItemRemoval('${id}')`}" class="text-[10px] text-gray-400 hover:text-ash-red font-bold transition-colors tracking-widest">
@@ -254,7 +268,6 @@ function renderCartItems(items, isApiCart) {
         </div>`;
     }).join('');
 }
-
 
 async function removeItemFromCart(itemId) {
     if (!confirm("Remove this item from your bag?")) return;
@@ -286,13 +299,25 @@ async function changeCartQuantity(cartItemId, delta) {
         const item = cartData.items.find(i => i._id === cartItemId);
         if (!item) return;
 
-        // Stock check
-        const maxStock = item.product?.stock || 10; 
+        // ⭐ Get Dynamic Stock from the Variation
+        let maxStock = 0;
+        const vIndex = item.variationIndex || 1;
+        const variation = item.product?.variations?.[vIndex - 1];
+
+        if (variation) {
+            if (item.productType === 'CapCollection') {
+                maxStock = variation.stock || 0;
+            } else {
+                const sizeData = variation.sizes?.find(s => s.size === item.size);
+                maxStock = sizeData ? sizeData.stock : 0;
+            }
+        }
+
         const newQuantity = item.quantity + delta;
 
         if (newQuantity <= 0) return removeItemFromCart(cartItemId);
         if (newQuantity > maxStock) {
-            displayMessage(`<i class="fas fa-info-circle"></i> Only ${maxStock} in stock.`);
+            displayMessage(`<i class="fas fa-info-circle"></i> Only ${maxStock} items available in this size.`);
             return;
         }
 
@@ -302,7 +327,7 @@ async function changeCartQuantity(cartItemId, delta) {
             body: JSON.stringify({ quantity: newQuantity }) 
         });
         if (response.ok) await fetchAndRenderCart();
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error("Quantity update failed", e); }
 }
 
 function changeLocalQuantity(itemId, delta) {
@@ -310,13 +335,14 @@ function changeLocalQuantity(itemId, delta) {
     const index = cart.findIndex(i => (i._id || i.productId) === itemId);
     if (index !== -1) {
         const item = cart[index];
-        const maxStock = item.maxStock || 10;
+        // Ensure maxStock is read from the item (calculated during Add To Bag)
+        const maxStock = item.maxStock || 5; 
         const newQty = item.quantity + delta;
 
         if (newQty <= 0) {
             cart.splice(index, 1);
         } else if (newQty > maxStock) {
-            displayMessage(`<i class="fas fa-info-circle"></i> Max stock (${maxStock}) reached.`);
+            displayMessage(`<i class="fas fa-exclamation-triangle"></i> Maximum available stock reached.`);
             return;
         } else {
             cart[index].quantity = newQty;
@@ -349,7 +375,7 @@ function updateCartSummary(data) {
         ...item,
         variationIndex: (item.variationIndex !== undefined && item.variationIndex !== null) 
                         ? item.variationIndex 
-                        : 0
+                        : 1
     }));
 
     const subtotal = verifiedItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);

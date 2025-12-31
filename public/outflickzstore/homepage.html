@@ -526,7 +526,7 @@ function addToCart(collectionId, quantity) {
 }
 /**
  * Handles adding an item to the cart. 
- * Updated to correctly handle Cap sizes (O/S) and skip radio validation.
+ * Correctly handles Cap sizes (O/S) and maps variationIndex to 1-based for Database.
  */
 async function simulateAddToCart(productDetails) {
     // 1. CONTEXT IDENTIFICATION
@@ -543,19 +543,16 @@ async function simulateAddToCart(productDetails) {
     }
 
     // 2. IDENTIFY CAP / ONE-SIZE ITEMS
-    // Check type mapping or if a size was already passed (like 'O/S' from the card)
-    const isCap = productDetails.productType === 'CapCollection' || 
-                  productDetails.productType === 'caps' || 
+    const isCap = productDetails.productType?.toLowerCase().includes('cap') || 
                   productDetails.size === 'O/S' ||
                   productDetails.size === 'One Size';
 
-    // 3. GATHER SELECTIONS (Size & Color)
+    // 3. GATHER SELECTIONS
     const selectedSizeInput = sourceContainer.querySelector(`input[name="size-${productDetails.productId}"]:checked`);
     const selectedColorInput = sourceContainer.querySelector(`input[name="color-${productDetails.productId}"]:checked`);
     
     // 4. VALIDATION
-    // Logic: If it's NOT a cap AND no size is checked, THEN show the error.
-    if (!isCap && !selectedSizeInput) {
+    if (!isCap && !selectedSizeInput && !productDetails.size) {
         displayCartAlert("Please select a size first.", "error");
         const sizeArea = sourceContainer.querySelector('.size-selection-area') || sourceContainer;
         sizeArea.classList.add('ring-2', 'ring-red-500', 'rounded-md');
@@ -563,23 +560,30 @@ async function simulateAddToCart(productDetails) {
         return;
     }
 
-    // 5. NORMALIZE DATA
+    // 5. NORMALIZE DATA (Aligning with MongoDB Schema min: 1)
     const color = (selectedColorInput && selectedColorInput.value !== 'undefined') ? selectedColorInput.value : 'N/A';
     
-    // Size logic: Use 'O/S' for caps, otherwise use the radio value, otherwise fallback to details
     let size = 'N/A';
-    let variationIndex = 0; // ⭐ DEFAULT TO 0
+    let variationIndex = 1; // ⭐ Default to 1 (Satisfies Database min: 1)
 
     if (isCap) {
         size = 'O/S';
+        variationIndex = 1; 
     } else if (selectedSizeInput) {
         size = selectedSizeInput.value;
-        variationIndex = parseInt(selectedSizeInput.getAttribute('data-index')) || 0;
+        // Map Frontend 0-index to Backend 1-index (0->1, 1->2, etc.)
+        const rawIndex = parseInt(selectedSizeInput.getAttribute('data-index'));
+        variationIndex = (!isNaN(rawIndex)) ? (rawIndex + 1) : 1;
     } else if (productDetails.size) {
         size = productDetails.size;
+        // Pass through variationIndex if provided, otherwise default to 1
+        variationIndex = productDetails.variationIndex || 1;
     }
-    
-    // Sync Image with Selected Color if a map exists
+
+    // Final Schema Safety Check
+    if (variationIndex < 1 || variationIndex > 4) variationIndex = 1;
+
+    // Sync Image with Selected Color
     let selectedImageUrl = productDetails.imageUrl;
     const colorMapElement = sourceContainer.querySelector(`[data-color-map]`);
     if (colorMapElement && color !== 'N/A') {
@@ -591,9 +595,9 @@ async function simulateAddToCart(productDetails) {
         } catch (e) { console.error("Color map error", e); }
     }
 
-    const quantityInput = sourceContainer.querySelector(`input[id*="qty-${productDetails.productId}"]`) || 
-                          sourceContainer.querySelector(`#quantity-input-${productDetails.productId}`);
-    const quantity = parseInt(quantityInput?.value) || 1;
+    const qtyInput = sourceContainer.querySelector(`input[id*="qty-${productDetails.productId}"]`) || 
+                     sourceContainer.querySelector(`#quantity-input-${productDetails.productId}`);
+    const quantity = parseInt(qtyInput?.value) || 1;
 
     // 6. NORMALIZE PRODUCT TYPE (Backend Alignment)
     let finalProductType = productDetails.productType;
@@ -617,10 +621,12 @@ async function simulateAddToCart(productDetails) {
         color: color,
         imageUrl: selectedImageUrl,
         variation: `${color} / ${size}`,
-        variationIndex: variationIndex // ⭐ ADD THIS LINE
+        variationIndex: variationIndex 
     };
 
-    // 7. EXECUTION (API vs Local)
+    console.log("🚀 Cart Submission:", itemData);
+
+    // 7. EXECUTION (API vs Local Storage)
     const isLoggedIn = !!localStorage.getItem('userAccessToken'); 
 
     if (!isLoggedIn) {
@@ -642,6 +648,7 @@ async function simulateAddToCart(productDetails) {
                 handleLocalCartOnly(itemData);
             }
         } catch (error) {
+            console.error("Cart API failed, falling back to local storage", error);
             handleLocalCartOnly(itemData);
         }
     }
@@ -1293,35 +1300,53 @@ function closeQuickView() {
         }, 300);
     }
 }
-
 function handleModalAddToCart(productId, productType) {
     const modal = document.getElementById('quick-view-modal');
     if (!modal) return;
 
     const isCap = productType.toLowerCase().includes('cap');
     
-    // 1. SIZE RETRIEVAL
-    let selectedSize = null;
-    let variationIndex = 0; // Default for caps/one-size
+    // --- 1. SIZE & VARIATION RETRIEVAL ---
+    let selectedSize = isCap ? "One Size" : null;
+    let variationIndex = 1; // ⭐ DEFAULT TO 1 (Satisfies Database min: 1)
+
+    // Find the checked radio button in the modal
     const checkedSizeRadio = modal.querySelector(`input[name="size-${productId}"]:checked`);
+
     if (checkedSizeRadio) {
         selectedSize = checkedSizeRadio.value;
-        variationIndex = parseInt(checkedSizeRadio.getAttribute('data-index')) || 0;
+        
+        // Convert 0-based HTML loop index to 1-based Database index
+        const rawIndex = checkedSizeRadio.getAttribute('data-index');
+        if (rawIndex !== null) {
+            variationIndex = parseInt(rawIndex) + 1;
+        }
+    } else if (isCap) {
+        // Caps/Headwear logic: force standard values
+        selectedSize = "One Size";
+        variationIndex = 1; 
     } else if (window.selectedSizes && window.selectedSizes[productId]) {
+        // Fallback to global state if radio isn't checked but size was pre-selected
         selectedSize = window.selectedSizes[productId];
     }
 
-    // 2. COLOR RETRIEVAL
+    // ⭐ VALIDATION CHECK: Ensure we stay within 1-4 for the Schema
+    if (variationIndex < 1 || variationIndex > 4 || isNaN(variationIndex)) {
+        console.warn(`[Inventory] Variation index ${variationIndex} out of bounds. Resetting to 1.`);
+        variationIndex = 1;
+    }
+
+    // --- 2. COLOR RETRIEVAL ---
     const checkedColorRadio = modal.querySelector(`input[name="color-${productId}"]:checked`);
     const selectedColor = checkedColorRadio ? checkedColorRadio.value : "Original";
 
-    // 3. VALIDATION
+    // --- 3. SELECTION VALIDATION ---
     if (!isCap && !selectedSize) {
         alert("Please select a size first.");
         return;
     }
 
-    // 4. DATA EXTRACTION
+    // --- 4. DATA EXTRACTION ---
     const qtyInput = document.getElementById(`modal-qty-${productId}`);
     const quantityValue = qtyInput ? parseInt(qtyInput.value) : 1;
     const productName = modal.querySelector('h2').innerText;
@@ -1331,30 +1356,26 @@ function handleModalAddToCart(productId, productType) {
     
     const imageUrl = document.getElementById('modal-main-image')?.src || "";
 
-    // 5. BUILD FINAL PAYLOAD (Standardized Object)
+    // --- 5. BUILD FINAL PAYLOAD ---
     const itemData = {
         productId: productId, 
         name: productName,
         price: priceValue, 
         quantity: quantityValue,
-        size: isCap ? "One Size" : selectedSize,
+        size: selectedSize, // Now "One Size" for caps or the selected size for wears
         color: selectedColor,
         imageUrl: imageUrl,
         productType: productType,
-        variationIndex: variationIndex // ⭐ ADD THIS LINE
+        variationIndex: variationIndex // ⭐ CORRECT 1-BASED INDEX
     };
 
     console.log("🚀 Submitting to simulateAddToCart:", itemData);
 
-    // 6. EXECUTION 
-    // We call simulateAddToCart because it handles the logic for 
-    // both logged-in users (Netlify API) and guests (localStorage Objects)
+    // --- 6. EXECUTION ---
     if (typeof simulateAddToCart === 'function') {
-        
-        // --- KEY CHANGE: PASS THE OBJECT, NOT A STRING ---
         simulateAddToCart(itemData);
 
-        // 7. UI SUCCESS FEEDBACK
+        // --- 7. UI SUCCESS FEEDBACK ---
         const addBtn = modal.querySelector('button[onclick*="handleModalAddToCart"]');
         if (addBtn) {
             const originalContent = addBtn.innerHTML;
